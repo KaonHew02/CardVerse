@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="color-scheme" content="dark light">
+    <title>CardVerse — One World. Every Game.</title>
+    <meta name="description" content="A casual card and tile game hub. Virtual coins only.">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🃏</text></svg>">
+    <link rel="stylesheet" href="css/global.css">
+    <link rel="stylesheet" href="css/lobby.css">
+    <link rel="stylesheet" href="css/game.css">
+    <link rel="stylesheet" href="css/responsive.css">
+</head>
+<body data-screen="home">
+
+    <header class="topbar">
+        <button class="brand" data-go="home" title="Lobby">
+            <span class="brand-mark">🃏</span>
+            <span class="brand-text"><b>CARDVERSE</b><small>One World. Every Game.</small></span>
+        </button>
+        <button class="hdr-player" data-go="profile" title="Profile">
+            <span class="avatar" id="hdrAvatar">🙂</span>
+            <span class="hdr-who">
+                <b id="hdrName">Player</b>
+                <small id="hdrLevel">Lv 1</small>
+                <span class="xp-bar tiny"><span class="xp-fill" id="hdrXp"></span></span>
+            </span>
+        </button>
+        <button class="hdr-coins" data-go="missions" title="Daily Bonus">
+            🪙 <b id="hdrCoins">0</b>
+            <span class="badge-dot" id="hdrBadge" hidden>0</span>
+        </button>
+    </header>
+
+    <div id="storeAlert" class="strip danger" hidden></div>
+
+    <div id="driveOffer" class="strip info" hidden>
+        <span>This browser has no CardVerse record. Restore your player from Google Drive?</span>
+        <button class="btn tiny" id="driveOfferPull">From Drive</button>
+        <button class="btn tiny ghost" id="driveOfferNo">Start fresh</button>
+    </div>
+
+    <main>
+
+        <section class="screen" id="screen-home">
+            <div class="hero">
+                <div class="hero-mark">🃏</div>
+                <h1>CARDVERSE</h1>
+                <p class="slogan">One World. Every Game.</p>
+            </div>
+            <h2 class="section-title">🎮 Game Lobby</h2>
+            <div class="lobby-grid" id="lobbyGrid"></div>
+            <div class="home-nav" id="homeNav"></div>
+            <p class="muted small center footnote">Virtual coins only. Nothing in CardVerse can be bought, sold or cashed out.</p>
+        </section>
+
+        <section class="screen" id="screen-setup" hidden>
+            <div class="screen-top"><button class="btn ghost" data-go="home">← Lobby</button><h2>Choose a table</h2></div>
+            <div id="setupBody"></div>
+        </section>
+
+        <section class="screen screen-table" id="screen-table" hidden>
+            <div class="table-bar">
+                <button class="btn ghost" id="tableLeave">← Leave</button>
+                <span id="tableGame" class="table-game"></span>
+                <span id="tableRoom" class="muted small"></span>
+                <span id="tableShoe" class="muted small"></span>
+                <span class="table-coins">🪙 <b id="tableCoins">0</b></span>
+            </div>
+            <div id="tableRoot" class="table-root"></div>
+            <div id="resultOverlay" class="overlay" hidden></div>
+        </section>
+
+        <section class="screen" id="screen-profile" hidden>
+            <div class="screen-top"><button class="btn ghost" data-go="home">← Lobby</button><h2>👤 Profile</h2></div>
+            <div id="profileBody"></div>
+        </section>
+
+        <section class="screen" id="screen-achievements" hidden>
+            <div class="screen-top"><button class="btn ghost" data-go="home">← Lobby</button><h2>🏆 Achievements</h2></div>
+            <div id="achBody"></div>
+        </section>
+
+        <section class="screen" id="screen-stats" hidden>
+            <div class="screen-top"><button class="btn ghost" data-go="home">← Lobby</button><h2>📊 Statistics</h2></div>
+            <div id="statsBody"></div>
+        </section>
+
+        <section class="screen" id="screen-leaderboard" hidden>
+            <div class="screen-top"><button class="btn ghost" data-go="home">← Lobby</button><h2>🏅 Leaderboard</h2></div>
+            <div id="lbBody"></div>
+        </section>
+
+        <section class="screen" id="screen-missions" hidden>
+            <div class="screen-top"><button class="btn ghost" data-go="home">← Lobby</button><h2>🎁 Daily Bonus</h2></div>
+            <div id="missionsBody"></div>
+        </section>
+
+        <section class="screen" id="screen-settings" hidden>
+            <div class="screen-top"><button class="btn ghost" data-go="home">← Lobby</button><h2>⚙️ Settings</h2></div>
+            <div id="settingsBody"></div>
+        </section>
+
+    </main>
+
+    <div id="toast" class="toast" hidden></div>
+
+    <div id="dialog" class="dialog-back" hidden>
+        <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="dialogTitle">
+            <h3 id="dialogTitle"></h3>
+            <div id="dialogBody" class="dialog-body"></div>
+            <input type="text" id="dialogField" class="dialog-field" hidden>
+            <div class="btn-row right">
+                <button class="btn ghost" id="dialogNo">Cancel</button>
+                <button class="btn primary" id="dialogYes">OK</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- core: order matters — each file adds to window.CV -->
+    <script src="js/core/rng.js"></script>
+    <script src="js/core/cards.js"></script>
+    <script src="js/core/store.js"></script>
+    <script src="js/core/engine.js"></script>
+    <script src="js/core/transport.js"></script>
+    <script src="js/core/ai.js"></script>
+    <script src="js/core/registry.js"></script>
+    <script src="js/core/profile.js"></script>
+    <script src="js/core/stats.js"></script>
+    <script src="js/core/achievements.js"></script>
+    <script src="js/core/missions.js"></script>
+    <script src="js/core/cosmetics.js"></script>
+    <script src="js/core/rewards.js"></script>
+    <script src="js/core/table.js"></script>
+
+    <!-- shell -->
+    <script src="js/ui/shell.js"></script>
+    <script src="js/ui/cardview.js"></script>
+    <script src="js/ui/settings.js"></script>
+    <script src="js/save.js"></script>
+
+    <!-- games: each folder registers itself -->
+    <script src="js/games/blackjack/engine.js"></script>
+    <script src="js/games/blackjack/ai.js"></script>
+    <script src="js/games/blackjack/view.js"></script>
+    <script src="js/games/blackjack/index.js"></script>
+    <script src="js/games/twentyone/engine.js"></script>
+    <script src="js/games/twentyone/ai.js"></script>
+    <script src="js/games/twentyone/index.js"></script>
+
+    <!-- screens -->
+    <script src="js/ui/play.js"></script>
+    <script src="js/ui/result.js"></script>
+    <script src="js/ui/lobby.js"></script>
+    <script src="js/ui/profile.js"></script>
+    <script src="js/ui/achievements.js"></script>
+    <script src="js/ui/statistics.js"></script>
+    <script src="js/ui/leaderboard.js"></script>
+    <script src="js/ui/missions.js"></script>
+
+    <script src="js/app.js"></script>
+
+    <!-- the Drive copy; harmless if it never loads -->
+    <script src="drive-config.js"></script>
+    <script src="drive.js"></script>
+</body>
+</html>

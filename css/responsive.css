@@ -1,0 +1,44 @@
+/* CardVerse — small screens. The table is the screen that has to work on a
+ * phone held upright: cards shrink, seats stack, the bet box goes full width,
+ * and nothing is allowed to scroll sideways. */
+
+@media (max-width: 720px) {
+    :root { --card-w: 52px; --card-h: 74px; }
+    main { padding: 10px 10px 40px; }
+    .brand-text small { display: none; }
+    .hdr-who { min-width: 0; }
+    .hdr-who small { display: none; }
+    .hero h1 { font-size: 1.7rem; }
+    .lobby-grid { grid-template-columns: 1fr; }
+    .home-nav { grid-template-columns: repeat(3, 1fr); }
+    .nav-tile small { display: none; }
+    .stat-grid { grid-template-columns: repeat(2, 1fr); }
+    .result-grid { grid-template-columns: repeat(2, 1fr); }
+    .table-root { padding: 14px 8px 12px; border-radius: 16px; min-height: 76vh; }
+    .bj-seats { flex-direction: column; align-items: stretch; }
+    .seat { max-width: none; min-width: 0; }
+    .seat.is-you { order: -1; }
+    .bet-box { width: 100%; }
+    .chips .chip { width: 48px; height: 48px; }
+    .bj-actions .btn { min-width: 0; flex: 1; }
+    .bj-actions .btn-row { width: 100%; }
+    .login-grid { grid-template-columns: repeat(4, 1fr); }
+    .setup-head { flex-direction: column; align-items: flex-start; }
+    .row-opt { flex-wrap: wrap; }
+    .row-opt select, .row-opt input[type="text"] { min-width: 0; width: 100%; }
+    .profile-card { flex-wrap: wrap; }
+    .ach-side { align-items: flex-start; }
+    table.history td:nth-child(4) { display: none; }
+}
+
+@media (max-width: 420px) {
+    :root { --card-w: 46px; --card-h: 66px; }
+    .card-pip { font-size: 1.5rem; }
+    .home-nav { grid-template-columns: repeat(2, 1fr); }
+    .brand-text { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    :root { --anim: 1ms; }
+    .card-fresh, .screen, .dialog, .result { animation: none; }
+}
