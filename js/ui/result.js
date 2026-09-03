@@ -9,13 +9,15 @@
 (() => {
     'use strict';
 
+    const t = (k, p) => window.CV.t(k, p);
+
     const CV = window.CV;
     const { $, esc, fmt, signed, pct } = CV.UI;
 
     const HEAD = {
-        win:  { title: 'YOU WIN!',  icon: '🏆', cls: 'win' },
-        loss: { title: 'YOU LOSE',  icon: '💸', cls: 'loss' },
-        draw: { title: 'PUSH',      icon: '🤝', cls: 'draw' },
+        win:  { key: 'res.win',  icon: '🏆', cls: 'win' },
+        loss: { key: 'res.loss', icon: '💸', cls: 'loss' },
+        draw: { key: 'res.draw', icon: '🤝', cls: 'draw' },
     };
 
     const MEDAL = ['🥇', '🥈', '🥉'];
@@ -46,7 +48,7 @@
         const withCards = rows.filter((r) => r.hands && r.hands.length);
         const cardsBlock = withCards.length ? `
             <div class="rc-board">
-                <span class="rc-label">Everyone's cards</span>
+                <span class="rc-label">${esc(t('res.board'))}</span>
                 <table class="rc-board-table"><tbody>
                     ${withCards.map((r) => `
                         <tr class="${r.seat === you ? 'is-you' : ''}${r.house ? ' is-house' : ''}">
@@ -62,18 +64,18 @@
         // rather than believed. The lines sum to exactly what was paid.
         const money = (mine && mine.lines && mine.lines.length) ? `
             <details class="rc-money" open>
-                <summary>How your coins worked out</summary>
+                <summary>${esc(t('res.money'))}</summary>
                 <table class="rc-money-table"><tbody>
                     ${mine.lines.map((l) => `
                         <tr>
                             <td>
                                 <b>${esc(l.label)}</b><small class="muted"> — ${esc(l.why)}</small>
-                                <small class="rc-sum">staked 🪙${fmt(l.stake)} → back 🪙${fmt(l.returned)}</small>
+                                <small class="rc-sum">${esc(t('res.staked', { stake: fmt(l.stake), back: fmt(l.returned) }))}</small>
                             </td>
                             <td class="num ${l.amount > 0 ? 'good' : l.amount < 0 ? 'bad' : ''}">${signed(l.amount)}</td>
                         </tr>`).join('')}
                     <tr class="rc-total-row">
-                        <td><b>Net this hand</b></td>
+                        <td><b>${esc(t('res.net'))}</b></td>
                         <td class="num ${summary.coins > 0 ? 'good' : summary.coins < 0 ? 'bad' : ''}"><b>${signed(summary.coins)}</b></td>
                     </tr>
                 </tbody></table>
@@ -81,7 +83,7 @@
 
         const table = rows.map((r) => `
             <tr class="${r.seat === you ? 'is-you' : ''}">
-                <td>${MEDAL[r.rank - 1] || r.rank + 'th'}</td>
+                <td>${MEDAL[r.rank - 1] || esc(t('res.nth', { n: r.rank }))}</td>
                 <td>${esc(r.name)}</td>
                 <td class="num muted small">${r.house ? '' : '🪙 ' + fmt(r.stake || 0)}</td>
                 <td class="num ${r.coins > 0 ? 'good' : r.coins < 0 ? 'bad' : ''}">${signed(r.coins)}</td>
@@ -93,29 +95,29 @@
             <span class="reward">${a.reward.coins ? '🪙 ' + fmt(a.reward.coins) : ''} ${a.reward.xp ? '⭐ ' + fmt(a.reward.xp) : ''}</span></div>`).join('');
 
         const missions = summary.missions.map((m) => `
-            <div class="unlock mission"><span class="icon">${m.icon}</span><div><b>Mission complete</b><small>${esc(m.text)} — claim it in Daily Bonus</small></div></div>`).join('');
+            <div class="unlock mission"><span class="icon">${m.icon}</span><div><b>${esc(t('res.missionDone'))}</b><small>${esc(t('res.claimIn', { text: m.text }))}</small></div></div>`).join('');
 
         const levelUp = summary.levels
-            ? `<div class="levelup">⬆️ Level ${CV.Profile.get().level} — ${CV.Profile.titleFor(CV.Profile.get().level).name}! <small>+${fmt(summary.levelCoins)} coins</small></div>`
+            ? `<div class="levelup">${esc(t('res.levelUp', { n: CV.Profile.get().level, title: CV.Profile.titleFor(CV.Profile.get().level).name }))} <small>${esc(t('res.levelCoins', { n: fmt(summary.levelCoins) }))}</small></div>`
             : '';
 
         const streak = summary.streak >= 2
-            ? `<div class="streak">🔥 ${summary.streak} in a row${summary.milestone ? ` <small>+${summary.milestone} XP bonus</small>` : ''}</div>`
+            ? `<div class="streak">${esc(t('res.streak', { n: summary.streak }))}${summary.milestone ? ` <small>${esc(t('res.streakBonus', { n: summary.milestone }))}</small>` : ''}</div>`
             : '';
 
         host.innerHTML = `
             <div class="result ${head.cls}">
                 <div class="result-head">
                     <span class="icon">${head.icon}</span>
-                    <h2>${head.title}</h2>
+                    <h2>${esc(t(head.key))}</h2>
                     <div class="muted">${esc(summary.gameName)} · ${esc(CV.Registry.room(summary.room).name)}${summary.result.detail ? ' · ' + esc(summary.result.detail) : ''}</div>
                 </div>
 
                 <div class="result-grid">
-                    <div class="stat"><span class="label">Rank</span><span class="value">${MEDAL[summary.rank - 1] || summary.rank + 'th'}</span></div>
-                    <div class="stat"><span class="label">Coins</span><span class="value ${summary.coins > 0 ? 'good' : summary.coins < 0 ? 'bad' : ''}">🪙 ${signed(summary.coins)}</span></div>
-                    <div class="stat"><span class="label">XP</span><span class="value">⭐ +${fmt(summary.xp)}</span></div>
-                    <div class="stat"><span class="label">Win rate</span><span class="value small">${pct(summary.winRateBefore)} → ${pct(summary.winRateAfter)}</span></div>
+                    <div class="stat"><span class="label">${esc(t('res.rank'))}</span><span class="value">${MEDAL[summary.rank - 1] || esc(t('res.nth', { n: summary.rank }))}</span></div>
+                    <div class="stat"><span class="label">${esc(t('res.coins'))}</span><span class="value ${summary.coins > 0 ? 'good' : summary.coins < 0 ? 'bad' : ''}">🪙 ${signed(summary.coins)}</span></div>
+                    <div class="stat"><span class="label">${esc(t('res.xp'))}</span><span class="value">⭐ +${fmt(summary.xp)}</span></div>
+                    <div class="stat"><span class="label">${esc(t('res.winRate'))}</span><span class="value small">${pct(summary.winRateBefore)} → ${pct(summary.winRateAfter)}</span></div>
                 </div>
 
                 ${cardsBlock}
@@ -126,8 +128,8 @@
                 <table class="result-table"><tbody>${table}</tbody></table>
 
                 <div class="btn-row">
-                    <button class="btn primary big" id="resultAgain">Play again</button>
-                    <button class="btn" id="resultLobby">Back to lobby</button>
+                    <button class="btn primary big" id="resultAgain">${esc(t('res.again'))}</button>
+                    <button class="btn" id="resultLobby">${esc(t('res.lobby'))}</button>
                 </div>
             </div>`;
 

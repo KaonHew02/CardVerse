@@ -14,6 +14,8 @@
 (() => {
     'use strict';
 
+    const t = (k, p) => window.CV.t(k, p);
+
     const CV = window.CV;
     const { $, esc, fmt, pct } = CV.UI;
 
@@ -23,7 +25,10 @@
         const grid = $('lobbyGrid');
         grid.innerHTML = CV.Registry.all().map((g) => {
             const s = CV.Stats.forGame(g.code);
-            const played = s.played ? `<span class="muted small">${s.played} played · ${pct(CV.Stats.winRate(g.code))} wins</span>` : '';
+            const played = s.played
+                ? `<span class="muted small">${esc(t('lobby.record', { played: s.played, rate: pct(CV.Stats.winRate(g.code)) }))}</span>`
+                : '';
+            const range = g.players[0] + (g.players[1] > g.players[0] ? '–' + g.players[1] : '');
             if (!g.ready) {
                 return `
                     <div class="game-card is-soon">
@@ -31,9 +36,9 @@
                         <div class="game-body">
                             <h3>${esc(g.name)}</h3>
                             <p>${esc(g.blurb)}</p>
-                            <span class="muted small">Players: ${g.players[0]}${g.players[1] > g.players[0] ? '–' + g.players[1] : ''}</span>
+                            <span class="muted small">${esc(t('lobby.players', { range }))}</span>
                         </div>
-                        <span class="soon">Coming soon</span>
+                        <span class="soon">${esc(t('lobby.soon'))}</span>
                     </div>`;
             }
             return `
@@ -42,10 +47,10 @@
                     <div class="game-body">
                         <h3>${esc(g.name)}</h3>
                         <p>${esc(g.blurb)}</p>
-                        <span class="muted small">Players: ${g.players[0]}–${g.players[1]}</span>
+                        <span class="muted small">${esc(t('lobby.players', { range }))}</span>
                         ${played}
                     </div>
-                    <button class="btn primary">PLAY</button>
+                    <button class="btn primary">${esc(t('lobby.play'))}</button>
                 </div>`;
         }).join('');
 
@@ -55,13 +60,13 @@
         const p = CV.Profile.get();
 
         $('homeNav').innerHTML = `
-            <button class="nav-tile" data-go="achievements"><span class="icon">🏆</span><span>Achievements</span><small>${ach.done} / ${ach.total}</small></button>
-            <button class="nav-tile" data-go="stats"><span class="icon">📊</span><span>Statistics</span><small>${fmt(p.totalGames)} games</small></button>
-            <button class="nav-tile${todo ? ' has-badge' : ''}" data-go="missions"><span class="icon">🎁</span><span>Daily Bonus</span><small>${todo ? todo + ' to claim' : login.claimedToday ? 'Claimed today' : 'Ready'}</small></button>
-            <button class="nav-tile" data-go="room"><span class="icon">🌐</span><span>Play with Friends</span><small>Online</small></button>
-            <button class="nav-tile" data-go="leaderboard"><span class="icon">🏅</span><span>Leaderboard</span><small>Local</small></button>
-            <button class="nav-tile" data-go="profile"><span class="icon">👤</span><span>Profile</span><small>Lv ${p.level}</small></button>
-            <button class="nav-tile" data-go="settings"><span class="icon">⚙️</span><span>Settings</span><small>Theme · Data</small></button>`;
+            <button class="nav-tile" data-go="achievements"><span class="icon">🏆</span><span>${esc(t('nav.achievements'))}</span><small>${esc(t('nav.achCount', { done: ach.done, total: ach.total }))}</small></button>
+            <button class="nav-tile" data-go="stats"><span class="icon">📊</span><span>${esc(t('nav.stats'))}</span><small>${esc(t('nav.games', { n: fmt(p.totalGames) }))}</small></button>
+            <button class="nav-tile${todo ? ' has-badge' : ''}" data-go="missions"><span class="icon">🎁</span><span>${esc(t('nav.bonus'))}</span><small>${esc(todo ? t('nav.toClaim', { n: todo }) : login.claimedToday ? t('nav.claimed') : t('nav.ready'))}</small></button>
+            <button class="nav-tile" data-go="room"><span class="icon">🌐</span><span>${esc(t('nav.friends'))}</span><small>${esc(t('nav.online'))}</small></button>
+            <button class="nav-tile" data-go="leaderboard"><span class="icon">🏅</span><span>${esc(t('nav.leaderboard'))}</span><small>${esc(t('nav.local'))}</small></button>
+            <button class="nav-tile" data-go="profile"><span class="icon">👤</span><span>${esc(t('nav.profile'))}</span><small>${esc(t('lv'))} ${p.level}</small></button>
+            <button class="nav-tile" data-go="settings"><span class="icon">⚙️</span><span>${esc(t('nav.settings'))}</span><small>${esc(t('set.theme'))} · ${esc(t('set.data'))}</small></button>`;
     }
 
     /* ---- set-up ----------------------------------------------------------- */
@@ -97,12 +102,12 @@
                 <div>
                     <h2>${esc(game.name)}</h2>
                     <p class="muted">${esc(game.blurb)}</p>
-                    <p class="muted small">You: ${s.played} played · ${s.wins} won · ${pct(CV.Stats.winRate(game.code))}</p>
+                    <p class="muted small">${esc(t('setup.you', { played: s.played, wins: s.wins, rate: pct(CV.Stats.winRate(game.code)) }))}</p>
                 </div>
             </div>
 
             <div class="card-panel">
-                <h3>Room</h3>
+                <h3>${esc(t('setup.room'))}</h3>
                 <div class="room-grid">
                     ${rooms.map((r) => {
                         const need = r.entry + r.bet[0];
@@ -111,26 +116,26 @@
                         <button class="room${setup.room === r.id ? ' is-on' : ''}${ok ? '' : ' is-locked'}" data-room="${r.id}" ${ok ? '' : 'disabled'}>
                             <span class="icon">${r.icon}</span>
                             <b>${esc(r.name)}</b>
-                            <small>${r.entry ? 'Entry 🪙 ' + fmt(r.entry) : 'Free entry'}</small>
-                            <small>Bets ${fmt(r.bet[0])}–${fmt(r.bet[1])}</small>
+                            <small>${esc(r.entry ? t('setup.entry', { n: fmt(r.entry) }) : t('setup.freeEntry'))}</small>
+                            <small>${esc(t('setup.bets', { lo: fmt(r.bet[0]), hi: fmt(r.bet[1]) }))}</small>
                             <small class="muted">${esc(r.blurb)}</small>
-                            ${ok ? '' : `<small class="lock">Need 🪙 ${fmt(need)}</small>`}
+                            ${ok ? '' : `<small class="lock">${esc(t('setup.need', { n: fmt(need) }))}</small>`}
                         </button>`;
                     }).join('')}
                 </div>
             </div>
 
             <div class="card-panel">
-                <h3>Opponents</h3>
+                <h3>${esc(t('setup.opponents'))}</h3>
                 <div class="row-opt">
-                    <span>AI players</span>
+                    <span>${esc(t('setup.aiPlayers'))}</span>
                     <div class="seg" id="setupAi">
                         ${Array.from({ length: maxOthers + 1 }, (_, n) =>
                             `<button class="${setup.ai === n ? 'is-on' : ''}" data-ai="${n}" ${n + setup.guests.length > maxOthers ? 'disabled' : ''}>${n}</button>`).join('')}
                     </div>
                 </div>
                 <div class="row-opt">
-                    <span>Difficulty</span>
+                    <span>${esc(t('setup.difficulty'))}</span>
                     <div class="seg" id="setupLevel">
                         ${Object.entries(CV.AI_LEVELS).map(([k, v]) =>
                             `<button class="${setup.level === k ? 'is-on' : ''}" data-level="${k}">${v.icon} ${v.label}</button>`).join('')}
@@ -139,23 +144,23 @@
             </div>
 
             <div class="card-panel">
-                <h3>Pass-and-play</h3>
-                <p class="muted small">Friends on this device take their own seats. They play with 5,000 table coins; only your seat earns coins, XP and stats.</p>
+                <h3>${esc(t('setup.hotseat'))}</h3>
+                <p class="muted small">${esc(t('setup.hotseatNote'))}</p>
                 <div class="row-opt">
-                    <span>Extra players</span>
+                    <span>${esc(t('setup.extra'))}</span>
                     <div class="seg" id="setupGuests">
                         ${Array.from({ length: maxOthers + 1 }, (_, n) =>
                             `<button class="${setup.guests.length === n ? 'is-on' : ''}" data-guests="${n}" ${n + setup.ai > maxOthers ? 'disabled' : ''}>${n}</button>`).join('')}
                     </div>
                 </div>
                 <div id="setupGuestNames" class="guest-names">
-                    ${setup.guests.map((g, i) => `<input type="text" maxlength="12" placeholder="Guest ${i + 1}" value="${esc(g)}" data-guest="${i}">`).join('')}
+                    ${setup.guests.map((g, i) => `<input type="text" maxlength="12" placeholder="${esc(t('setup.guestN', { n: i + 1 }))}" value="${esc(g)}" data-guest="${i}">`).join('')}
                 </div>
             </div>
 
             <div class="setup-foot">
-                <div class="muted small">${setup.ai + setup.guests.length + 1} of ${game.players[1]} seats · you have 🪙 ${fmt(p.coins)}</div>
-                <button class="btn primary big" id="setupStart">Sit down</button>
+                <div class="muted small">${esc(t('setup.seats', { used: setup.ai + setup.guests.length + 1, max: game.players[1], coins: fmt(p.coins) }))}</div>
+                <button class="btn primary big" id="setupStart">${esc(t('setup.sit'))}</button>
             </div>`;
 
         const body = $('setupBody');
@@ -178,7 +183,7 @@
         S.set('aiCount', setup.ai);
         S.set('aiLevel', setup.level);
         S.set('guests', setup.guests.length);
-        S.set('guestNames', setup.guests.map((g, i) => (g || '').trim() || `Guest ${i + 1}`));
+        S.set('guestNames', setup.guests.map((g, i) => (g || '').trim() || t('setup.guestN', { n: i + 1 })));
         CV.Play.begin({
             gameCode: setup.game.code,
             room: setup.room,

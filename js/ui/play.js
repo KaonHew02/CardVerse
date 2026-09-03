@@ -15,6 +15,8 @@
 (() => {
     'use strict';
 
+    const t = (k, p) => window.CV.t(k, p);
+
     const CV = window.CV;
     const { $, fmt, esc } = CV.UI;
 
@@ -30,7 +32,7 @@
         const p    = CV.Profile.get();
 
         if (p.coins < room.entry + room.bet[0]) {
-            CV.UI.toast(`You need ${fmt(room.entry + room.bet[0])} coins to sit in the ${room.name}.`, 'warn');
+            CV.UI.toast(t('setup.cantAfford', { n: fmt(room.entry + room.bet[0]), room: room.name }), 'warn');
             return false;
         }
         if (room.entry && !CV.Profile.spend(room.entry)) return false;
@@ -60,8 +62,8 @@
 
         const you = session.seats.find((s) => s.isYou);
         if (you.coins < session.room.bet[0]) {
-            CV.UI.say('Out of coins for this table',
-                `The ${session.room.name} needs at least ${fmt(session.room.bet[0])} to bet. Claim the daily bonus or drop to a cheaper room.`);
+            CV.UI.say(t('table.brokeTitle'),
+                t('table.brokeBody', { room: session.room.name, n: fmt(session.room.bet[0]) }));
             return leave(true);
         }
 
@@ -115,11 +117,9 @@
         if (CV.Room && CV.Room.active) {
             const online = () => { CV.Room.teardown(); table = null; view = null; session = null; CV.UI.go('home'); };
             if (force) return online();
-            return CV.UI.confirm(CV.Room.isHost ? 'Close the table?' : 'Leave the table?',
-                CV.Room.isHost
-                    ? 'Everyone is disconnected and the room code stops working.'
-                    : 'You leave the hand and your seat carries on as an AI.',
-                CV.Room.isHost ? 'Close it' : 'Leave', online, true);
+            return CV.UI.confirm(t(CV.Room.isHost ? 'room.closeTitle' : 'room.leaveTitle'),
+                t(CV.Room.isHost ? 'room.closeBody' : 'room.leaveBody'),
+                t(CV.Room.isHost ? 'room.closeGo' : 'table.leaveGo'), online, true);
         }
         const mid = table && !table.engine.isOver() && table.engine.phase !== 'betting';
         const go = () => {
@@ -132,7 +132,7 @@
             CV.UI.go('home');
         };
         if (force || !mid) return go();
-        CV.UI.confirm('Leave this hand?', 'The bet on the table is lost and the hand counts as a loss.', 'Leave', go, true);
+        CV.UI.confirm(t('table.leaveTitle'), t('table.leaveBody'), t('table.leaveGo'), go, true);
     }
 
     function paintBar(s) {
@@ -157,7 +157,7 @@
 
         const built = params.guest ? CV.Room.buildGuestTable(root) : CV.Room.buildHostTable(root);
         if (!built) {
-            CV.UI.say('The table is not ready', 'Nothing has arrived from the host yet. Try again in a moment.');
+            CV.UI.say(t('room.notReady'), t('room.notReadyBody'));
             return CV.UI.go('home');
         }
         table = built.table;

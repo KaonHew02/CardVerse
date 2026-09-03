@@ -11,18 +11,21 @@
 (() => {
     'use strict';
 
+    const t = (k, p) => window.CV.t(k, p);
+
     const CV = window.CV;
     const { handValue, isBlackjack } = CV.Cards;
     const { esc, fmt, signed } = CV.UI;
 
+    /** Badge on a finished hand. The word comes from the pack; only the tone is local. */
     const OUTCOME = {
-        blackjack: { text: 'BLACKJACK', cls: 'win' },
-        twentyone: { text: '21!',       cls: 'win' },
-        win:       { text: 'WIN',       cls: 'win' },
-        push:      { text: 'PUSH',      cls: 'push' },
-        loss:      { text: 'LOSE',      cls: 'loss' },
-        bust:      { text: 'BUST',      cls: 'loss' },
-        surrender: { text: 'SURRENDER', cls: 'loss' },
+        blackjack: { key: 'out.blackjack', cls: 'win' },
+        twentyone: { key: 'out.twentyone', cls: 'win' },
+        win:       { key: 'out.win',       cls: 'win' },
+        push:      { key: 'out.push',      cls: 'push' },
+        loss:      { key: 'out.loss',      cls: 'loss' },
+        bust:      { key: 'out.bust',      cls: 'loss' },
+        surrender: { key: 'out.surrender', cls: 'loss' },
     };
 
     class BlackjackView {
@@ -48,7 +51,7 @@
                     <section class="bj-dealer">
                         <div class="seat-head">
                             <span class="avatar">🎩</span>
-                            <span class="name">Dealer</span>
+                            <span class="name">${esc(t('table.dealer'))}</span>
                             <span class="total" id="bjDealerTotal"></span>
                         </div>
                         <div id="bjDealerHand" class="hand-wrap"></div>
@@ -60,8 +63,8 @@
                 </div>`;
             this.$ = (id) => this.root.querySelector('#' + id);
             this.$('bjRule').textContent = this.simple
-                ? `Single deck · Dealer draws to 17 · Exactly 21 pays 3:2`
-                : `${this.engine.config.decks} decks · Dealer stands on 17 · Blackjack pays 3:2`;
+                ? t('table.rulesSimple')
+                : t('table.rules', { decks: this.engine.config.decks });
 
             CV.UI.on(this.root, '[data-act]', (el) => this.act(el));
             this.table.onChange((events) => this.paint(events));
@@ -101,7 +104,7 @@
             // Whatever is now on screen is known; the next paint animates only newcomers.
             this.root.querySelectorAll('.card[data-id]').forEach((c) => this.known.add(c.dataset.id));
             const bar = document.getElementById('tableShoe');
-            if (bar) bar.textContent = `${e.shoe.remaining} cards`;
+            if (bar) bar.textContent = t('table.cards', { n: e.shoe.remaining });
             const coins = document.getElementById('tableCoins');
             if (coins && e.youSeat >= 0) coins.textContent = fmt(e.seats[e.youSeat].coins);
         }
@@ -180,13 +183,13 @@
                         <div class="seat-head">
                             <span class="avatar">${s.avatar}</span>
                             <div class="who">
-                                <span class="name">${esc(s.name)}${s.isYou ? ' <em>(you)</em>' : ''}</span>
+                                <span class="name">${esc(s.name)}${s.isYou ? ` <em>(${esc(t('you'))})</em>` : ''}</span>
                                 <span class="coins">🪙 ${fmt(s.coins)}</span>
                             </div>
                             ${lvl}
                         </div>
                         <div class="seat-hands">
-                            ${s.out ? '<div class="muted small">Sitting out</div>' : hands || '<div class="hand hand-empty"></div>'}
+                            ${s.out ? `<div class="muted small">${esc(t('table.sittingOut'))}</div>` : hands || '<div class="hand hand-empty"></div>'}
                         </div>
                     </div>`;
             }).join('');
@@ -201,7 +204,7 @@
                 else total = (v.soft && v.total !== 21 ? 'soft ' : '') + v.total;
             }
             const outcome = h.outcome && OUTCOME[h.outcome]
-                ? `<span class="badge ${OUTCOME[h.outcome].cls}">${OUTCOME[h.outcome].text} ${signed(h.payout - h.bet)}</span>`
+                ? `<span class="badge ${OUTCOME[h.outcome].cls}">${esc(t(OUTCOME[h.outcome].key))} ${signed(h.payout - h.bet)}</span>`
                 : '';
             const tags = [h.doubled ? '2×' : '', h.split ? 'split' : ''].filter(Boolean).join(' · ');
             return `
@@ -220,27 +223,37 @@
             const host = this.$('bjStatus');
             const seat = e.seats[e.turn];
 
-            if (this.revealing) { host.innerHTML = '<span>Dealer draws…</span>'; return; }
+            if (this.revealing) { host.innerHTML = `<span>${esc(t('table.dealerDraws'))}</span>`; return; }
             if (e.over) {
-                const d = handValue(e.dealer.cards);
-                host.innerHTML = `<span>${d.total > 21 ? 'Dealer busts.' : 'Dealer has ' + d.total + '.'}</span>`;
+                const d = handValue((e.dealer.cards || []).filter(Boolean));
+                host.innerHTML = `<span>${esc(d.total > 21 ? t('table.dealerBusts') : t('table.dealerHas', { n: d.total }))}</span>`;
                 return;
             }
-            if (e.phase === 'dealer') { host.innerHTML = '<span>Dealer plays…</span>'; return; }
+            if (e.phase === 'dealer') { host.innerHTML = `<span>${esc(t('table.dealerPlays'))}</span>`; return; }
             if (!seat) { host.innerHTML = ''; return; }
 
             if (seat.isHuman) {
-                const who = seat.isYou ? 'Your' : esc(seat.name) + '’s';
-                const pass = seat.isYou ? '' : ' <small class="muted">— pass the device</small>';
-                if (e.phase === 'betting')   host.innerHTML = `<span class="you">${who} bet${pass}</span>`;
-                else if (e.phase === 'insurance') host.innerHTML = `<span class="you">Dealer shows an ace. ${who} call: insurance?${pass}</span>`;
-                else {
-                    const n = seat.hands.length > 1 ? ` — hand ${seat.active + 1} of ${seat.hands.length}` : '';
-                    host.innerHTML = `<span class="you">${who} turn${n}${pass}</span>`;
+                const mine = seat.isYou;
+                const who = mine ? '' : esc(seat.name);
+                // A guest at an online table is another person, not someone to
+                // hand the phone to — that prompt belongs to pass-and-play only.
+                const pass = (!mine && !CV.Room.active)
+                    ? `<small class="muted">${esc(t('table.passDevice'))}</small>` : '';
+                let line;
+                if (e.phase === 'betting') {
+                    line = mine ? t('table.yourBet') : t('table.someoneBet', { who });
+                } else if (e.phase === 'insurance') {
+                    line = t('table.insuranceAsk', { who: mine ? t('you') : who });
+                } else {
+                    const n = seat.hands.length > 1
+                        ? t('table.handOf', { n: seat.active + 1, total: seat.hands.length }) : '';
+                    line = (mine ? t('table.yourTurn') : t('table.someoneTurn', { who })) + n;
                 }
+                host.innerHTML = `<span class="you">${esc(line)}${pass}</span>`;
             } else {
-                const verb = e.phase === 'betting' ? 'is betting' : e.phase === 'insurance' ? 'is deciding on insurance' : 'is thinking';
-                host.innerHTML = `<span class="muted">${seat.avatar} ${esc(seat.name)} ${verb}…</span>`;
+                const key = e.phase === 'betting' ? 'table.betting'
+                    : e.phase === 'insurance' ? 'table.insuring' : 'table.thinking';
+                host.innerHTML = `<span class="muted">${seat.avatar} ${esc(t(key, { name: seat.name }))}</span>`;
             }
         }
 
@@ -257,7 +270,7 @@
 
             const hint = this.hint(seat);
             host.innerHTML = `
-                ${hint ? `<div class="bj-hint muted small">Book says: <b>${hint}</b></div>` : ''}
+                ${hint ? `<div class="bj-hint muted small">${esc(t('table.bookLabel'))} <b>${esc(hint)}</b></div>` : ''}
                 <div class="btn-row">
                     ${options.map((o) => `<button class="btn act-${o.type}" data-act="${o.type}">${o.label}${o.hint ? ` <small>${o.hint}</small>` : ''}</button>`).join('')}
                 </div>`;
@@ -270,15 +283,15 @@
             const chips = [opt.min, opt.min * 2, opt.min * 5, opt.max].filter((v, i, a) => v <= opt.max && a.indexOf(v) === i);
             host.innerHTML = `
                 <div class="bet-box">
-                    <div class="bet-amount">🪙 <b id="bjBetAmt">${fmt(this.bet)}</b> <small class="muted">of ${fmt(seat.coins)}</small></div>
+                    <div class="bet-amount">🪙 <b id="bjBetAmt">${fmt(this.bet)}</b> <small class="muted">${esc(t('table.ofCoins', { n: fmt(seat.coins) }))}</small></div>
                     <input type="range" id="bjBetRange" min="${opt.min}" max="${opt.max}" step="5" value="${this.bet}">
                     <div class="btn-row chips">
                         ${chips.map((v) => `<button class="chip" data-act="chip" data-v="${v}">${fmt(v)}</button>`).join('')}
                     </div>
                     <div class="btn-row">
-                        <button class="btn primary big" data-act="bet">Deal</button>
+                        <button class="btn primary big" data-act="bet">${esc(t('table.deal'))}</button>
                     </div>
-                    <div class="muted small">Table ${fmt(opt.min)}–${fmt(opt.max)}</div>
+                    <div class="muted small">${esc(t('table.range', { lo: fmt(opt.min), hi: fmt(opt.max) }))}</div>
                 </div>`;
             const range = this.$('bjBetRange');
             range.addEventListener('input', () => {
@@ -293,8 +306,8 @@
             const h = this.engine.hand(seat.index);
             const can = (t) => this.engine.legalActions(seat.index).some((o) => o.type === t);
             const up  = CV.Cards.pipValue(this.engine.dealerUp());
-            const t = this.table.ai.book(h, up, can, 'expert');
-            return can(t) ? t[0].toUpperCase() + t.slice(1) : '';
+            const move = this.table.ai.book(h, up, can, 'expert');
+            return can(move) ? t('act.' + move) : '';
         }
 
         /* ---- input ------------------------------------------------------- */

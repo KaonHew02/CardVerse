@@ -15,6 +15,8 @@
 (() => {
     'use strict';
 
+    const t = (k, p) => window.CV.t(k, p);
+
     const CV = window.CV;
     const { $, esc, fmt } = CV.UI;
 
@@ -40,12 +42,9 @@
         if (!CV.Net.available()) {
             $('roomBody').innerHTML = `
                 <div class="card-panel">
-                    <h3>Online play is unavailable</h3>
-                    <p class="muted">The peer-to-peer library did not load. Check your connection
-                    or whether an extension is blocking it, then reload. Everything else in
-                    CardVerse works without it — including pass-and-play, where friends share
-                    this device.</p>
-                    <div class="btn-row"><button class="btn" data-go="home">Back to lobby</button></div>
+                    <h3>${esc(t('room.unavailable'))}</h3>
+                    <p class="muted">${esc(t('room.unavailableBody'))}</p>
+                    <div class="btn-row"><button class="btn" data-go="home">${esc(t('room.backLobby'))}</button></div>
                 </div>`;
             return;
         }
@@ -53,17 +52,16 @@
             <div class="room-choice">
                 <button class="room-big" id="roomHost">
                     <span class="icon">🎲</span>
-                    <b>Host a table</b>
-                    <small>You deal. Friends join with a 6-digit code.</small>
+                    <b>${esc(t('room.hostBig'))}</b>
+                    <small>${esc(t('room.hostSub'))}</small>
                 </button>
                 <button class="room-big" id="roomJoin">
                     <span class="icon">🔑</span>
-                    <b>Join a table</b>
-                    <small>Type the code your friend gives you.</small>
+                    <b>${esc(t('room.joinBig'))}</b>
+                    <small>${esc(t('room.joinSub'))}</small>
                 </button>
             </div>
-            <p class="muted small center">Play goes directly between your devices. Nothing about the
-            game passes through CardVerse — only an introduction service that swaps addresses.</p>`;
+            <p class="muted small center">${esc(t('room.privacy'))}</p>`;
         $('roomHost').addEventListener('click', () => CV.UI.go('room', { mode: 'host' }));
         $('roomJoin').addEventListener('click', () => CV.UI.go('room', { mode: 'join' }));
     }
@@ -76,20 +74,20 @@
 
         $('roomBody').innerHTML = `
             <div class="card-panel">
-                <h3>Table settings</h3>
-                <label class="row-opt"><span>Game</span>
+                <h3>${esc(t('room.settings'))}</h3>
+                <label class="row-opt"><span>${esc(t('room.game'))}</span>
                     <select id="rmGame">${games.map((g) => `<option value="${g.code}" ${room.gameCode === g.code ? 'selected' : ''}>${g.icon} ${esc(g.name)}</option>`).join('')}</select>
                 </label>
-                <label class="row-opt"><span>Room</span>
-                    <select id="rmRoom">${CV.Registry.ROOMS.map((r) => `<option value="${r.id}" ${room.roomId === r.id ? 'selected' : ''}>${r.icon} ${esc(r.name)} — bets ${fmt(r.bet[0])}–${fmt(r.bet[1])}</option>`).join('')}</select>
+                <label class="row-opt"><span>${esc(t('setup.room'))}</span>
+                    <select id="rmRoom">${CV.Registry.ROOMS.map((r) => `<option value="${r.id}" ${room.roomId === r.id ? 'selected' : ''}>${r.icon} ${esc(r.name)} — ${esc(t('setup.bets', { lo: fmt(r.bet[0]), hi: fmt(r.bet[1]) }))}</option>`).join('')}</select>
                 </label>
-                <label class="row-opt"><span>Fill empty seats with AI</span>
+                <label class="row-opt"><span>${esc(t('room.fillAI'))}</span>
                     <input type="checkbox" id="rmFill" ${room.fill ? 'checked' : ''}>
                 </label>
-                <label class="row-opt"><span>AI difficulty</span>
+                <label class="row-opt"><span>${esc(t('setup.difficulty'))}</span>
                     <select id="rmLevel">${Object.entries(CV.AI_LEVELS).map(([k, v]) => `<option value="${k}" ${room.aiLevel === k ? 'selected' : ''}>${v.icon} ${v.label}</option>`).join('')}</select>
                 </label>
-                <div class="btn-row"><button class="btn primary big" id="rmOpen">Open the table</button></div>
+                <div class="btn-row"><button class="btn primary big" id="rmOpen">${esc(t('room.open'))}</button></div>
             </div>
             <div id="rmLobby"></div>`;
 
@@ -107,11 +105,11 @@
         const p = CV.Profile.get();
 
         if (p.coins < roomDef.entry + roomDef.bet[0]) {
-            return CV.UI.say('Not enough coins',
-                `Sitting in the ${esc(roomDef.name)} needs ${fmt(roomDef.entry + roomDef.bet[0])} coins.`);
+            return CV.UI.say(t('room.noCoins'),
+                t('room.noCoinsBody', { room: esc(roomDef.name), n: fmt(roomDef.entry + roomDef.bet[0]) }));
         }
 
-        CV.UI.flash(btn, '⏳ Opening…', 25000);
+        CV.UI.flash(btn, t('room.opening'), 25000);
         try {
             host = new CV.Net.Host();
             const code = await host.open(game.players[1]);
@@ -119,7 +117,7 @@
             room.started = false;
             btn.disabled = true;
 
-            host.on('join', () => { paintLobby(); CV.UI.toast('Someone joined the table', 'ok'); });
+            host.on('join', () => { paintLobby(); CV.UI.toast(t('room.joined'), 'ok'); });
             host.on('roster', paintLobby);
             host.on('leave', (entry) => { onLeave(entry); paintLobby(); });
             host.on('action', (action) => { if (table) table.dispatch(action); });
@@ -128,7 +126,7 @@
             paintLobby();
         } catch (err) {
             btn.disabled = false;
-            CV.UI.say('Could not open the table', esc(err.message));
+            CV.UI.say(t('room.cantOpen'), esc(err.message));
             if (host) { host.close(); host = null; }
         }
     }
@@ -141,43 +139,42 @@
 
         $('rmLobby').innerHTML = `
             <div class="card-panel">
-                <h3>Room code</h3>
+                <h3>${esc(t('room.code'))}</h3>
                 <div class="room-code" id="rmCode" title="Click to copy">${room.code.split('').map((d) => `<span>${d}</span>`).join('')}</div>
-                <p class="muted small center">Read this out, or tap it to copy. Keep this tab open —
-                the table lives in it.</p>
+                <p class="muted small center">${esc(t('room.codeNote'))}</p>
             </div>
             <div class="card-panel">
-                <h3>At the table <small class="muted">${people.length} of ${max}</small></h3>
+                <h3>${esc(t('room.atTable'))} <small class="muted">${people.length} ${esc(t('of'))} ${max}</small></h3>
                 ${people.map((pl) => `
                     <div class="room-player">
                         <span class="avatar">${pl.avatar}</span>
                         <b>${esc(pl.name)}</b>
-                        ${pl.host ? '<span class="tag on">Host</span>' : '<span class="tag">Guest</span>'}
+                        ${pl.host ? `<span class="tag on">${esc(t('host'))}</span>` : `<span class="tag">${esc(t('guest'))}</span>`}
                     </div>`).join('')}
                 ${room.fill && people.length < max
-                    ? `<p class="muted small">${max - people.length} empty seat${max - people.length === 1 ? '' : 's'} will be filled with AI.</p>`
+                    ? `<p class="muted small">${esc(t('room.emptySeats', { n: max - people.length }))}</p>`
                     : ''}
                 <div class="btn-row">
-                    <button class="btn primary big" id="rmStart">${room.started ? 'Next hand' : 'Start playing'}</button>
-                    <button class="btn ghost" id="rmClose">Close the table</button>
+                    <button class="btn primary big" id="rmStart">${esc(t(room.started ? 'room.next' : 'room.start'))}</button>
+                    <button class="btn ghost" id="rmClose">${esc(t('room.closeTable'))}</button>
                 </div>
             </div>`;
 
         $('rmCode').addEventListener('click', () => {
             navigator.clipboard && navigator.clipboard.writeText(room.code)
-                .then(() => CV.UI.toast('Code copied', 'ok', 1200))
-                .catch(() => CV.UI.toast('Copy failed — read it out instead', 'warn'));
+                .then(() => CV.UI.toast(t('room.copied'), 'ok', 1200))
+                .catch(() => CV.UI.toast(t('room.copyFail'), 'warn'));
         });
         $('rmStart').addEventListener('click', startHosted);
         $('rmClose').addEventListener('click', () => {
-            CV.UI.confirm('Close the table?', 'Everyone is disconnected and the code stops working.',
-                'Close it', () => { teardown(); CV.UI.go('home'); }, true);
+            CV.UI.confirm(t('room.closeTitle'), t('room.closeBody'),
+                t('room.closeGo'), () => { teardown(); CV.UI.go('home'); }, true);
         });
     }
 
     /** A guest left. Their seat carries on as an AI rather than stalling everyone. */
     function onLeave(entry) {
-        CV.UI.toast(`${entry.name} left the table`, 'warn', 3000);
+        CV.UI.toast(t('room.left', { name: entry.name }), 'warn', 3000);
         if (!table || !table.engine.seats[entry.seat]) return;
         const seat = table.engine.seats[entry.seat];
         seat.kind = 'ai';
@@ -195,7 +192,7 @@
         const people = host.roster();
 
         if (!room.started && roomDef.entry && !CV.Profile.spend(roomDef.entry)) {
-            return CV.UI.say('Not enough coins', 'The table fee could not be taken.');
+            return CV.UI.say(t('room.noCoins'), t('room.noCoinsBody', { room: roomDef.name, n: fmt(roomDef.entry) }));
         }
 
         // Seat 0 is the host; guests keep the seat they were given; the rest are AI.
@@ -284,11 +281,11 @@
     function paintJoin() {
         $('roomBody').innerHTML = `
             <div class="card-panel">
-                <h3>Join a table</h3>
-                <p class="muted small">Type the six digits your friend read out.</p>
+                <h3>${esc(t('room.joinTitle'))}</h3>
+                <p class="muted small">${esc(t('room.joinHint'))}</p>
                 <input type="text" id="rmJoinCode" class="code-input" inputmode="numeric"
                        pattern="[0-9]*" maxlength="6" placeholder="000000" autocomplete="off">
-                <div class="btn-row"><button class="btn primary big" id="rmJoinGo">Join</button></div>
+                <div class="btn-row"><button class="btn primary big" id="rmJoinGo">${esc(t('room.join'))}</button></div>
                 <p class="muted small" id="rmJoinNote"></p>
             </div>`;
         const input = $('rmJoinCode');
@@ -300,17 +297,17 @@
 
     async function joinTable(ev) {
         const code = ($('rmJoinCode').value || '').trim();
-        if (code.length !== 6) return CV.UI.toast('The code is six digits.', 'warn');
+        if (code.length !== 6) return CV.UI.toast(t('room.sixDigits'), 'warn');
 
         const btn = ev.currentTarget;
-        CV.UI.flash(btn, '⏳ Connecting…', 25000);
-        $('rmJoinNote').textContent = 'Looking for the table…';
+        CV.UI.flash(btn, t('room.joining'), 25000);
+        $('rmJoinNote').textContent = t('room.looking');
 
         try {
             client = new CV.Net.Client();
             await client.join(code);
             room = { code, joined: true };
-            $('rmJoinNote').textContent = 'Connected. Waiting for the host to deal…';
+            $('rmJoinNote').textContent = t('room.connected');
 
             // 'start' announces the hand; the table is built from the first
             // snapshot, not from this message. Navigating on 'start' alone
@@ -335,7 +332,7 @@
             });
             client.on('over', (msg) => { if (table && table.finish) table.finish(rehydrate(msg.result)); });
             client.on('bye', (msg) => {
-                CV.UI.say('The table closed', esc((msg && msg.reason) || 'The host left.'));
+                CV.UI.say(t('room.closedTitle'), esc((msg && msg.reason) || t('room.closedBody')));
                 teardown();
                 CV.UI.go('home');
             });
@@ -344,7 +341,7 @@
             paintWaiting();
         } catch (err) {
             $('rmJoinNote').textContent = '';
-            CV.UI.say('Could not join', esc(err.message));
+            CV.UI.say(t('room.cantJoin'), esc(err.message));
             if (client) { client.close(); client = null; }
         }
     }
@@ -357,10 +354,10 @@
     function paintWaiting() {
         $('roomBody').innerHTML = `
             <div class="card-panel center">
-                <h3>You are in</h3>
+                <h3>${esc(t('room.youAreIn'))}</h3>
                 <div class="room-code">${room.code.split('').map((d) => `<span>${d}</span>`).join('')}</div>
-                <p class="muted">Waiting for the host to start the hand. Keep this tab open.</p>
-                <div class="btn-row"><button class="btn ghost" id="rmLeave">Leave</button></div>
+                <p class="muted">${esc(t('room.waitHost'))}</p>
+                <div class="btn-row"><button class="btn ghost" id="rmLeave">${esc(t('table.leaveGo'))}</button></div>
             </div>`;
         $('rmLeave').addEventListener('click', () => { teardown(); CV.UI.go('home'); });
     }
@@ -382,7 +379,7 @@
             if (settled) {
                 CV.UI.header();
                 waitForBoard(() => CV.ResultView.show(settled.result, {
-                    onAgain: () => { CV.UI.toast('Waiting for the host to deal again…', 'info', 2500); },
+                    onAgain: () => { CV.UI.toast(t('room.waitDeal'), 'info', 2500); },
                     onLobby: () => { teardown(); CV.UI.go('home'); },
                 }));
             }

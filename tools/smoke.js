@@ -42,7 +42,7 @@ function load(rel) {
 }
 
 [
-    'js/core/rng.js', 'js/core/cards.js', 'js/core/store.js', 'js/core/engine.js',
+    'js/core/rng.js', 'js/core/cards.js', 'js/core/store.js', 'js/core/i18n.js', 'js/core/engine.js',
     'js/core/transport.js', 'js/core/ai.js', 'js/core/registry.js', 'js/core/profile.js',
     'js/core/stats.js', 'js/core/achievements.js', 'js/core/missions.js', 'js/core/cosmetics.js',
     'js/core/rewards.js', 'js/core/table.js',
@@ -184,10 +184,21 @@ for (const game of CV.Registry.playable()) {
         enet += e.seats[0].net;
     }
     const eedge = (enet / ebet) * 100;
-    console.log(`  expert solo over ${HANDS * 3} hands: ${eedge.toFixed(2)}% of stake`);
-    // Blackjack basic strategy sits near -0.5%; 21's any-21-pays-3:2 rule
-    // tips a perfect player slightly positive, by design — it is the beginner's game.
-    check(eedge > -4 && eedge < 6, `${game.code}: expert return ${eedge.toFixed(2)}% is implausible for basic strategy`);
+
+    // The band has to scale with the sample or this check fails at random on
+    // short runs. A blackjack hand has a standard deviation near 1.15 units,
+    // so the standard error on the mean return is 115/sqrt(n) percent; three
+    // of those either side of the expected edge is a band that catches a real
+    // strategy regression without flagging ordinary variance. It cost one
+    // spurious failure at 300 hands to learn this.
+    const nHands = HANDS * 3;
+    const se = 115 / Math.sqrt(nHands);
+    const expected = game.simple ? 4 : -0.5;      // 21's any-21-pays-3:2 rule is player-positive
+    const lo = expected - 3 * se, hi = expected + 3 * se;
+    console.log(`  expert solo over ${nHands} hands: ${eedge.toFixed(2)}% of stake `
+        + `(expect ${expected}% ±${(3 * se).toFixed(1)})`);
+    check(eedge > lo && eedge < hi,
+        `${game.code}: expert return ${eedge.toFixed(2)}% is outside ${lo.toFixed(1)}..${hi.toFixed(1)}%`);
 
     // Determinism: same seed and seats → same log and same events.
     const a = playHand(game, { seed: 4242, seats: seats(4, new CV.RNG(1)), config: { room: 'casual' } });

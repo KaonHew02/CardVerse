@@ -58,6 +58,7 @@ js/core/              the hub — nothing in here knows a game by name
   cosmetics.js        the shop
   rewards.js          what a finished game is worth (one pipeline)
   store.js            localStorage with failure reporting
+  i18n.js             languages — one flat dict per language
 js/games/<game>/      engine.js · ai.js · view.js · index.js (registers itself)
 js/ui/                shell · lobby · play · result · profile · achievements ·
                       statistics · leaderboard · missions · settings · cardview

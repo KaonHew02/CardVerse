@@ -17,6 +17,8 @@
 (() => {
     'use strict';
 
+    const t = (k, p) => window.CV.t(k, p);
+
     const KEY = () => window.CV.Store.KEYS.missions;
 
     const MISSION_COUNT = 4;
@@ -57,7 +59,9 @@
             metric: 'game:' + g.code,
             target: 1,
             icon: g.icon,
-            text: `Play ${g.name}`,
+            // Built per call rather than localized once, because the game's
+            // own name has already been translated by then.
+            text: t('miss.playGame', { name: g.name }),
             reward: { xp: 50 },
         }));
     }
@@ -155,13 +159,13 @@
 
     /** The 7-day cycle from the spec. Day 7 restarts the cycle at day 1. */
     const LOGIN_REWARDS = [
-        { day: 1, coins: 100,  icon: '🪙', label: '100 coins' },
-        { day: 2, coins: 150,  icon: '🪙', label: '150 coins' },
-        { day: 3, coins: 200,  icon: '🪙', label: '200 coins' },
-        { day: 4, coins: 250, xp: 100, icon: '🎁', label: '250 coins + 100 XP' },
-        { day: 5, coins: 500,  icon: '🪙', label: '500 coins' },
-        { day: 6, xp: 300,     icon: '⭐', label: '300 XP' },
-        { day: 7, coins: 1500, xp: 500, icon: '💎', label: '1,500 coins + 500 XP' },
+        { day: 1, coins: 100,  icon: '🪙', key: 'miss.r100' },
+        { day: 2, coins: 150,  icon: '🪙', key: 'miss.r150' },
+        { day: 3, coins: 200,  icon: '🪙', key: 'miss.r200' },
+        { day: 4, coins: 250, xp: 100, icon: '🎁', key: 'miss.r250xp' },
+        { day: 5, coins: 500,  icon: '🪙', key: 'miss.r500' },
+        { day: 6, xp: 300,     icon: '⭐', key: 'miss.r300xp' },
+        { day: 7, coins: 1500, xp: 500, icon: '💎', key: 'miss.r1500' },
     ];
 
     const yesterdayKey = () => {

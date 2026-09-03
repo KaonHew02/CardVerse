@@ -10,6 +10,8 @@
 (() => {
     'use strict';
 
+    const t = (k, p) => window.CV.t(k, p);
+
     const CV = window.CV;
     const { $, esc, fmt, dmyDate } = CV.UI;
 
@@ -27,17 +29,17 @@
                 <span class="avatar big">${p.avatar}</span>
                 <div>
                     <b>${esc(p.name)}</b>
-                    <div class="muted small">Level ${p.level} · 🪙 ${fmt(p.coins)} · ${fmt(o.wins)} wins · net ${CV.UI.signed(o.coinsWon - o.coinsLost)}</div>
+                    <div class="muted small">${esc(t('lb.summary', { level: p.level, coins: fmt(p.coins), wins: fmt(o.wins), net: CV.UI.signed(o.coinsWon - o.coinsLost) }))}</div>
                 </div>
             </div>
 
             <div class="seg tabs">
-                <button class="${tab === 'all' ? 'is-on' : ''}" data-tab="all">🌐 All</button>
+                <button class="${tab === 'all' ? 'is-on' : ''}" data-tab="all">${esc(t('lb.all'))}</button>
                 ${games.map((g) => `<button class="${tab === g.code ? 'is-on' : ''}" data-tab="${g.code}">${g.icon} ${esc(g.name)}</button>`).join('')}
             </div>
 
             <div class="card-panel">
-                <h3>Biggest wins</h3>
+                <h3>${esc(t('lb.biggest'))}</h3>
                 ${best.length ? `<table class="history"><tbody>${best.map((h, i) => {
                     const g = CV.Registry.get(h.game) || { icon: '❔', name: h.game };
                     return `<tr>
@@ -47,10 +49,10 @@
                         <td class="muted small">${esc(CV.Registry.room(h.room).name)}</td>
                         <td class="muted small">${dmyDate(new Date(h.at))}</td>
                     </tr>`;
-                }).join('')}</tbody></table>` : '<p class="muted small">No winning hands recorded yet.</p>'}
+                }).join('')}</tbody></table>` : `<p class="muted small">${esc(t('lb.none'))}</p>`}
             </div>
 
-            <p class="muted small center">Rankings are local to this browser. A global board arrives with online play.</p>`;
+            <p class="muted small center">${esc(t('lb.localNote'))}</p>`;
 
         $('lbBody').querySelectorAll('[data-tab]').forEach((b) => b.addEventListener('click', () => { tab = b.dataset.tab; render(); }));
     }

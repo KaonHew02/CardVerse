@@ -20,6 +20,8 @@
 (() => {
     'use strict';
 
+    const t = (k, p) => window.CV.t(k, p);
+
     const CV = window.CV;
     const { Deck, handValue, isBlackjack, pipValue } = CV.Cards;
 
@@ -31,15 +33,20 @@
      * player-facing names, kept beside the payout rule they describe so the
      * two cannot drift apart.
      */
+    const odds = (mult) => (mult === 1.5 ? '3:2' : mult + ':1');
+
     const OUTCOME = {
-        blackjack: { label: 'Blackjack',   why: (h, c) => `pays ${c.blackjackPays === 1.5 ? '3:2' : c.blackjackPays + ':1'}` },
-        twentyone: { label: 'Exactly 21',  why: (h, c) => `pays ${c.exactBonus === 1.5 ? '3:2' : c.exactBonus + ':1'}` },
-        win:       { label: 'Win',         why: () => 'beat the dealer, pays 1:1' },
-        push:      { label: 'Push',        why: () => 'same as the dealer, stake returned' },
-        loss:      { label: 'Lose',        why: () => 'dealer was higher' },
-        bust:      { label: 'Bust',        why: (h) => `went over 21 on ${handValue(h.cards).total}` },
-        surrender: { label: 'Surrendered', why: () => 'half the stake back' },
+        blackjack: { key: 'blackjack', why: (h, c) => t('why.blackjack', { odds: odds(c.blackjackPays) }) },
+        twentyone: { key: 'twentyone', why: (h, c) => t('why.twentyone', { odds: odds(c.exactBonus) }) },
+        win:       { key: 'win',       why: () => t('why.win') },
+        push:      { key: 'push',      why: () => t('why.push') },
+        loss:      { key: 'loss',      why: () => t('why.loss') },
+        bust:      { key: 'bust',      why: (h) => t('why.bust', { total: handValue(h.cards).total }) },
+        surrender: { key: 'surrender', why: () => t('why.surrender') },
     };
+
+    /** Outcome names are looked up per call — the language can change between hands. */
+    const outcomeLabel = (code) => (OUTCOME[code] ? t('out.' + OUTCOME[code].key) : code);
 
     class BlackjackEngine extends CV.GameEngine {
 
@@ -149,33 +156,33 @@
             if (this.phase === 'betting') {
                 const max = Math.min(this.maxBet, s.coins);
                 if (max < this.minBet) return [];
-                return [{ type: 'bet', min: this.minBet, max, label: 'Bet' }];
+                return [{ type: 'bet', min: this.minBet, max, label: t('act.bet') }];
             }
 
             if (this.phase === 'insurance') {
                 const half = Math.floor(s.bet / 2);
-                const out = [{ type: 'noInsure', label: 'No insurance' }];
-                if (s.coins >= half && half > 0) out.unshift({ type: 'insure', label: 'Insure', hint: `${half} coins` });
+                const out = [{ type: 'noInsure', label: t('act.noInsure') }];
+                if (s.coins >= half && half > 0) out.unshift({ type: 'insure', label: t('act.insure'), hint: t('act.insureHint', { n: half }) });
                 return out;
             }
 
             if (this.phase === 'playing') {
                 const h = this.hand(seat);
                 if (!h || h.done) return [];
-                const out = [{ type: 'hit', label: 'Hit' }, { type: 'stand', label: 'Stand' }];
+                const out = [{ type: 'hit', label: t('act.hit') }, { type: 'stand', label: t('act.stand') }];
                 const first = h.cards.length === 2;
                 const canAfford = s.coins >= h.bet;
 
                 if (first && this.config.double && canAfford && (this.config.doubleAfterSplit || !h.split)) {
-                    out.push({ type: 'double', label: 'Double' });
+                    out.push({ type: 'double', label: t('act.double') });
                 }
                 if (first && this.config.split && canAfford
                     && pipValue(h.cards[0]) === pipValue(h.cards[1])
                     && s.hands.length <= this.config.maxSplits) {
-                    out.push({ type: 'split', label: 'Split' });
+                    out.push({ type: 'split', label: t('act.split') });
                 }
                 if (first && this.config.surrender && !h.split && s.hands.length === 1) {
-                    out.push({ type: 'surrender', label: 'Surrender' });
+                    out.push({ type: 'surrender', label: t('act.surrender') });
                 }
                 return out;
             }
@@ -502,9 +509,10 @@
                 // what makes the total on the result screen checkable rather
                 // than something the player has to take on trust.
                 const lines = s.hands.map((h, k) => {
-                    const o = OUTCOME[h.outcome] || { label: h.outcome, why: () => '' };
+                    const o = OUTCOME[h.outcome] || { why: () => '' };
+                    const name = outcomeLabel(h.outcome);
                     return {
-                        label: o.label + (s.hands.length > 1 ? ` · hand ${k + 1}` : ''),
+                        label: s.hands.length > 1 ? t('out.hand', { label: name, n: k + 1 }) : name,
                         why: o.why(h, this.config),
                         stake: h.bet,
                         returned: h.payout,
@@ -514,8 +522,8 @@
                 if (s.insurance) {
                     const paid = dealerBJ ? s.insurance * 3 : 0;
                     lines.push({
-                        label: 'Insurance',
-                        why: dealerBJ ? 'dealer had blackjack, pays 2:1' : 'dealer had no blackjack',
+                        label: t('out.insurance'),
+                        why: t(dealerBJ ? 'why.insuranceWon' : 'why.insuranceLost'),
                         stake: s.insurance, returned: paid, amount: paid - s.insurance,
                     });
                 }
@@ -530,7 +538,7 @@
                     stake: s.hands.reduce((n, h) => n + h.bet, 0) + s.insurance,
                     score: best,
                     outcome: s.net > 0 ? 'win' : s.net < 0 ? 'loss' : 'draw',
-                    note: outcomes.map((o) => (OUTCOME[o] || { label: o }).label).join(' · '),
+                    note: outcomes.map(outcomeLabel).join(' · '),
                     lines,
                     hands: s.hands.map((h) => ({
                         cards: h.cards.slice(), bet: h.bet, payout: h.payout,
@@ -562,11 +570,11 @@
             // nobody gets a gold medal for losing to the dealer.
             const dv = this.dealerValue();
             rows.push({
-                seat: -1, name: 'Dealer', house: true,
+                seat: -1, name: t('table.dealer'), house: true,
                 coins: -rows.reduce((n, r) => n + r.coins, 0),
                 ratio: 0, score: dv.total > 21 ? 0 : dv.total,
                 outcome: 'house',
-                note: dv.total > 21 ? 'Bust' : `Stands on ${dv.total}`,
+                note: dv.total > 21 ? t('note.dealerBust') : t('note.dealerStands', { n: dv.total }),
                 hands: [{ cards: this.dealer.cards.slice(), bet: 0, payout: 0,
                           outcome: dv.total > 21 ? 'bust' : 'house', total: dv.total }],
                 lines: [], extra: {},
@@ -577,7 +585,7 @@
             rows.forEach((r, idx) => { if (r.ratio !== last) { rank = idx + 1; last = r.ratio; } r.rank = rank; });
             this.cached = new CV.GameResult({
                 ranks: rows,
-                detail: dv.total > 21 ? 'Dealer busts' : `Dealer ${dv.total}`,
+                detail: dv.total > 21 ? t('detail.dealerBusts') : t('detail.dealer', { n: dv.total }),
             });
             return this.cached;
         }

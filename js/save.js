@@ -18,6 +18,8 @@
 (() => {
     'use strict';
 
+    const t = (k, p) => window.CV.t(k, p);
+
     const CV = window.CV;
     const FORMAT  = 'cardverse.backup';
     const VERSION = 1;
@@ -35,10 +37,13 @@
     function summary(env) {
         const K = CV.Store.KEYS;
         const p = (env.stores && env.stores[K.profile]) || null;
-        if (!p) return 'no player record';
+        if (!p) return t('save.noPlayer');
         const s = (env.stores && env.stores[K.stats]) || {};
         const games = Object.values(s).reduce((n, g) => n + (g.played || 0), 0);
-        return `${CV.UI.esc(p.name || 'a player')} at level ${p.level || 1} with ${CV.UI.fmt(p.coins || 0)} coins and ${CV.UI.fmt(games)} games`;
+        return t('save.summary', {
+            name: CV.UI.esc(p.name || '—'), level: p.level || 1,
+            coins: CV.UI.fmt(p.coins || 0), games: CV.UI.fmt(games),
+        });
     }
 
     function valid(env) {
@@ -65,13 +70,13 @@
                 if (before[key] === null) CV.Store.remove(key);
                 else CV.Store.write(key, before[key]);
             }
-            CV.UI.say('Nothing was changed', 'The browser refused one of the writes, so the previous record was put back in full.');
+            CV.UI.say(t('save.noChange'), t('save.noChangeBody'));
             return false;
         }
 
         // Import restores the profile's own name into the header before the
         // reload so the confirmation the player sees is already theirs.
-        CV.UI.toast('Loaded — restarting…', 'ok', 1200);
+        CV.UI.toast(t('save.loading'), 'ok', 1200);
         setTimeout(() => location.reload(), 500);
         return true;
     }
@@ -88,7 +93,7 @@
         a.click();
         a.remove();
         setTimeout(() => URL.revokeObjectURL(url), 2000);
-        CV.UI.flash(btn, '✅ Exported');
+        CV.UI.flash(btn, t('save.exported'));
     }
 
     function importBackup(file) {
@@ -97,15 +102,14 @@
             let env = null;
             try { env = JSON.parse(reader.result); } catch (_) { env = null; }
             if (!valid(env)) {
-                return CV.UI.say('That file is not a CardVerse backup',
-                    'Pick a file that Export made — it is named cardverse-<i>date</i>.json.');
+                return CV.UI.say(t('save.badFile'), t('save.badFileBody'));
             }
             CV.UI.confirm(
-                'Replace what is here with this file?',
-                `The file holds ${summary(env)}. This browser holds ${summary(envelope())}, and all of it will be replaced.`,
-                'Use the file', () => apply(env), true);
+                t('save.replaceTitle'),
+                t('save.replaceBody', { file: summary(env), here: summary(envelope()) }),
+                t('save.useFile'), () => apply(env), true);
         };
-        reader.onerror = () => CV.UI.say('Could not read the file', 'The browser refused to open it.');
+        reader.onerror = () => CV.UI.say(t('save.unreadable'), t('save.unreadableBody'));
         reader.readAsText(file);
     }
 

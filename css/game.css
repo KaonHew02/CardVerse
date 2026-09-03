@@ -233,7 +233,8 @@
 /* break-word, not break-all: a name should wrap between words or overflow
  * gracefully, never split into "Deale / r". */
 .result-table td { overflow-wrap: break-word; word-break: normal; }
-.result-table td:first-child { width: 2.6em; }
+/* Wide enough for a medal, "4th", and 第4名 alike. */
+.result-table td:first-child { width: 3.6em; white-space: nowrap; }
 
 /* ---- result: everyone's cards ----------------------------------------- */
 

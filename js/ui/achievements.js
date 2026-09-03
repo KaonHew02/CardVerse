@@ -7,6 +7,8 @@
 (() => {
     'use strict';
 
+    const t = (k, p) => window.CV.t(k, p);
+
     const CV = window.CV;
     const { $, esc, fmt, dmyDate } = CV.UI;
 
@@ -22,7 +24,7 @@
                 </div>
                 <div class="ach-side">
                     <span class="reward">${reward}</span>
-                    <small class="muted">${when ? dmyDate(new Date(when)) : 'Locked'}</small>
+                    <small class="muted">${when ? dmyDate(new Date(when)) : esc(t('ach.locked'))}</small>
                 </div>
             </div>`;
     }
@@ -41,10 +43,10 @@
 
         $('achBody').innerHTML = `
             <div class="card-panel">
-                <div class="row-opt"><b>${prog.done} of ${prog.total} unlocked</b><span class="muted">${Math.round(prog.pct)}%</span></div>
+                <div class="row-opt"><b>${esc(t('ach.unlocked', { done: prog.done, total: prog.total }))}</b><span class="muted">${Math.round(prog.pct)}%</span></div>
                 <div class="xp-bar"><div class="xp-fill gold" style="width:${prog.pct}%"></div></div>
             </div>
-            <h3>🌐 CardVerse <small class="muted">${global.filter((a) => CV.Achievements.has(a.id)).length} / ${global.length}</small></h3>
+            <h3>${esc(t('ach.global'))} <small class="muted">${global.filter((a) => CV.Achievements.has(a.id)).length} / ${global.length}</small></h3>
             ${global.map(row).join('')}
             ${sections}`;
     }

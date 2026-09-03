@@ -22,7 +22,7 @@
     <header class="topbar">
         <button class="brand" data-go="home" title="Lobby">
             <img class="brand-mark" src="assets/logo/cardverse-mark.svg" alt="" width="34" height="34">
-            <span class="brand-text"><b>CARDVERSE</b><small>One World. Every Game.</small></span>
+            <span class="brand-text"><b>CARDVERSE</b><small data-i18n="app.slogan">One World. Every Game.</small></span>
         </button>
         <button class="hdr-player" data-go="profile" title="Profile">
             <span class="avatar" id="hdrAvatar">🙂</span>
@@ -41,9 +41,9 @@
     <div id="storeAlert" class="strip danger" hidden></div>
 
     <div id="driveOffer" class="strip info" hidden>
-        <span>This browser has no CardVerse record. Restore your player from Google Drive?</span>
-        <button class="btn tiny" id="driveOfferPull">From Drive</button>
-        <button class="btn tiny ghost" id="driveOfferNo">Start fresh</button>
+        <span data-i18n="drive.offer">This browser has no CardVerse record. Restore your player from Google Drive?</span>
+        <button class="btn tiny" id="driveOfferPull" data-i18n="drive.offerYes">From Drive</button>
+        <button class="btn tiny ghost" id="driveOfferNo" data-i18n="drive.offerNo">Start fresh</button>
     </div>
 
     <main>
@@ -52,27 +52,27 @@
             <div class="hero">
                 <img class="hero-mark" src="assets/logo/cardverse-mark.svg" alt="CardVerse" width="104" height="104">
                 <h1>CARDVERSE</h1>
-                <p class="slogan">One World. Every Game.</p>
+                <p class="slogan" data-i18n="app.slogan">One World. Every Game.</p>
             </div>
-            <h2 class="section-title">🎮 Game Lobby</h2>
+            <h2 class="section-title" data-i18n="lobby.title">🎮 Game Lobby</h2>
             <div class="lobby-grid" id="lobbyGrid"></div>
             <div class="home-nav" id="homeNav"></div>
-            <p class="muted small center footnote">Virtual coins only. Nothing in CardVerse can be bought, sold or cashed out.</p>
+            <p class="muted small center footnote" data-i18n="lobby.footnote">Virtual coins only. Nothing in CardVerse can be bought, sold or cashed out.</p>
         </section>
 
         <section class="screen" id="screen-room" hidden>
-            <div class="screen-top"><button class="btn ghost" data-go="home">← Lobby</button><h2>🌐 Play with friends</h2></div>
+            <div class="screen-top"><button class="btn ghost" data-go="home" data-i18n="back">← Lobby</button><h2 data-i18n="room.title">🌐 Play with friends</h2></div>
             <div id="roomBody"></div>
         </section>
 
         <section class="screen" id="screen-setup" hidden>
-            <div class="screen-top"><button class="btn ghost" data-go="home">← Lobby</button><h2>Choose a table</h2></div>
+            <div class="screen-top"><button class="btn ghost" data-go="home" data-i18n="back">← Lobby</button><h2 data-i18n="setup.title">Choose a table</h2></div>
             <div id="setupBody"></div>
         </section>
 
         <section class="screen screen-table" id="screen-table" hidden>
             <div class="table-bar">
-                <button class="btn ghost" id="tableLeave">← Leave</button>
+                <button class="btn ghost" id="tableLeave" data-i18n="leave">← Leave</button>
                 <span id="tableGame" class="table-game"></span>
                 <span id="tableRoom" class="muted small"></span>
                 <span id="tableShoe" class="muted small"></span>
@@ -83,32 +83,32 @@
         </section>
 
         <section class="screen" id="screen-profile" hidden>
-            <div class="screen-top"><button class="btn ghost" data-go="home">← Lobby</button><h2>👤 Profile</h2></div>
+            <div class="screen-top"><button class="btn ghost" data-go="home" data-i18n="back">← Lobby</button><h2 data-i18n="prof.title">👤 Profile</h2></div>
             <div id="profileBody"></div>
         </section>
 
         <section class="screen" id="screen-achievements" hidden>
-            <div class="screen-top"><button class="btn ghost" data-go="home">← Lobby</button><h2>🏆 Achievements</h2></div>
+            <div class="screen-top"><button class="btn ghost" data-go="home" data-i18n="back">← Lobby</button><h2 data-i18n="ach.title">🏆 Achievements</h2></div>
             <div id="achBody"></div>
         </section>
 
         <section class="screen" id="screen-stats" hidden>
-            <div class="screen-top"><button class="btn ghost" data-go="home">← Lobby</button><h2>📊 Statistics</h2></div>
+            <div class="screen-top"><button class="btn ghost" data-go="home" data-i18n="back">← Lobby</button><h2 data-i18n="stats.title">📊 Statistics</h2></div>
             <div id="statsBody"></div>
         </section>
 
         <section class="screen" id="screen-leaderboard" hidden>
-            <div class="screen-top"><button class="btn ghost" data-go="home">← Lobby</button><h2>🏅 Leaderboard</h2></div>
+            <div class="screen-top"><button class="btn ghost" data-go="home" data-i18n="back">← Lobby</button><h2 data-i18n="lb.title">🏅 Leaderboard</h2></div>
             <div id="lbBody"></div>
         </section>
 
         <section class="screen" id="screen-missions" hidden>
-            <div class="screen-top"><button class="btn ghost" data-go="home">← Lobby</button><h2>🎁 Daily Bonus</h2></div>
+            <div class="screen-top"><button class="btn ghost" data-go="home" data-i18n="back">← Lobby</button><h2 data-i18n="miss.title">🎁 Daily Bonus</h2></div>
             <div id="missionsBody"></div>
         </section>
 
         <section class="screen" id="screen-settings" hidden>
-            <div class="screen-top"><button class="btn ghost" data-go="home">← Lobby</button><h2>⚙️ Settings</h2></div>
+            <div class="screen-top"><button class="btn ghost" data-go="home" data-i18n="back">← Lobby</button><h2 data-i18n="set.title">⚙️ Settings</h2></div>
             <div id="settingsBody"></div>
         </section>
 
@@ -122,8 +122,8 @@
             <div id="dialogBody" class="dialog-body"></div>
             <input type="text" id="dialogField" class="dialog-field" hidden>
             <div class="btn-row right">
-                <button class="btn ghost" id="dialogNo">Cancel</button>
-                <button class="btn primary" id="dialogYes">OK</button>
+                <button class="btn ghost" id="dialogNo" data-i18n="cancel">Cancel</button>
+                <button class="btn primary" id="dialogYes" data-i18n="ok">OK</button>
             </div>
         </div>
     </div>
@@ -132,6 +132,7 @@
     <script src="js/core/rng.js"></script>
     <script src="js/core/cards.js"></script>
     <script src="js/core/store.js"></script>
+    <script src="js/core/i18n.js" charset="utf-8"></script>
     <script src="js/core/engine.js"></script>
     <script src="js/core/transport.js"></script>
     <script src="js/core/ai.js"></script>

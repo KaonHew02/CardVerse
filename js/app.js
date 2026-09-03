@@ -16,6 +16,7 @@
     /** The rest of the spec, greyed in the lobby until each one is built. */
     function registerStubs() {
         const R = CV.Registry;
+        // English names and blurbs; i18n.localize() translates them in place.
         R.stub('doudizhu', '斗地主', '🏠', 'Landlord vs Farmers. Bombs and rockets.', [3, 3]);
         R.stub('bigtwo',   '锄大D',  '♦️', 'Malaysian Big Two. First out wins.', [4, 4]);
         R.stub('poker',    'Poker',  '♠️', "Texas Hold'em. Best five of seven.", [2, 9]);
@@ -35,7 +36,7 @@
             if (!strip) return;
             if (!err) { strip.hidden = true; return; }
             strip.hidden = false;
-            strip.textContent = 'This browser is refusing to save. Your progress will be lost on reload — export it from Settings now.';
+            strip.textContent = CV.t('storage.failing');
         });
     }
 
@@ -49,6 +50,9 @@
         CV.Cosmetics.applyToDocument();
 
         registerStubs();
+        // After the stubs, because localize() walks the whole registry; before
+        // the first render, because every screen paints from it.
+        CV.I18n.init();
         wireGlobal();
 
         CV.UI.go('home');
@@ -58,7 +62,7 @@
 
         const login = CV.Missions.loginState();
         if (login.claimable && !CV.Store.isEmpty()) {
-            setTimeout(() => CV.UI.toast(`🎁 Day ${login.day} login bonus is waiting in Daily Bonus.`, 'info', 3500), 600);
+            setTimeout(() => CV.UI.toast(CV.t('miss.loginWaiting', { n: login.day }), 'info', 3500), 600);
         }
     }
 
