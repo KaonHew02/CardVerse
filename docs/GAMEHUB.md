@@ -11,7 +11,7 @@ copy-paste rather than a fresh round of Google Cloud archaeology.
 | --- | --- |
 | Cloud project | **GameHub** — its consent screen sets the name every game shows at sign-in |
 | OAuth client | **one**, Web application, origin `https://kaonhew02.github.io` |
-| Drive folder | **one**, named `GameHub`, holding one save file per game |
+| Drive folder | **`GameHub`**, with one sub-folder per game |
 | Scope | `drive.file`, always. Never widen it to `drive`. |
 
 ### Why one client, when the earlier advice was one per app
@@ -32,6 +32,34 @@ Two facts, both learned the awkward way:
 
 MoneyFlow and FinSim have shared a client since day one, so this is what was
 happening in practice anyway.
+
+## Folder layout
+
+The folder is independent of the client ID — one OAuth client writes into as
+many folders as you point it at, because `folderId` is only the parent a file
+is filed under. So the hub mirrors the Cloud project structure:
+
+```
+GameHub/                     ← the folder whose id everyone starts from
+  CardVerse/
+    cardverse-data.json
+  <next game>/
+    <app>-data.json
+```
+
+Each game's `drive-config.js` carries **its own sub-folder id**, not the
+GameHub root's. Making the sub-folder and copying its id is the one manual
+step per game; in exchange the folder is browsable at a glance and a single
+game's folder can be shared or cleared without touching the others.
+
+A **flat** `GameHub/` holding every file also works — filenames are unique, and
+`findFile()` matches parent *plus* name — but then which file belongs to which
+game is only legible by reading filenames. Sub-folders are the default here.
+
+Whichever is used, changing a game's `folderId` after it has written a file
+**orphans that file**: the app looks in the new folder, finds nothing, and
+writes a fresh one. Press *From Drive* (or Export) before moving a game that
+already has a save, and delete the old file afterwards.
 
 ## Telling the games apart
 

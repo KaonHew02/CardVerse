@@ -259,3 +259,16 @@ table.history td:first-child { white-space: nowrap; }
 }
 
 .footnote { margin-top: 28px; }
+
+/* ---- Drive stamp ------------------------------------------------------- */
+
+/* A tick means there is a copy in Drive; a crossed-out cloud means there is
+ * not and pressing "To Drive" fixes it; nothing at all means Drive was never
+ * set up in this build. Deliberately wordless — the sentence lives in
+ * #driveWhen underneath and in the tooltip, because a status sentence sitting
+ * in a button row is something to re-read on every glance. */
+.drive-stamp { font-size: 1.15rem; line-height: 1; cursor: help; }
+.drive-stamp[data-state="none"] { display: none; }
+.drive-stamp[data-state="ok"]   { filter: none; }
+.drive-stamp[data-state="warn"] { animation: stampPulse 2.4s ease-in-out infinite; }
+@keyframes stampPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }

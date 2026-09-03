@@ -107,6 +107,7 @@
                     <button class="btn" id="drivePush">☁️ To Drive</button>
                     <button class="btn" id="drivePull">⬇️ From Drive</button>
                     <button class="btn" id="driveAuto" aria-pressed="false">Auto: off</button>
+                    <span id="driveStamp" class="drive-stamp" title=""></span>
                 </div>
                 <p class="muted small" id="driveWhen"></p>
                 <p class="muted small" id="storeUsage"></p>
