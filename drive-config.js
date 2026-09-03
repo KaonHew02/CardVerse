@@ -43,7 +43,7 @@ const CV_DRIVE = {
      *
      * Keep this folder **Restricted** in Drive's Share settings.
      */
-    folderId: '1Qc4ZfqWyoQf-2_ohW1ieoebwtCWKjJOz',
+    folderId: '1gp4tdFod_306oTR6xQy-5eVPhAuyp_ya',
 
     /**
      * The one file CardVerse writes, and the thing that keeps it apart from

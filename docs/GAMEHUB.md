@@ -40,12 +40,15 @@ many folders as you point it at, because `folderId` is only the parent a file
 is filed under. So the hub mirrors the Cloud project structure:
 
 ```
-GameHub/                     ← the folder whose id everyone starts from
-  CardVerse/
+GameHub/                 1Qc4ZfqWyoQf-2_ohW1ieoebwtCWKjJOz   ← parent, nothing files here
+  CardVerse/             1gp4tdFod_306oTR6xQy-5eVPhAuyp_ya
     cardverse-data.json
-  <next game>/
+  <next game>/           <make one, copy its id>
     <app>-data.json
 ```
+
+The parent's id is recorded only for navigation — **no game points at it**.
+Each `drive-config.js` carries its own sub-folder id.
 
 Each game's `drive-config.js` carries **its own sub-folder id**, not the
 GameHub root's. Making the sub-folder and copying its id is the one manual
