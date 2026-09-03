@@ -39,7 +39,7 @@ const CV_DRIVE = {
      *
      * Keep this folder **Restricted** in Drive's Share settings.
      */
-    folderId: 'PASTE-YOUR-FOLDER-ID',
+    folderId: '1Qc4ZfqWyoQf-2_ohW1ieoebwtCWKjJOz',
 
     /** The one file CardVerse writes. Renaming it in Drive starts a new one. */
     filename: 'cardverse-data.json',

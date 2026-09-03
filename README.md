@@ -98,7 +98,7 @@ broker, or a small WebSocket server).
 ## Running it
 
 Open `index.html`. For the Drive copy it has to be served from the registered
-origin — publish to GitHub Pages (`KaonHew02/CardVerse`, branch `main`, root)
+origin — publish to GitHub Pages (`KaonHew02/CardVerse`, branch `master`, root)
 and follow `docs/DRIVE.md`.
 
 ## Testing the engine headless

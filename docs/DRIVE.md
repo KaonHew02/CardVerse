@@ -27,35 +27,76 @@ including from a double-clicked `index.html`.
 ## Where it works
 
 Google will only sign an app in from a real web address, so Drive works from
-**https://kaonhew02.github.io/CardVerse/** (once the repo is published to
-GitHub Pages) and not from a file opened off disk. The rest of CardVerse —
-every game, Export, Import — works from either.
+**https://kaonhew02.github.io/CardVerse/** and not from a file opened off
+disk. `file://` has no origin and Google will not issue a token to it. The
+rest of CardVerse — every game, Export, Import — works from either.
 
-## Setting it up (once, about five minutes)
+## Status
+
+| | |
+| --- | --- |
+| Drive folder | ✅ set — `1Qc4ZfqWyoQf-2_ohW1ieoebwtCWKjJOz` |
+| OAuth client ID | ⬜ **still a placeholder — step 2 below** |
+| GitHub Pages | ⬜ **not enabled yet — step 1 below** |
+
+Until both are done every Drive button says "Drive is not set up yet" rather
+than failing oddly. Export and Import work regardless.
+
+## Step 1 — turn on GitHub Pages (about a minute)
+
+The repo is pushed but not published, so there is no address for Google to
+trust yet.
+
+1. Open <https://github.com/KaonHew02/CardVerse/settings/pages>.
+2. Under **Build and deployment → Source**, choose **Deploy from a branch**.
+3. Branch: **`master`**, folder: **`/ (root)`**. Press **Save**.
+4. Wait a minute, then check <https://kaonhew02.github.io/CardVerse/> loads.
+
+> The branch is `master`, not `main` — worth checking the dropdown, since
+> GitHub defaults the picker to whatever it lists first.
+
+## Step 2 — make the OAuth client (about five minutes)
 
 You already have a Google Cloud project with the Drive API enabled and the
-consent screen done, from MoneyFlow and FinSim. Reuse it: add a third OAuth
-client rather than reusing one of theirs, so the sign-in window says
-"CardVerse" and the grants stay separate.
+consent screen done, from MoneyFlow and FinSim. Reuse that project, but add a
+**new client** rather than reusing FinSim's. Two reasons: the sign-in window
+then says "CardVerse", and `drive.file` access is granted **per OAuth client**
+— a shared client would let CardVerse see `finsim-data.json` as well as its
+own file.
 
-1. Open <https://console.cloud.google.com/apis/credentials> in that project.
-2. **Create credentials → OAuth client ID → Web application.**
+1. Open <https://console.cloud.google.com/apis/credentials> and check the
+   project picker at the top is on the project you used for FinSim.
+2. **Create credentials → OAuth client ID → Application type: Web application.**
    - Name: `CardVerse`
-   - Authorised JavaScript origins: `https://kaonhew02.github.io`
-     (scheme and host only — no path, no trailing slash)
-   - Authorised redirect URIs: leave empty.
-3. Copy the client ID (it ends in `.apps.googleusercontent.com`) into
-   `drive-config.js` as `clientId`.
-4. In Google Drive, make a folder for CardVerse (or reuse one). Open it and
-   copy the ID from the address bar — the part after `/folders/` and before
-   any `?` — into `drive-config.js` as `folderId`. Keep the folder's sharing
-   set to **Restricted**.
-5. Commit and push. Open the site, go to Settings, press **To Drive**, sign
-   in when asked, and the stamp under the buttons will say when the copy went
-   up.
+   - **Authorised JavaScript origins** → Add URI: `https://kaonhew02.github.io`
+     — scheme and host only. No `/CardVerse`, no trailing slash. This is the
+     field that causes almost every failure.
+   - **Authorised redirect URIs**: leave completely empty.
+   - Create.
+3. Copy the client ID (it ends `.apps.googleusercontent.com`) and paste it into
+   `drive-config.js`, replacing `PASTE-YOUR-CLIENT-ID.apps.googleusercontent.com`.
+4. Commit and push:
+
+   ```bash
+   git add drive-config.js && git commit -m "Drive: add CardVerse OAuth client" && git push
+   ```
+
+5. If your consent screen is still in **Testing**, add your own Google account
+   under **Audience → Test users**, or Google will refuse to sign you in.
 
 A **client secret is never needed** and must never be pasted anywhere in this
 project. If the console offers one, ignore it.
+
+## Step 3 — first copy
+
+Open <https://kaonhew02.github.io/CardVerse/>, go to **Settings → Your data**,
+press **To Drive** and sign in. The stamp underneath turns into a cloud with a
+tick. Then turn **Auto** on if you want it kept up to date without pressing
+anything — but note the first copy always has to be one you send by hand,
+because Auto deliberately never opens a sign-in window.
+
+Keep the folder's sharing set to **Restricted** in Drive. "Anyone with the
+link" would mean anyone holding that link can read your save.
 
 ## If something goes wrong
 
