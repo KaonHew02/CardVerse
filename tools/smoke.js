@@ -235,6 +235,74 @@ console.log('\n🪙 Rewards pipeline');
     check(ss.spectator && CV.Profile.get().coins === pc, 'spectator table changed the profile');
 }
 
+/* ---- what a host is allowed to broadcast ------------------------------- */
+
+/**
+ * The multiplayer safety property, checked on every game the hub registers.
+ *
+ * `snapshotFor(viewer)` is the only object a host may put on a wire, so it
+ * must not carry anything the viewer could not see at a real table. The RNG
+ * is the dangerous one and the easiest to reintroduce: mulberry32 is
+ * deterministic, so `{seed, calls}` reproduces the whole shoe — every hidden
+ * card and every card still to come. A leak here is not a rendering bug, it
+ * is a client that can see the deck.
+ */
+console.log('\n📡 Broadcast safety');
+for (const game of CV.Registry.playable()) {
+    const before = failures;
+    let checkedHidden = 0;
+
+    for (let i = 0; i < 400; i++) {
+        const rng = new CV.RNG(5000 + i);
+        const e = new game.Engine({
+            rng,
+            seats: seats(3, rng, 1).map((s, k) => new CV.Seat(k, s)),
+            config: { room: 'casual' },
+        });
+        const ai = new game.AI(e);
+        e.start();
+
+        // Step through the hand, auditing the broadcast at every single state.
+        let guard = 0;
+        while (guard++ < 200) {
+            for (const viewer of [-1, 0, 1, 2]) {
+                const view = e.snapshotFor(viewer);
+                const wire = JSON.stringify(view);
+
+                check(view.rng === undefined, `${game.code}: snapshotFor(${viewer}) carries the RNG seed`);
+                check(!/"seed"/.test(wire), `${game.code}: a seed appears in the broadcast`);
+
+                // The hole card must be absent from the wire until it is turned.
+                if (!e.dealer.revealed && e.dealer.cards.length > 1) {
+                    const hole = e.dealer.cards[1];
+                    check(!wire.includes(hole.id),
+                        `${game.code}: hole card ${hole.id} is in the broadcast before the reveal`);
+                    check(view.dealer.cards.length === 1,
+                        `${game.code}: broadcast shows ${view.dealer.cards.length} dealer cards before the reveal`);
+                    checkedHidden++;
+                }
+
+                // Nothing still in the shoe may ever appear.
+                for (const card of e.shoe.cards.slice(-6)) {
+                    check(!wire.includes('"' + card.id + '"'),
+                        `${game.code}: an undealt card (${card.id}) is in the broadcast`);
+                }
+            }
+            if (e.isOver()) break;
+            const action = ai.decide(e.turn);
+            if (!action || !e.apply(action)) break;
+        }
+
+        // Once turned, the hole card must be visible — redaction that never
+        // lifts is just a broken game.
+        const done = e.snapshotFor(0);
+        check(done.dealer.revealed && done.dealer.cards.length === e.dealer.cards.length,
+            `${game.code}: dealer hand still redacted after the round ended`);
+    }
+    console.log(`  ${game.icon} ${game.name}: ${checkedHidden} concealed-state broadcasts audited`);
+    if (failures === before) console.log('    ✓ no seed, no hole card, no undealt card on the wire');
+}
+
 /* ---- the Table wrapper, with real timers ------------------------------- */
 
 console.log('\n🪑 Table wrapper');

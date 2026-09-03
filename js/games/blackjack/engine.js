@@ -520,11 +520,38 @@
             return this.cached;
         }
 
+        /** The host's truth: the whole dealer hand, hole card included. */
         snapshot() {
             return Object.assign(super.snapshot(), {
-                dealer: { cards: this.dealer.revealed ? this.dealer.cards : [this.dealer.cards[0]], revealed: this.dealer.revealed },
+                dealer: { cards: this.dealer.cards.slice(), revealed: this.dealer.revealed },
                 shoeRemaining: this.shoe.remaining,
+                seen: this.seen.slice(),
             });
+        }
+
+        /**
+         * The broadcast view. Two things come out on top of the base class
+         * dropping the RNG:
+         *
+         *   - the hole card, until it is turned. It is the only concealed card
+         *     in Blackjack and the whole game hinges on not knowing it.
+         *   - `seen`, the running list of face-up cards. It is not secret —
+         *     anyone at the table watched those cards land — but it is only
+         *     there for the counting AI, and shipping it invites a client to
+         *     count for free. A peer that wants to count can watch the deal
+         *     events like a person does.
+         *
+         * Player hands are all face-up, so `redactSeat` stays the default.
+         */
+        snapshotFor(viewer) {
+            const view = super.snapshotFor(viewer);
+            delete view.seen;
+            view.dealer = {
+                cards: this.dealer.revealed ? this.dealer.cards.slice() : [this.dealer.cards[0]],
+                revealed: this.dealer.revealed,
+                hidden: this.dealer.revealed ? 0 : Math.max(0, this.dealer.cards.length - 1),
+            };
+            return view;
         }
     }
 

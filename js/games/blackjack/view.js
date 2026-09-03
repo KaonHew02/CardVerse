@@ -72,12 +72,32 @@
             this.paintSeats();
             this.paintStatus(events);
             this.paintActions();
+            this.followTurn();
             // Whatever is now on screen is known; the next paint animates only newcomers.
             this.root.querySelectorAll('.card[data-id]').forEach((c) => this.known.add(c.dataset.id));
             const bar = document.getElementById('tableShoe');
             if (bar) bar.textContent = `${e.shoe.remaining} cards`;
             const coins = document.getElementById('tableCoins');
             if (coins && e.youSeat >= 0) coins.textContent = fmt(e.seats[e.youSeat].coins);
+        }
+
+        /**
+         * On a phone the action bar is pinned to the bottom, but the cards it
+         * refers to can be several seats up the page. Bring the seat whose
+         * turn it is into view — once per turn, not on every repaint, or the
+         * page fights the player every time a card lands.
+         */
+        followTurn() {
+            const e = this.engine;
+            const seat = e.seats[e.turn];
+            const key = `${e.phase}:${e.turn}:${seat ? seat.active : ''}`;
+            if (key === this.lastFollow) return;
+            this.lastFollow = key;
+            if (window.innerWidth > 720 || e.over || !seat || !seat.isHuman) return;
+            const el = this.root.querySelector('.seat.is-turn');
+            if (!el) return;
+            const still = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+            el.scrollIntoView({ block: 'center', behavior: still ? 'auto' : 'smooth' });
         }
 
         cards(list, hidden) {

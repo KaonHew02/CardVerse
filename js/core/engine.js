@@ -137,8 +137,13 @@
         /* ---- state ------------------------------------------------------ */
 
         /**
-         * The whole table as JSON. Used for the result screen, for tests, and
-         * as the payload a host will send once online play lands.
+         * The host's complete state — every hidden card and the RNG seed.
+         *
+         * **Never send this to another player.** `rng` is `{seed, calls}`,
+         * which is not a detail: mulberry32 is deterministic, so a seed and a
+         * call count reproduce the entire shoe — the hole card, and every card
+         * still to come. Use it for saving, tests and debugging only.
+         * `snapshotFor()` is the one that goes on a wire.
          */
         snapshot() {
             return {
@@ -150,6 +155,42 @@
                 seats: this.seats.map((s) => ({ ...s })),
                 log:   this.log.slice(),
             };
+        }
+
+        /**
+         * What one seat is allowed to see — the **only** thing a host may
+         * broadcast once online play lands.
+         *
+         * Drops the RNG for the reason above, then asks the game to hide the
+         * cards this viewer has no business knowing. The base class hides
+         * nothing beyond the seed, because in a face-up game like Blackjack
+         * there is nothing else to hide; a game with concealed hands (斗地主,
+         * 锄大D, mahjong) **must** override `redactSeat`, and its absence is a
+         * bug that hands every opponent's cards to every client.
+         *
+         * @param {number} viewer seat index the snapshot is destined for, or
+         *                        -1 for a spectator
+         */
+        snapshotFor(viewer) {
+            const view = this.snapshot();
+            delete view.rng;
+            view.viewer = viewer;
+            view.seats = view.seats.map((seat, i) => this.redactSeat(seat, i, viewer));
+            view.options = this.legalActions(viewer);
+            return view;
+        }
+
+        /**
+         * Hide what `viewer` must not see on `seat`. Return a copy — mutating
+         * the argument would corrupt the host's own state, since `snapshot()`
+         * shallow-copies the seat objects.
+         *
+         * Convention for concealed hands: replace each card with `null` rather
+         * than dropping it, so the count stays visible. Everyone at a real
+         * table can see how many cards you are holding.
+         */
+        redactSeat(seat, _index, _viewer) {
+            return seat;
         }
     }
 

@@ -20,8 +20,29 @@
     .seat.is-you { order: -1; }
     .bet-box { width: 100%; }
     .chips .chip { width: 48px; height: 48px; }
+
+    /* The controls are pinned to the bottom of the screen on a phone.
+     * Stacked seats push the action row below four opponents, so the player
+     * whose turn it is has to scroll away from their own cards to find Hit —
+     * and then scroll back to see what happened. Fixed, not sticky: the felt
+     * sets `overflow: hidden`, which kills position:sticky inside it. */
+    .bj-actions {
+        position: fixed; left: 0; right: 0; bottom: 0; z-index: 25;
+        margin: 0; min-height: 0; gap: 4px;
+        padding: 8px 10px calc(8px + env(safe-area-inset-bottom, 0px));
+        background: color-mix(in srgb, var(--panel) 97%, transparent);
+        border-top: 1px solid var(--border);
+        box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.45);
+    }
+    .bj-actions:empty { display: none; }
     .bj-actions .btn { min-width: 0; flex: 1; }
-    .bj-actions .btn-row { width: 100%; }
+    .bj-actions .btn-row { width: 100%; margin: 0; }
+    .bj-actions .bet-box { padding: 8px 10px; gap: 6px; background: none; }
+    .bj-actions .bet-amount { font-size: 1.1rem; }
+
+    /* Room for it, so the last seat is never trapped underneath. */
+    body[data-screen="table"] main { padding-bottom: 190px; }
+    .bj { min-height: 0; }
     .login-grid { grid-template-columns: repeat(4, 1fr); }
     .setup-head { flex-direction: column; align-items: flex-start; }
     .row-opt { flex-wrap: wrap; }

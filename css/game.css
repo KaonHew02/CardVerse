@@ -44,10 +44,10 @@
 }
 [data-table="luxury"] .table-root { background-size: 12px 12px, auto; }
 
-.bj { display: flex; flex-direction: column; gap: 14px; min-height: 66vh; }
+.bj { display: flex; flex-direction: column; gap: 14px; min-height: 60vh; }
 .bj-dealer { display: flex; flex-direction: column; align-items: center; gap: 6px; }
 .bj-rule { color: rgba(255,255,255,0.65); }
-.bj-seats { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; align-items: flex-start; flex: 1; }
+.bj-seats { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; align-items: flex-start; flex: 1 1 auto; align-content: center; }
 .bj-status { text-align: center; font-size: 1.05rem; min-height: 1.6em; }
 .bj-status .you { color: var(--accent); font-weight: 700; }
 .bj-status .muted { color: rgba(255,255,255,0.7); }
@@ -59,7 +59,7 @@
 
 .seat {
     background: rgba(0, 0, 0, 0.28); border: 2px solid transparent; border-radius: 16px;
-    padding: 10px 12px; min-width: 200px; max-width: 320px; flex: 1 1 200px;
+    padding: 10px 12px; min-width: 0; max-width: 260px; flex: 1 1 168px;
     transition: border-color 200ms, box-shadow 200ms;
 }
 .seat.is-you   { background: rgba(0, 0, 0, 0.4); }
@@ -89,11 +89,18 @@
 
 /* ---- cards ------------------------------------------------------------- */
 
-.hand-wrap { min-height: var(--card-h); }
-.hand { display: flex; min-height: var(--card-h); }
+.hand-wrap:not(:empty) { min-height: var(--card-h); }
+.hand { display: flex; }
+.hand:not(.hand-empty) { min-height: var(--card-h); }
 .hand .card { margin-left: calc(var(--card-w) * -0.42); }
 .hand .card:first-child { margin-left: 0; }
-.hand-empty { min-height: calc(var(--card-h) * 0.6); }
+
+/* A waiting seat shows where its cards will land rather than a blank gap —
+ * the gap read as a rendering fault while the AI were still betting. */
+.hand-empty {
+    width: var(--card-w); height: calc(var(--card-h) * 0.72);
+    border: 2px dashed rgba(255, 255, 255, 0.18); border-radius: 7px;
+}
 
 .card {
     position: relative; width: var(--card-w); height: var(--card-h); border-radius: 7px;
@@ -172,3 +179,22 @@
 .unlock small { color: var(--muted); }
 .unlock .reward { color: var(--accent); font-weight: 700; font-size: 0.85rem; white-space: nowrap; }
 .unlock.mission { border-left-color: var(--info); }
+
+
+/* ---- big screens ------------------------------------------------------- */
+
+/* A felt capped at the lobby's 1100px leaves half a 1920 monitor empty, and
+ * the cards end up smaller than they need to be. The table — and only the
+ * table — gets the extra width. */
+@media (min-width: 1280px) {
+    body[data-screen="table"] main { max-width: 1440px; }
+    body[data-screen="table"] { --card-w: 72px; --card-h: 101px; }
+    .table-root { min-height: 68vh; }
+    .seat { max-width: 300px; flex-basis: 200px; }
+}
+
+/* Laptops are the common case and sit between the two: full seat row, cards
+ * a touch larger than the phone size, no wasted vertical space. */
+@media (min-width: 900px) and (max-width: 1279px) {
+    body[data-screen="table"] { --card-w: 66px; --card-h: 93px; }
+}
