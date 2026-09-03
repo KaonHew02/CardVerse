@@ -248,13 +248,23 @@
             const settled = events.find((e) => e.type === 'settled');
             if (settled) {
                 host.broadcast({ t: 'over', result: table.engine.result() });
-                setTimeout(() => hostFinished(settled.result), 900 * table.speed);
+                waitForBoard(() => hostFinished(settled.result));
             }
         });
 
         table.start();
         host.sendViews(table.engine);
         return { table, view };
+    }
+
+    /** Same beat the solo table takes — let the dealer finish turning first. */
+    function waitForBoard(done) {
+        const speed = (table && table.speed) || 1;
+        const tick = () => {
+            if (view && view.revealing) return setTimeout(tick, 180);
+            setTimeout(done, 1500 * speed);
+        };
+        tick();
     }
 
     function hostFinished(summary) {
@@ -371,10 +381,10 @@
             const settled = events.find((e) => e.type === 'settled');
             if (settled) {
                 CV.UI.header();
-                setTimeout(() => CV.ResultView.show(settled.result, {
+                waitForBoard(() => CV.ResultView.show(settled.result, {
                     onAgain: () => { CV.UI.toast('Waiting for the host to deal again…', 'info', 2500); },
                     onLobby: () => { teardown(); CV.UI.go('home'); },
-                }), 900);
+                }));
             }
         });
         return { table, view };

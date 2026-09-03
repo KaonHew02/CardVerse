@@ -29,35 +29,40 @@
         const mine  = rows.find((r) => r.seat === you);
         const house = rows.find((r) => r.house);
 
-        /** A hand, drawn small, with its total. */
+        /** One hand, drawn small, with its total. */
         const handStrip = (h) => `
-            <div class="rc-hand">
+            <span class="rc-hand">
                 ${CV.CardView.hand(h.cards || [], { size: 'sm' })}
                 <span class="rc-total${h.total > 21 ? ' bad' : ''}">${h.total > 21 ? 'BUST' : h.total}</span>
                 ${h.doubled ? '<span class="tag">2×</span>' : ''}${h.split ? '<span class="tag">split</span>' : ''}
-            </div>`;
+            </span>`;
 
-        // What the player actually held, and what the dealer turned over.
-        // Without this the result screen announces a number and covers the
-        // evidence for it.
-        const cardsBlock = (mine && mine.hands && mine.hands.length) ? `
-            <div class="rc-cards">
-                <div class="rc-side">
-                    <span class="rc-label">Your hand${mine.hands.length > 1 ? 's' : ''}</span>
-                    ${mine.hands.map(handStrip).join('')}
-                </div>
-                ${house && house.hands && house.hands.length ? `
-                <div class="rc-side">
-                    <span class="rc-label">Dealer</span>
-                    ${house.hands.map(handStrip).join('')}
-                </div>` : ''}
+        /**
+         * Everybody's cards, not just yours. The overlay sits on top of the
+         * table, so without this the round ends and takes the evidence with
+         * it — and the stake column is what makes two different "Win" payouts
+         * make sense, since a win pays on the winner's own stake.
+         */
+        const withCards = rows.filter((r) => r.hands && r.hands.length);
+        const cardsBlock = withCards.length ? `
+            <div class="rc-board">
+                <span class="rc-label">Everyone's cards</span>
+                <table class="rc-board-table"><tbody>
+                    ${withCards.map((r) => `
+                        <tr class="${r.seat === you ? 'is-you' : ''}${r.house ? ' is-house' : ''}">
+                            <td class="rc-who">${esc(r.name)}${r.seat === you ? ' <em>(you)</em>' : ''}</td>
+                            <td class="rc-hands">${r.hands.map(handStrip).join('')}</td>
+                            <td class="num muted">${r.house ? '' : '🪙 ' + fmt(r.stake || 0)}</td>
+                            <td class="num ${r.coins > 0 ? 'good' : r.coins < 0 ? 'bad' : ''}">${r.house ? '' : signed(r.coins)}</td>
+                        </tr>`).join('')}
+                </tbody></table>
             </div>` : '';
 
-        // And the arithmetic behind the coin figure, so it can be checked
+        // And the arithmetic behind your own figure, so it can be checked
         // rather than believed. The lines sum to exactly what was paid.
         const money = (mine && mine.lines && mine.lines.length) ? `
             <details class="rc-money" open>
-                <summary>How the coins worked out</summary>
+                <summary>How your coins worked out</summary>
                 <table class="rc-money-table"><tbody>
                     ${mine.lines.map((l) => `
                         <tr>
@@ -73,10 +78,12 @@
                     </tr>
                 </tbody></table>
             </details>` : '';
+
         const table = rows.map((r) => `
             <tr class="${r.seat === you ? 'is-you' : ''}">
                 <td>${MEDAL[r.rank - 1] || r.rank + 'th'}</td>
                 <td>${esc(r.name)}</td>
+                <td class="num muted small">${r.house ? '' : '🪙 ' + fmt(r.stake || 0)}</td>
                 <td class="num ${r.coins > 0 ? 'good' : r.coins < 0 ? 'bad' : ''}">${signed(r.coins)}</td>
                 <td class="muted small">${esc(r.note || '')}</td>
             </tr>`).join('');

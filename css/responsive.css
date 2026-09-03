@@ -43,6 +43,17 @@
     /* Room for it, so the last seat is never trapped underneath. */
     body[data-screen="table"] main { padding-bottom: 190px; }
     .bj { min-height: 0; }
+    /* Narrow screens give the hands column almost nothing once the name and
+     * two figures have taken their share. */
+    .rc-who { width: 4.6em; font-size: 0.92em; }
+    .rc-board-table td.num { width: 3.6em; }
+    .rc-cards { gap: 8px; }
+
+    /* Five columns will not fit 375px without splitting the names. The
+     * outcome word is dropped here because the board above already shows
+     * every hand and what it did — this table is the money summary. */
+    .result-table td:last-child { display: none; }
+
     .login-grid { grid-template-columns: repeat(4, 1fr); }
     .setup-head { flex-direction: column; align-items: flex-start; }
     .row-opt { flex-wrap: wrap; }

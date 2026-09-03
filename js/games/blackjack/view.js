@@ -33,6 +33,12 @@
             this.session = session;
             this.known   = new Set();       // card ids already on screen
             this.bet     = null;
+            // The engine draws the dealer's whole hand in one synchronous
+            // loop, so without this the cards all appear at once and the
+            // round is over before anyone can read it. The view holds them
+            // back and turns them one at a time.
+            this.shownDealer = 0;
+            this.revealTimer = null;
             this.simple  = !!session.game.simple;   // 21: fewer controls, plainer words
         }
 
@@ -62,7 +68,26 @@
             this.paint([]);
         }
 
-        unmount() { this.root.innerHTML = ''; }
+        unmount() {
+            clearTimeout(this.revealTimer);
+            this.revealTimer = null;
+            this.root.innerHTML = '';
+        }
+
+        /** True while dealer cards are still being turned over. */
+        get revealing() {
+            const d = this.engine.dealer;
+            return !!d.revealed && this.shownDealer < (d.cards || []).filter(Boolean).length;
+        }
+
+        scheduleReveal() {
+            if (this.revealTimer) return;
+            this.revealTimer = setTimeout(() => {
+                this.revealTimer = null;
+                this.shownDealer++;
+                this.paint([]);
+            }, 620 * (this.table.speed || 1));
+        }
 
         /* ---- painting ---------------------------------------------------- */
 
@@ -114,7 +139,22 @@
             // A remote view is JSON off a wire: filter before measuring, so a
             // malformed hand degrades to a blank dealer rather than a crash
             // that takes the whole table down.
-            const cards = (d.cards || []).filter(Boolean);
+            const all = (d.cards || []).filter(Boolean);
+
+            // Face-down, everything the engine has is the two dealt cards and
+            // the second is drawn as a back. Face-up, the hand grows a card at
+            // a time from those two, so the total visibly climbs to 17 the way
+            // it does at a real table.
+            let cards;
+            if (hidden) {
+                this.shownDealer = 0;
+                cards = all;
+            } else {
+                if (this.shownDealer < 2) this.shownDealer = Math.min(2, all.length);
+                cards = all.slice(0, this.shownDealer);
+                if (this.shownDealer < all.length) this.scheduleReveal();
+            }
+
             this.$('bjDealerHand').innerHTML = cards.length ? this.cards(cards, hidden) : '';
             const total = this.$('bjDealerTotal');
             if (!cards.length) total.textContent = '';
@@ -180,6 +220,7 @@
             const host = this.$('bjStatus');
             const seat = e.seats[e.turn];
 
+            if (this.revealing) { host.innerHTML = '<span>Dealer draws…</span>'; return; }
             if (e.over) {
                 const d = handValue(e.dealer.cards);
                 host.innerHTML = `<span>${d.total > 21 ? 'Dealer busts.' : 'Dealer has ' + d.total + '.'}</span>`;

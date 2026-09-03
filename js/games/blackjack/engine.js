@@ -524,6 +524,10 @@
                     seat: i,
                     name: s.name,
                     coins: s.net,
+                    // What this seat put up. Two players can both "win" and be
+                    // paid different amounts because a win pays on your own
+                    // stake — without showing it, the payouts look arbitrary.
+                    stake: s.hands.reduce((n, h) => n + h.bet, 0) + s.insurance,
                     score: best,
                     outcome: s.net > 0 ? 'win' : s.net < 0 ? 'loss' : 'draw',
                     note: outcomes.map((o) => (OUTCOME[o] || { label: o }).label).join(' · '),

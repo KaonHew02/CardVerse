@@ -78,12 +78,28 @@
 
         table.onChange((events) => {
             const settled = events.find((e) => e.type === 'settled');
-            if (settled) setTimeout(() => finish(settled.result), 900 * table.speed);
+            if (settled) whenBoardSettles(() => finish(settled.result));
         });
 
         $('resultOverlay').hidden = true;
         paintBar();
         table.start();
+    }
+
+    /**
+     * Hold the result back until the table has finished showing what
+     * happened. The engine resolves the dealer in one synchronous burst, so
+     * without this the overlay lands on top of cards that are still being
+     * turned over — which is what made a hand feel like it ended before you
+     * could read it.
+     */
+    function whenBoardSettles(done) {
+        const speed = (table && table.speed) || 1;
+        const tick = () => {
+            if (view && view.revealing) return setTimeout(tick, 180);
+            setTimeout(done, 1500 * speed);
+        };
+        tick();
     }
 
     function finish(summary) {

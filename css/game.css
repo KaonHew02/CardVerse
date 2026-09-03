@@ -230,4 +230,32 @@
  * with it. */
 .result { max-width: 100%; overflow-x: hidden; }
 .result-table { table-layout: fixed; }
-.result-table td { word-break: break-word; }
+/* break-word, not break-all: a name should wrap between words or overflow
+ * gracefully, never split into "Deale / r". */
+.result-table td { overflow-wrap: break-word; word-break: normal; }
+.result-table td:first-child { width: 2.6em; }
+
+/* ---- result: everyone's cards ----------------------------------------- */
+
+.rc-board { background: var(--panel2); border-radius: var(--radius-sm); padding: 10px 12px; margin-bottom: 12px; }
+.rc-board-table { font-size: 0.82rem; table-layout: fixed; width: 100%; }
+.rc-board-table td { padding: 5px 4px; border-top: 1px solid var(--border); vertical-align: middle; }
+.rc-board-table td.num { width: 4.4em; }
+.rc-board-table tr:first-child td { border-top: 0; }
+.rc-board-table tr.is-you td { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.rc-board-table tr.is-house td { color: var(--muted); }
+.rc-who { width: 6.2em; font-weight: 700; word-break: break-word; }
+.rc-who em { font-style: normal; color: var(--accent); font-weight: 500; font-size: 0.85em; }
+.rc-hands { width: auto; }
+.rc-hand { display: inline-flex; align-items: center; gap: 6px; margin-right: 10px; }
+
+/* A dealer who draws five cards must wrap, not widen the overlay — the
+ * result card is fixed-width and anything that stretches it takes the
+ * buttons off the bottom of the screen with it.
+ *
+ * The recap does NOT fan its cards. A fan overlaps by a negative margin,
+ * which on a wrapped row overlaps the wrong neighbour and turns a five-card
+ * bust into a pile. This is the one place cards are read, not held. */
+.hand-sm { flex-wrap: wrap; row-gap: 3px; column-gap: 2px; }
+.hand.hand-sm .card,
+.hand.hand-sm .card:first-child { margin-left: 0; }
