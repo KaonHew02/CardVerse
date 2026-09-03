@@ -23,6 +23,24 @@
     const CV = window.CV;
     const { Deck, handValue, isBlackjack, pipValue } = CV.Cards;
 
+    /**
+     * What each outcome is called, and what it pays, in words.
+     *
+     * The result screen used to print the internal code — a player who won
+     * with 21 was told "twentyone", and a loser was told "loss". These are the
+     * player-facing names, kept beside the payout rule they describe so the
+     * two cannot drift apart.
+     */
+    const OUTCOME = {
+        blackjack: { label: 'Blackjack',   why: (h, c) => `pays ${c.blackjackPays === 1.5 ? '3:2' : c.blackjackPays + ':1'}` },
+        twentyone: { label: 'Exactly 21',  why: (h, c) => `pays ${c.exactBonus === 1.5 ? '3:2' : c.exactBonus + ':1'}` },
+        win:       { label: 'Win',         why: () => 'beat the dealer, pays 1:1' },
+        push:      { label: 'Push',        why: () => 'same as the dealer, stake returned' },
+        loss:      { label: 'Lose',        why: () => 'dealer was higher' },
+        bust:      { label: 'Bust',        why: (h) => `went over 21 on ${handValue(h.cards).total}` },
+        surrender: { label: 'Surrendered', why: () => 'half the stake back' },
+    };
+
     class BlackjackEngine extends CV.GameEngine {
 
         /** Safe to put on a wire. `shoe` is deliberately absent — see snapshotFor. */
@@ -471,6 +489,7 @@
 
         result() {
             if (this.cached) return this.cached;
+            const dealerBJ = isBlackjack(this.dealer.cards);
             const rows = [];
             for (let i = this.firstSeat(); i >= 0; i = this.nextSeat(i)) {
                 const s = this.seats[i];
@@ -478,13 +497,42 @@
                 const best = Math.max(0, ...s.hands
                     .filter((h) => handValue(h.cards).total <= 21)
                     .map((h) => handValue(h.cards).total));
+                // One line per hand, plus insurance, each showing what was
+                // staked and what came back. They sum to `coins`, which is
+                // what makes the total on the result screen checkable rather
+                // than something the player has to take on trust.
+                const lines = s.hands.map((h, k) => {
+                    const o = OUTCOME[h.outcome] || { label: h.outcome, why: () => '' };
+                    return {
+                        label: o.label + (s.hands.length > 1 ? ` · hand ${k + 1}` : ''),
+                        why: o.why(h, this.config),
+                        stake: h.bet,
+                        returned: h.payout,
+                        amount: h.payout - h.bet,
+                    };
+                });
+                if (s.insurance) {
+                    const paid = dealerBJ ? s.insurance * 3 : 0;
+                    lines.push({
+                        label: 'Insurance',
+                        why: dealerBJ ? 'dealer had blackjack, pays 2:1' : 'dealer had no blackjack',
+                        stake: s.insurance, returned: paid, amount: paid - s.insurance,
+                    });
+                }
+
                 rows.push({
                     seat: i,
                     name: s.name,
                     coins: s.net,
                     score: best,
                     outcome: s.net > 0 ? 'win' : s.net < 0 ? 'loss' : 'draw',
-                    note: outcomes.join(' · '),
+                    note: outcomes.map((o) => (OUTCOME[o] || { label: o }).label).join(' · '),
+                    lines,
+                    hands: s.hands.map((h) => ({
+                        cards: h.cards.slice(), bet: h.bet, payout: h.payout,
+                        outcome: h.outcome, total: handValue(h.cards).total,
+                        doubled: !!h.doubled, split: !!h.split,
+                    })),
                     extra: {
                         blackjacks: outcomes.filter((o) => o === 'blackjack').length,
                         twentyones: outcomes.filter((o) => o === 'twentyone').length,
@@ -513,7 +561,11 @@
                 seat: -1, name: 'Dealer', house: true,
                 coins: -rows.reduce((n, r) => n + r.coins, 0),
                 ratio: 0, score: dv.total > 21 ? 0 : dv.total,
-                outcome: 'house', note: dv.total > 21 ? 'bust' : String(dv.total), extra: {},
+                outcome: 'house',
+                note: dv.total > 21 ? 'Bust' : `Stands on ${dv.total}`,
+                hands: [{ cards: this.dealer.cards.slice(), bet: 0, payout: 0,
+                          outcome: dv.total > 21 ? 'bust' : 'house', total: dv.total }],
+                lines: [], extra: {},
             });
 
             rows.sort((a, b) => b.ratio - a.ratio || b.coins - a.coins);

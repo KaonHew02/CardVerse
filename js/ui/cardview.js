@@ -39,6 +39,7 @@
         </div>`;
     }
 
+    /** `size: 'sm'` shrinks a hand for recaps like the result screen. */
     function el(card, opts) {
         const tpl = document.createElement('template');
         tpl.innerHTML = html(card, opts).trim();

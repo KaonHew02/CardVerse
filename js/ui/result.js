@@ -26,6 +26,53 @@
         const rows = summary.result.ranks;
 
         const you = CV.Play.table ? CV.Play.table.engine.youSeat : -1;
+        const mine  = rows.find((r) => r.seat === you);
+        const house = rows.find((r) => r.house);
+
+        /** A hand, drawn small, with its total. */
+        const handStrip = (h) => `
+            <div class="rc-hand">
+                ${CV.CardView.hand(h.cards || [], { size: 'sm' })}
+                <span class="rc-total${h.total > 21 ? ' bad' : ''}">${h.total > 21 ? 'BUST' : h.total}</span>
+                ${h.doubled ? '<span class="tag">2×</span>' : ''}${h.split ? '<span class="tag">split</span>' : ''}
+            </div>`;
+
+        // What the player actually held, and what the dealer turned over.
+        // Without this the result screen announces a number and covers the
+        // evidence for it.
+        const cardsBlock = (mine && mine.hands && mine.hands.length) ? `
+            <div class="rc-cards">
+                <div class="rc-side">
+                    <span class="rc-label">Your hand${mine.hands.length > 1 ? 's' : ''}</span>
+                    ${mine.hands.map(handStrip).join('')}
+                </div>
+                ${house && house.hands && house.hands.length ? `
+                <div class="rc-side">
+                    <span class="rc-label">Dealer</span>
+                    ${house.hands.map(handStrip).join('')}
+                </div>` : ''}
+            </div>` : '';
+
+        // And the arithmetic behind the coin figure, so it can be checked
+        // rather than believed. The lines sum to exactly what was paid.
+        const money = (mine && mine.lines && mine.lines.length) ? `
+            <details class="rc-money" open>
+                <summary>How the coins worked out</summary>
+                <table class="rc-money-table"><tbody>
+                    ${mine.lines.map((l) => `
+                        <tr>
+                            <td>
+                                <b>${esc(l.label)}</b><small class="muted"> — ${esc(l.why)}</small>
+                                <small class="rc-sum">staked 🪙${fmt(l.stake)} → back 🪙${fmt(l.returned)}</small>
+                            </td>
+                            <td class="num ${l.amount > 0 ? 'good' : l.amount < 0 ? 'bad' : ''}">${signed(l.amount)}</td>
+                        </tr>`).join('')}
+                    <tr class="rc-total-row">
+                        <td><b>Net this hand</b></td>
+                        <td class="num ${summary.coins > 0 ? 'good' : summary.coins < 0 ? 'bad' : ''}"><b>${signed(summary.coins)}</b></td>
+                    </tr>
+                </tbody></table>
+            </details>` : '';
         const table = rows.map((r) => `
             <tr class="${r.seat === you ? 'is-you' : ''}">
                 <td>${MEDAL[r.rank - 1] || r.rank + 'th'}</td>
@@ -64,6 +111,8 @@
                     <div class="stat"><span class="label">Win rate</span><span class="value small">${pct(summary.winRateBefore)} → ${pct(summary.winRateAfter)}</span></div>
                 </div>
 
+                ${cardsBlock}
+                ${money}
                 ${levelUp}${streak}
                 ${unlocked}${missions}
 

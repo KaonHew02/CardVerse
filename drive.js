@@ -137,7 +137,14 @@
             };
 
             tokenClient.error_callback = (err) => {
-                settle(reject, new Error(err && err.type === 'popup_closed'
+                const type = (err && err.type) || '';
+                // A non-interactive attempt fails through this same callback,
+                // and it has not opened any window to close — saying so sent
+                // people looking for a pop-up that was never there.
+                if (!interactive) {
+                    return settle(reject, new Error('Google would not sign you in without being asked.'));
+                }
+                settle(reject, new Error(type === 'popup_closed'
                     ? 'The Google sign-in window was closed before it finished.'
                     : 'The Google sign-in window could not open. Allow pop-ups for this site and try again.'));
             };
@@ -290,7 +297,11 @@
 
         try {
             flashButton(btn, '<span>⏳ Saving…</span>');
-            await authorize(false);
+            // Interactive: a press of this button IS the permission to open a
+            // sign-in window. Asking silently here was a bug — `prompt: 'none'`
+            // tells Google never to show anything, so the very first save could
+            // never succeed, and failed claiming the window had been closed.
+            await authorize(true);
             await writeFile(backupEnvelope());
             remember();
             flashButton(btn, '<span>✅ In Drive</span>');
@@ -309,7 +320,7 @@
 
         try {
             flashButton(btn, '<span>⏳ Reading…</span>');
-            await authorize(false);
+            await authorize(true);
 
             const id = await findFile();
             if (!id) {

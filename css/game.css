@@ -198,3 +198,36 @@
 @media (min-width: 900px) and (max-width: 1279px) {
     body[data-screen="table"] { --card-w: 66px; --card-h: 93px; }
 }
+
+/* ---- result: the evidence -------------------------------------------- */
+
+/* The result screen used to announce a number and cover the cards that
+ * produced it. These show the hand and the arithmetic behind the coins. */
+.rc-cards { display: flex; gap: 14px; flex-wrap: wrap; justify-content: center; margin-bottom: 12px; }
+.rc-side { background: var(--panel2); border-radius: var(--radius-sm); padding: 10px 12px; flex: 1 1 190px; }
+.rc-label { display: block; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin-bottom: 6px; }
+.rc-hand { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 6px; }
+.rc-hand:last-child { margin-bottom: 0; }
+.rc-total { font-weight: 800; font-size: 1.05rem; }
+.rc-total.bad { color: var(--bad); }
+.hand-sm .card { width: calc(var(--card-w) * 0.62); height: calc(var(--card-h) * 0.62); border-radius: 5px; }
+.hand-sm .card .card-pip { font-size: 1.15rem; }
+.hand-sm .card .card-corner { font-size: 0.58rem; }
+.hand-sm .card { margin-left: calc(var(--card-w) * -0.24); }
+.hand-sm .card:first-child { margin-left: 0; }
+
+.rc-money { background: var(--panel2); border-radius: var(--radius-sm); padding: 8px 12px; margin-bottom: 12px; }
+.rc-money summary { cursor: pointer; font-weight: 700; font-size: 0.88rem; }
+.rc-money-table { margin-top: 6px; font-size: 0.82rem; table-layout: fixed; width: 100%; }
+.rc-money-table td { padding: 5px 6px; vertical-align: top; word-break: break-word; }
+.rc-money-table td.num { width: 5.5em; vertical-align: middle; }
+.rc-money-table small { font-weight: 400; }
+.rc-sum { display: block; color: var(--muted); font-size: 0.92em; }
+.rc-total-row td { border-top: 2px solid var(--border); vertical-align: middle; }
+
+/* The result card must never be widened by its own contents — it is a fixed
+ * overlay, and a table that pushes it past the viewport takes the buttons
+ * with it. */
+.result { max-width: 100%; overflow-x: hidden; }
+.result-table { table-layout: fixed; }
+.result-table td { word-break: break-word; }
