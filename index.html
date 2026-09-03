@@ -6,7 +6,12 @@
     <meta name="color-scheme" content="dark light">
     <title>CardVerse — One World. Every Game.</title>
     <meta name="description" content="A casual card and tile game hub. Virtual coins only.">
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🃏</text></svg>">
+    <link rel="icon" type="image/svg+xml" href="assets/logo/cardverse-icon.svg">
+    <link rel="apple-touch-icon" href="assets/logo/cardverse-mark.svg">
+    <meta name="theme-color" content="#131a21">
+    <meta property="og:title" content="CardVerse — One World. Every Game.">
+    <meta property="og:description" content="A casual card and tile game hub. Virtual coins only.">
+    <meta property="og:image" content="assets/logo/cardverse-wide.svg">
     <link rel="stylesheet" href="css/global.css">
     <link rel="stylesheet" href="css/lobby.css">
     <link rel="stylesheet" href="css/game.css">
@@ -16,7 +21,7 @@
 
     <header class="topbar">
         <button class="brand" data-go="home" title="Lobby">
-            <span class="brand-mark">🃏</span>
+            <img class="brand-mark" src="assets/logo/cardverse-mark.svg" alt="" width="34" height="34">
             <span class="brand-text"><b>CARDVERSE</b><small>One World. Every Game.</small></span>
         </button>
         <button class="hdr-player" data-go="profile" title="Profile">
@@ -45,7 +50,7 @@
 
         <section class="screen" id="screen-home">
             <div class="hero">
-                <div class="hero-mark">🃏</div>
+                <img class="hero-mark" src="assets/logo/cardverse-mark.svg" alt="CardVerse" width="104" height="104">
                 <h1>CARDVERSE</h1>
                 <p class="slogan">One World. Every Game.</p>
             </div>
@@ -161,7 +166,10 @@
 
     <script src="js/app.js"></script>
 
-    <!-- the Drive copy; harmless if it never loads -->
+    <!-- Google's sign-in library, for the Drive copy only. `async defer` so a
+         blocked or slow accounts.google.com never delays a single card; the
+         Drive buttons check for it and say so if it never arrived. -->
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
     <script src="drive-config.js"></script>
     <script src="drive.js"></script>
 </body>

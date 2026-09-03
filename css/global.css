@@ -113,7 +113,7 @@ main { max-width: 1100px; margin: 0 auto; padding: 16px 16px 60px; }
 }
 .topbar button { background: none; border: 0; padding: 4px 6px; border-radius: var(--radius-sm); display: flex; align-items: center; gap: 8px; }
 .topbar button:hover { background: var(--panel2); }
-.brand-mark { font-size: 1.6rem; }
+.brand-mark { width: 34px; height: 34px; display: block; flex: none; }
 .brand-text { display: flex; flex-direction: column; line-height: 1.1; text-align: left; }
 .brand-text b { letter-spacing: 0.08em; }
 .brand-text small { color: var(--muted); font-size: 0.7rem; }

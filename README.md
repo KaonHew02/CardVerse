@@ -1,6 +1,8 @@
-# 🃏 CardVerse
+<p align="center">
+  <img src="assets/logo/cardverse-wide.svg" alt="CardVerse — One World. Every Game." width="520">
+</p>
 
-**One World. Every Game.**
+# CardVerse
 
 A casual card and tile game hub — Blackjack, 21, 斗地主, 锄大D, Poker, 斗牛
 and Mahjong — with one player profile, virtual coins, XP and levels,
@@ -60,7 +62,39 @@ js/save.js            Export / Import envelope
 drive.js              the Drive copy (ported from FinSim)
 drive-config.js       your OAuth client ID and folder ID
 docs/DRIVE.md         how to set Drive up
+assets/logo/          generated — see tools/build-logo.mjs, never hand-edit
+tools/build-logo.mjs  the logo, as code
+tools/smoke.js        headless engine tests
+tools/serve.js        a static server for local development
 ```
+
+## The logo
+
+A fan of five cards — one per suit, with a mahjong tile standing taller at the
+centre. Cards *and* tiles is the split the hub is built around, and the arc
+they sit in is the "verse".
+
+It is **generated, not drawn**. Edit the numbers in `tools/build-logo.mjs` and
+re-run it; never hand-edit `assets/logo/*.svg`, or the favicon stops matching
+the header.
+
+```bash
+node tools/build-logo.mjs
+```
+
+Open `assets/logo/preview.html` to check the mark still reads at 16px before
+shipping a change to it — that check is why the suit pips sit high on each
+card rather than centred. In a fan, a centred pip is exactly the part the next
+card covers, so a centred design renders as five white slivers.
+
+| file | for |
+| --- | --- |
+| `cardverse-icon.svg` | favicon — three cards, redrawn rather than scaled down |
+| `cardverse-mark.svg` | app icon, header, anywhere square |
+| `cardverse-glyph.svg` | the fan alone, no badge |
+| `cardverse-logo.svg` | stacked lockup |
+| `cardverse-wide.svg` | wide lockup, social preview |
+| `cardverse-wide-trim.svg` | the same, transparent |
 
 ### The three rules the architecture depends on
 

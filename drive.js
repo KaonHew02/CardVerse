@@ -42,6 +42,21 @@
     let tokenExpires = 0;
     let tokenClient = null;
 
+    /**
+     * Three guards ported from MiniShoppingMall's drive.js, each for a way
+     * this hung in a real game rather than in theory:
+     *
+     *   inFlight   a second authorize() used to overwrite the first's
+     *              callback, leaving that promise pending for ever.
+     *   silentOff  once a silent token is refused, stop asking. Retrying a
+     *              minute later is precisely the call that pops a sign-in
+     *              window in the middle of a hand.
+     *   warned     say why once per session, not once per attempt.
+     */
+    let inFlight = null;
+    let silentOff = false;
+    let warned = false;
+
     /** The Drive file id, once found or created. Cached so each save is one call. */
     let fileId = null;
 
@@ -67,16 +82,35 @@
     /**
      * Asks for a token, silently if Google already knows the answer.
      *
-     * `prompt: ''` means "do not put a window in front of them if you do not
-     * have to". The first time, and after a consent is revoked, Google ignores
-     * that and shows the picker anyway — which is correct, and is the only
-     * time this should interrupt anyone.
+     * `prompt: 'none'`, never `prompt: ''`. The empty string does not promise
+     * silence: with more than one Google account signed in, Google still opens
+     * the account chooser — which is how an automatic push ended up asking
+     * "which account?" in the middle of a hand and taking the window away from
+     * the table. 'none' tells Google to answer or fail, never to show anything.
+     *
+     * Interactive passes no prompt at all rather than 'consent', so a player
+     * who has already granted access is not asked to grant it again every time
+     * they press the button.
      */
     function authorize(interactive) {
-        return new Promise((resolve, reject) => {
-            if (valid()) return resolve(token);
+        if (valid()) return Promise.resolve(token);
+        if (!interactive && silentOff) {
+            return Promise.reject(new Error('Google will not sign you in without being asked.'));
+        }
+        if (inFlight) return inFlight;
 
-            const oauth2 = library();
+        const promise = new Promise((resolve, reject) => {
+            let done = false;
+            let timer = null;
+            const settle = (fn, value) => {
+                if (done) return;
+                done = true;
+                clearTimeout(timer);
+                fn(value);
+            };
+
+            let oauth2;
+            try { oauth2 = library(); } catch (err) { return settle(reject, err); }
 
             if (!tokenClient) {
                 tokenClient = oauth2.initTokenClient({
@@ -87,26 +121,43 @@
             }
 
             tokenClient.callback = (response) => {
-                if (response.error) {
+                if (!response || response.error || !response.access_token) {
+                    const code = (response && response.error) || 'no_token';
                     // access_denied is a person clicking Cancel, not a fault.
-                    if (/access_denied|user_cancel/i.test(response.error)) {
-                        return reject(new Error('Sign-in was cancelled, so nothing was sent to Drive.'));
+                    if (/access_denied|user_cancel/i.test(code)) {
+                        return settle(reject, new Error('Sign-in was cancelled, so nothing was sent to Drive.'));
                     }
-                    return reject(new Error('Google refused the sign-in: ' + response.error));
+                    return settle(reject, new Error('Google refused the sign-in: ' + code));
                 }
                 token = response.access_token;
                 tokenExpires = Date.now() + (Number(response.expires_in || 3600) * 1000);
-                resolve(token);
+                silentOff = false;
+                warned = false;
+                settle(resolve, token);
             };
 
             tokenClient.error_callback = (err) => {
-                reject(new Error(err && err.type === 'popup_closed'
+                settle(reject, new Error(err && err.type === 'popup_closed'
                     ? 'The Google sign-in window was closed before it finished.'
                     : 'The Google sign-in window could not open. Allow pop-ups for this site and try again.'));
             };
 
-            tokenClient.requestAccessToken({ prompt: interactive ? 'consent' : '' });
+            // A window someone closed can call neither callback, and a silent
+            // request that Google simply never answers would otherwise leave
+            // Auto wedged for the rest of the session.
+            timer = setTimeout(() => settle(reject, new Error('Google did not answer in time.')),
+                               interactive ? 120000 : 15000);
+
+            try {
+                tokenClient.requestAccessToken(interactive ? {} : { prompt: 'none' });
+            } catch (err) {
+                settle(reject, err);
+            }
         });
+
+        inFlight = promise;
+        promise.catch(() => {}).then(() => { if (inFlight === promise) inFlight = null; });
+        return promise;
     }
 
     /* ------------------------------------------------------------------ *
@@ -360,7 +411,19 @@
         // nothing should be waking a background tab into a sign-in window.
         if (!valid()) {
             if (document.visibilityState !== 'visible') return;
-            try { await authorize(false); } catch (err) { showStamp(); return; }
+            try {
+                await authorize(false);
+            } catch (err) {
+                // Stand down for the session rather than trying again in a
+                // minute, and say why exactly once.
+                silentOff = true;
+                if (!warned) {
+                    warned = true;
+                    if (window.CV && CV.UI) CV.UI.toast('Auto needs you to press “To Drive” once to sign in again.', 'warn', 4000);
+                }
+                showStamp();
+                return;
+            }
         }
 
         try {

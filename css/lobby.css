@@ -3,7 +3,7 @@
 /* ---- hero -------------------------------------------------------------- */
 
 .hero { text-align: center; padding: 22px 0 6px; }
-.hero-mark { font-size: 3.2rem; filter: drop-shadow(0 6px 18px rgba(245, 185, 66, 0.35)); }
+.hero-mark { width: 104px; height: 104px; display: block; margin: 0 auto; filter: drop-shadow(0 8px 22px rgba(245, 185, 66, 0.35)); }
 .hero h1 { font-size: 2.2rem; letter-spacing: 0.14em; margin: 4px 0 0; }
 .hero .slogan { color: var(--accent); font-weight: 600; letter-spacing: 0.06em; }
 
