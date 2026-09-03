@@ -27,35 +27,30 @@ including from a double-clicked `index.html`.
 ## Where it works
 
 Google will only sign an app in from a real web address, so Drive works from
-**https://kaonhew02.github.io/CardVerse/** and not from a file opened off
+**<https://kaonhew02.github.io/CardVerse/>** and not from a file opened off
 disk. `file://` has no origin and Google will not issue a token to it. The
 rest of CardVerse — every game, Export, Import — works from either.
+
+All your GitHub Pages projects share the single origin `kaonhew02.github.io`.
+That is why the origin below carries no `/CardVerse` path, and also why
+MoneyFlow, FinSim and MiniShoppingMall each needed their own OAuth client
+rather than a per-project origin.
 
 ## Status
 
 | | |
 | --- | --- |
+| GitHub Pages | ✅ live at <https://kaonhew02.github.io/CardVerse/> |
 | Drive folder | ✅ set — `1Qc4ZfqWyoQf-2_ohW1ieoebwtCWKjJOz` |
-| OAuth client ID | ⬜ **still a placeholder — step 2 below** |
-| GitHub Pages | ⬜ **not enabled yet — step 1 below** |
+| OAuth client ID | ⬜ **still a placeholder — the one step left, below** |
 
-Until both are done every Drive button says "Drive is not set up yet" rather
-than failing oddly. Export and Import work regardless.
+Until the client ID is filled in, every Drive button says "Drive is not set up
+yet" rather than failing oddly. **Everything else already works**: the game
+saves to this browser as you play, and Export / Import need no account at all.
+Drive is the copy that survives clearing the browser or moving to another
+machine — worth having, but not load-bearing.
 
-## Step 1 — turn on GitHub Pages (about a minute)
-
-The repo is pushed but not published, so there is no address for Google to
-trust yet.
-
-1. Open <https://github.com/KaonHew02/CardVerse/settings/pages>.
-2. Under **Build and deployment → Source**, choose **Deploy from a branch**.
-3. Branch: **`master`**, folder: **`/ (root)`**. Press **Save**.
-4. Wait a minute, then check <https://kaonhew02.github.io/CardVerse/> loads.
-
-> The branch is `master`, not `main` — worth checking the dropdown, since
-> GitHub defaults the picker to whatever it lists first.
-
-## Step 2 — make the OAuth client (about five minutes)
+## The one step left — make the OAuth client (about five minutes)
 
 You already have a Google Cloud project with the Drive API enabled and the
 consent screen done, from MoneyFlow and FinSim. Reuse that project, but add a
@@ -87,7 +82,7 @@ own file.
 A **client secret is never needed** and must never be pasted anywhere in this
 project. If the console offers one, ignore it.
 
-## Step 3 — first copy
+## Then — the first copy
 
 Open <https://kaonhew02.github.io/CardVerse/>, go to **Settings → Your data**,
 press **To Drive** and sign in. The stamp underneath turns into a cloud with a
