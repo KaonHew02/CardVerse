@@ -61,6 +61,47 @@ Whichever is used, changing a game's `folderId` after it has written a file
 writes a fresh one. Press *From Drive* (or Export) before moving a game that
 already has a save, and delete the old file afterwards.
 
+## One repo per game
+
+Each game keeps its own GitHub repo — `KaonHew02/CardVerse`,
+`KaonHew02/MiniShoppingMall`, and so on. Nothing about GameHub wants a
+monorepo, and the Google side costs nothing extra, because of one fact worth
+stating plainly:
+
+> A GitHub Pages project site lives at `https://kaonhew02.github.io/<repo>/`,
+> but an **origin is scheme + host only**. The `/<repo>` part is not in it.
+
+So every repo on the account shares the single origin
+`https://kaonhew02.github.io`, one entry on the OAuth client covers all of
+them, and a new repo needs nothing registered anywhere. That is also why the
+setup notes keep insisting the origin has no path — pasting
+`https://kaonhew02.github.io/CardVerse` there is the commonest way to make
+sign-in fail.
+
+### The other half of that fact: one origin means one browser store
+
+The same shared origin that makes OAuth free also means **every game shares one
+`localStorage`** — one ~5 MB quota between all of them, one flat namespace, and
+one "clear site data" that wipes the lot. Two rules follow:
+
+1. **Prefix every key with the game's name.** CardVerse writes only
+   `cardverse.*` — ten keys, `cardverse.profile.v1` through
+   `cardverse.drive.lastPush`. A game that writes a bare `settings` key would
+   collide with the next game that does the same, and the symptom would be a
+   save quietly changing under you.
+2. **Watch the shared ceiling as games accumulate.** A game save here is a few
+   KB, so five games is nowhere near 5 MB. If one ever gets close, the lever is
+   IndexedDB on the same origin — hundreds of MB — which is the move MoneyFlow
+   already made. Drive is a backup, not more room.
+
+### Keeping the copied files from rotting
+
+Separate repos mean `drive.js` is copy-pasted, not shared — there is no build
+step and no cross-origin import that would be worth the trouble. The discipline
+that keeps that honest: **CardVerse holds the canonical copy.** Copy from it,
+and if you fix a bug in some other game's copy, port the fix back to CardVerse
+so the *next* game starts from the fixed version rather than the original one.
+
 ## Telling the games apart
 
 Two fields, and nothing else, distinguish one game's save from another:
