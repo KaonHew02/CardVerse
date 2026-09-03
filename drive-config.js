@@ -31,7 +31,7 @@ const CV_DRIVE = {
      * Until this is replaced, every Drive button says so instead of failing
      * oddly. Export and Import work regardless — they need no account at all.
      */
-    clientId: 'PASTE-YOUR-CLIENT-ID.apps.googleusercontent.com',
+    clientId: '612843079573-ujp69s8asq895kofufsb84j372qrhl9f.apps.googleusercontent.com',
 
     /**
      * The shared **GameHub** folder — every game writes one file into it.
