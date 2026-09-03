@@ -60,6 +60,11 @@
             <p class="muted small center footnote">Virtual coins only. Nothing in CardVerse can be bought, sold or cashed out.</p>
         </section>
 
+        <section class="screen" id="screen-room" hidden>
+            <div class="screen-top"><button class="btn ghost" data-go="home">← Lobby</button><h2>🌐 Play with friends</h2></div>
+            <div id="roomBody"></div>
+        </section>
+
         <section class="screen" id="screen-setup" hidden>
             <div class="screen-top"><button class="btn ghost" data-go="home">← Lobby</button><h2>Choose a table</h2></div>
             <div id="setupBody"></div>
@@ -138,6 +143,8 @@
     <script src="js/core/cosmetics.js"></script>
     <script src="js/core/rewards.js"></script>
     <script src="js/core/table.js"></script>
+    <script src="js/core/net.js"></script>
+    <script src="js/core/remote.js"></script>
 
     <!-- shell -->
     <script src="js/ui/shell.js"></script>
@@ -163,8 +170,14 @@
     <script src="js/ui/statistics.js"></script>
     <script src="js/ui/leaderboard.js"></script>
     <script src="js/ui/missions.js"></script>
+    <script src="js/ui/room.js"></script>
 
     <script src="js/app.js"></script>
+
+    <!-- PeerJS, for online play only. Same deal as the sign-in library below:
+         `async defer` so a slow or blocked CDN never delays a card, and
+         CV.Net.available() reports honestly if it never arrived. -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.4/peerjs.min.js" async defer></script>
 
     <!-- Google's sign-in library, for the Drive copy only. `async defer` so a
          blocked or slow accounts.google.com never delays a single card; the

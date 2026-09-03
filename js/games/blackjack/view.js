@@ -111,13 +111,17 @@
             const e = this.engine;
             const d = e.dealer;
             const hidden = !d.revealed;
-            this.$('bjDealerHand').innerHTML = d.cards.length ? this.cards(d.cards, hidden) : '';
+            // A remote view is JSON off a wire: filter before measuring, so a
+            // malformed hand degrades to a blank dealer rather than a crash
+            // that takes the whole table down.
+            const cards = (d.cards || []).filter(Boolean);
+            this.$('bjDealerHand').innerHTML = cards.length ? this.cards(cards, hidden) : '';
             const total = this.$('bjDealerTotal');
-            if (!d.cards.length) total.textContent = '';
-            else if (hidden) total.textContent = handValue([d.cards[0]]).total + ' + ?';
+            if (!cards.length) total.textContent = '';
+            else if (hidden) total.textContent = handValue([cards[0]]).total + ' + ?';
             else {
-                const v = handValue(d.cards);
-                total.textContent = v.total > 21 ? 'BUST' : (isBlackjack(d.cards) ? 'BLACKJACK' : v.total);
+                const v = handValue(cards);
+                total.textContent = v.total > 21 ? 'BUST' : (isBlackjack(cards) ? 'BLACKJACK' : v.total);
                 total.classList.toggle('bad', v.total > 21);
             }
         }

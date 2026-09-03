@@ -282,6 +282,31 @@ for (const game of CV.Registry.playable()) {
                     checkedHidden++;
                 }
 
+                // Every viewer must be told their own seat is theirs, and
+                // exactly one seat may claim it.
+                const mine = view.seats.filter((st) => st.isYou);
+                check(mine.length === (viewer >= 0 ? 1 : 0),
+                    `${game.code}: ${mine.length} seats marked "you" in the view for seat ${viewer}`);
+                if (viewer >= 0) {
+                    check(view.seats[viewer].isYou, `${game.code}: seat ${viewer} not marked as its own viewer`);
+                    check(view.seats[viewer].kind === 'human', `${game.code}: viewer's own seat is not human`);
+                }
+
+                // A hole where a card should be is as bad as a leak: it
+                // serialises as null and crashes whatever reads its rank.
+                check(!/(^|[^a-z])null([^a-z]|$)/.test(wire.replace(/"[^"]*":null/g, '')),
+                    `${game.code}: a null card is in the broadcast`);
+                for (const c of (view.dealer.cards || [])) {
+                    check(c && typeof c.r === 'number', `${game.code}: broadcast dealer hand holds a non-card`);
+                }
+                for (const st of view.seats) {
+                    for (const h of (st.hands || [])) {
+                        for (const c of (h.cards || [])) {
+                            check(c && typeof c.r === 'number', `${game.code}: broadcast seat hand holds a non-card`);
+                        }
+                    }
+                }
+
                 // Nothing still in the shoe may ever appear.
                 for (const card of e.shoe.cards.slice(-6)) {
                     check(!wire.includes('"' + card.id + '"'),

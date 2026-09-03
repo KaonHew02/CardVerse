@@ -175,7 +175,25 @@
             const view = this.snapshot();
             delete view.rng;
             view.viewer = viewer;
-            view.seats = view.seats.map((seat, i) => this.redactSeat(seat, i, viewer));
+            view.game = this.constructor.code || null;
+            // Rules are public — everyone at a table can read the felt. But the
+            // config is whitelisted rather than copied, because a game may park
+            // private state on it: Blackjack carries the carried-over `shoe`,
+            // and sending that would post every remaining card to the table.
+            view.rules = {};
+            for (const key of (this.constructor.publicConfig || [])) view.rules[key] = this.config[key];
+            view.seats = view.seats.map((seat, i) => {
+                const out = this.redactSeat(seat, i, viewer);
+                // `isYou` and `kind` are written from the *recipient's* point of
+                // view, not copied from the host's. Left alone, every guest is
+                // told the host's chair is theirs — the seat highlight, the
+                // "(you)" label and the pass-the-device wording all follow
+                // isYou, so the table reads as someone else's game.
+                out.isYou = (i === viewer);
+                if (i === viewer) out.kind = 'human';
+                else if (out.kind === 'human') out.kind = 'remote';
+                return out;
+            });
             view.options = this.legalActions(viewer);
             return view;
         }

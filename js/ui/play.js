@@ -96,6 +96,15 @@
     }
 
     function leave(force) {
+        if (CV.Room && CV.Room.active) {
+            const online = () => { CV.Room.teardown(); table = null; view = null; session = null; CV.UI.go('home'); };
+            if (force) return online();
+            return CV.UI.confirm(CV.Room.isHost ? 'Close the table?' : 'Leave the table?',
+                CV.Room.isHost
+                    ? 'Everyone is disconnected and the room code stops working.'
+                    : 'You leave the hand and your seat carries on as an AI.',
+                CV.Room.isHost ? 'Close it' : 'Leave', online, true);
+        }
         const mid = table && !table.engine.isOver() && table.engine.phase !== 'betting';
         const go = () => {
             if (table) {
@@ -110,15 +119,54 @@
         CV.UI.confirm('Leave this hand?', 'The bet on the table is lost and the hand counts as a loss.', 'Leave', go, true);
     }
 
-    function paintBar() {
-        $('tableGame').textContent = `${session.game.icon} ${session.game.name}`;
-        $('tableRoom').textContent = `${session.room.icon} ${session.room.name}`;
+    function paintBar(s) {
+        const info = s || session;
+        if (!info) return;
+        $('tableGame').textContent = `${info.game.icon} ${info.game.name}`;
+        $('tableRoom').textContent = `${info.room.icon} ${info.room.name}`;
         $('tableCoins').textContent = fmt(CV.Profile.get().coins);
     }
 
+    /* ---- online ---------------------------------------------------------- */
+
+    /**
+     * An online table is built by room.js — the host runs a real Table and
+     * forwards snapshots, a guest runs a RemoteTable over them. Both hand back
+     * the same pair, so from here on the screen behaves identically.
+     */
+    function dealOnline(params) {
+        const root = $('tableRoot');
+        root.innerHTML = '';
+        $('resultOverlay').hidden = true;
+
+        const built = params.guest ? CV.Room.buildGuestTable(root) : CV.Room.buildHostTable(root);
+        if (!built) {
+            CV.UI.say('The table is not ready', 'Nothing has arrived from the host yet. Try again in a moment.');
+            return CV.UI.go('home');
+        }
+        table = built.table;
+        view  = built.view;
+        session = built.table.session;
+        paintBar(session);
+    }
+
+    /** The host dealt another hand at the same online table. */
+    function redealOnline() {
+        $('resultOverlay').hidden = true;
+        dealOnline({ online: true, guest: false });
+    }
+
     CV.UI.screen('table', {
-        render() { deal(); },
+        render(params) {
+            if (params && params.online) return dealOnline(params);
+            deal();
+        },
         leave() {
+            // An online table is owned by room.js and survives this screen —
+            // the host keeps the room open between hands. Only a solo table is
+            // torn down here, and only a solo table can be forfeited, since a
+            // guest's coins are settled by the host.
+            if (CV.Room && CV.Room.active) { table = null; view = null; session = null; return; }
             if (table) {
                 if (!table.settled && !table.engine.isOver()) CV.Rewards.forfeit(table);
                 table.destroy();
@@ -133,5 +181,9 @@
         if (btn) btn.addEventListener('click', () => leave(false));
     });
 
-    CV.Play = { begin, deal, leave, get session() { return session; }, get table() { return table; } };
+    CV.Play = {
+        begin, deal, leave, redealOnline,
+        get session() { return session; },
+        get table() { return table; },
+    };
 })();

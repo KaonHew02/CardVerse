@@ -58,6 +58,7 @@
             <button class="nav-tile" data-go="achievements"><span class="icon">🏆</span><span>Achievements</span><small>${ach.done} / ${ach.total}</small></button>
             <button class="nav-tile" data-go="stats"><span class="icon">📊</span><span>Statistics</span><small>${fmt(p.totalGames)} games</small></button>
             <button class="nav-tile${todo ? ' has-badge' : ''}" data-go="missions"><span class="icon">🎁</span><span>Daily Bonus</span><small>${todo ? todo + ' to claim' : login.claimedToday ? 'Claimed today' : 'Ready'}</small></button>
+            <button class="nav-tile" data-go="room"><span class="icon">🌐</span><span>Play with Friends</span><small>Online</small></button>
             <button class="nav-tile" data-go="leaderboard"><span class="icon">🏅</span><span>Leaderboard</span><small>Local</small></button>
             <button class="nav-tile" data-go="profile"><span class="icon">👤</span><span>Profile</span><small>Lv ${p.level}</small></button>
             <button class="nav-tile" data-go="settings"><span class="icon">⚙️</span><span>Settings</span><small>Theme · Data</small></button>`;

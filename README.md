@@ -41,6 +41,9 @@ keeps it a game hub.
 index.html            one page, screens shown and hidden by js/ui/shell.js
 css/                  global · lobby · game · responsive
 js/core/              the hub — nothing in here knows a game by name
+  net.js              WebRTC room codes (host + guest)
+  remote.js           RemoteEngine/RemoteTable — an engine's read surface
+                      rebuilt over a host's snapshots
   rng.js              seeded RNG (every shuffle is replayable)
   cards.js            Card / Deck / hand values
   engine.js           GameEngine base, Seat, GameResult

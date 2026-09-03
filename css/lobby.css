@@ -129,3 +129,34 @@
 /* ---- leaderboard ------------------------------------------------------- */
 
 .lb-you { display: flex; align-items: center; gap: 12px; }
+
+/* ---- online room ------------------------------------------------------- */
+
+.room-choice { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin-bottom: 14px; }
+.room-big {
+    display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 26px 16px;
+    background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius);
+    box-shadow: var(--shadow); transition: transform 140ms, border-color 140ms;
+}
+.room-big:hover { transform: translateY(-2px); border-color: color-mix(in srgb, var(--accent) 50%, var(--border)); }
+.room-big .icon { font-size: 2.2rem; }
+.room-big small { color: var(--muted); font-weight: 400; text-align: center; }
+
+/* The code is read aloud and typed on a phone, so it is spaced like a PIN
+ * rather than set as a word — digits that touch get misread. */
+.room-code { display: flex; gap: 8px; justify-content: center; margin: 10px 0; cursor: pointer; flex-wrap: wrap; }
+.room-code span {
+    display: grid; place-items: center; min-width: 44px; padding: 10px 4px;
+    background: var(--panel2); border-radius: var(--radius-sm);
+    font-size: 1.9rem; font-weight: 800; font-variant-numeric: tabular-nums;
+    color: var(--accent); border: 1px solid var(--border);
+}
+.code-input {
+    display: block; width: 100%; margin: 8px 0; padding: 14px;
+    background: var(--panel2); border: 1px solid var(--border); border-radius: var(--radius-sm);
+    font-size: 2rem; font-weight: 800; text-align: center; letter-spacing: 0.4em;
+    font-variant-numeric: tabular-nums; color: var(--text);
+}
+.room-player { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid var(--border); }
+.room-player:first-of-type { border-top: 0; }
+.room-player b { flex: 1; }

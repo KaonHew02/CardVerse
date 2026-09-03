@@ -25,6 +25,12 @@
 
     class BlackjackEngine extends CV.GameEngine {
 
+        /** Safe to put on a wire. `shoe` is deliberately absent — see snapshotFor. */
+        static get publicConfig() {
+            return ['room', 'decks', 'dealerHitsSoft17', 'blackjackPays', 'insurance',
+                    'surrender', 'double', 'split', 'exactBonus'];
+        }
+
         static get defaults() {
             return {
                 room: 'beginner',
@@ -546,8 +552,12 @@
         snapshotFor(viewer) {
             const view = super.snapshotFor(viewer);
             delete view.seen;
+            // slice(0, 1), never [cards[0]] — before the deal the hand is
+            // empty, and `[undefined]` serialises to `[null]`, handing the
+            // guest a card-shaped hole that crashes the first thing to read
+            // its rank. An empty hand must arrive as an empty array.
             view.dealer = {
-                cards: this.dealer.revealed ? this.dealer.cards.slice() : [this.dealer.cards[0]],
+                cards: this.dealer.revealed ? this.dealer.cards.slice() : this.dealer.cards.slice(0, 1),
                 revealed: this.dealer.revealed,
                 hidden: this.dealer.revealed ? 0 : Math.max(0, this.dealer.cards.length - 1),
             };
