@@ -61,7 +61,8 @@ js/ui/                shell · lobby · play · result · profile · achievement
 js/save.js            Export / Import envelope
 drive.js              the Drive copy (ported from FinSim)
 drive-config.js       your OAuth client ID and folder ID
-docs/DRIVE.md         how to set Drive up
+docs/DRIVE.md         how to set Drive up for CardVerse
+docs/GAMEHUB.md       the shared Google identity every game uses
 assets/logo/          generated — see tools/build-logo.mjs, never hand-edit
 tools/build-logo.mjs  the logo, as code
 tools/smoke.js        headless engine tests

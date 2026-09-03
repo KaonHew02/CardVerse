@@ -50,34 +50,21 @@ saves to this browser as you play, and Export / Import need no account at all.
 Drive is the copy that survives clearing the browser or moving to another
 machine — worth having, but not load-bearing.
 
-## The one step left — make the OAuth client (about five minutes)
+## The one step left — the GameHub client ID
 
-You already have a Google Cloud project with the Drive API enabled and the
-consent screen done, from MoneyFlow and FinSim. Reuse that project, but add a
-**new client** rather than reusing FinSim's. Two reasons: the sign-in window
-then says "CardVerse", and `drive.file` access is granted **per OAuth client**
-— a shared client would let CardVerse see `finsim-data.json` as well as its
-own file.
+CardVerse is the first game on the **GameHub** arrangement: one Google Cloud
+project, one OAuth client, one Drive folder, shared by every game from here on.
+**The full setup and the reasoning live in [GAMEHUB.md](GAMEHUB.md)** — make
+the project and the client there, once, then come back and paste the client ID
+into `drive-config.js`:
 
-1. Open <https://console.cloud.google.com/apis/credentials> and check the
-   project picker at the top is on the project you used for FinSim.
-2. **Create credentials → OAuth client ID → Application type: Web application.**
-   - Name: `CardVerse`
-   - **Authorised JavaScript origins** → Add URI: `https://kaonhew02.github.io`
-     — scheme and host only. No `/CardVerse`, no trailing slash. This is the
-     field that causes almost every failure.
-   - **Authorised redirect URIs**: leave completely empty.
-   - Create.
-3. Copy the client ID (it ends `.apps.googleusercontent.com`) and paste it into
-   `drive-config.js`, replacing `PASTE-YOUR-CLIENT-ID.apps.googleusercontent.com`.
-4. Commit and push:
+```bash
+git add drive-config.js && git commit -m "Drive: add the GameHub client ID" && git push
+```
 
-   ```bash
-   git add drive-config.js && git commit -m "Drive: add CardVerse OAuth client" && git push
-   ```
-
-5. If your consent screen is still in **Testing**, add your own Google account
-   under **Audience → Test users**, or Google will refuse to sign you in.
+Every game after this one reuses that same client ID and the same folder, and
+needs nothing done in Google Cloud at all — only its own unique `filename` and
+envelope `format`.
 
 A **client secret is never needed** and must never be pasted anywhere in this
 project. If the console offers one, ignore it.
