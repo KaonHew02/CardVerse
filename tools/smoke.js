@@ -51,6 +51,8 @@ function load(rel) {
     'js/games/dragongate/engine.js', 'js/games/dragongate/index.js',
     'js/games/bullbull/hands.js', 'js/games/bullbull/engine.js',
     'js/games/bullbull/ai.js', 'js/games/bullbull/index.js',
+    'js/games/dice/dice.js', 'js/games/dice/engine.js',
+    'js/games/dice/ai.js', 'js/games/dice/index.js',
     'js/games/lami/melds.js', 'js/games/lami/engine.js',
     'js/games/lami/ai.js', 'js/games/lami/index.js',
     'js/games/mahjong/tiles.js', 'js/games/mahjong/win.js', 'js/games/mahjong/fan.js',
@@ -220,7 +222,7 @@ console.log(`CardVerse smoke — ${HANDS} hands per game\n`);
  * own audit further down.
  */
 const OWN_AUDIT = new Set(['slots', 'dragongate', 'doudizhu', 'bigtwo', 'poker', 'mahjong',
-                           'bullbull', 'lami']);
+                           'bullbull', 'lami', 'dice']);
 
 for (const game of CV.Registry.playable()) {
     if (!game.AI || OWN_AUDIT.has(game.code)) continue;
@@ -2693,6 +2695,192 @@ function auditLami() {
     console.log('  ✓ rules card resolves');
 }
 auditLami();
+
+/* ---- 骰子 ---------------------------------------------------------------- */
+
+function auditDice() {
+    console.log('\n🎲 骰子');
+    const game = CV.Registry.get('dice');
+    const D = CV.Dice;
+
+    /* --- every throw there is ------------------------------------------------ */
+
+    {
+        const tally = { triple: 0, small: 0, big: 0, unknown: 0 };
+        const totals = {};
+        let n = 0;
+
+        for (let a = 1; a <= 6; a++) for (let b = 1; b <= 6; b++) for (let c = 1; c <= 6; c++) {
+            const r = D.read([a, b, c]);
+            tally[r.type]++;
+            totals[r.total] = totals[r.total] || {};
+            totals[r.total][r.type] = (totals[r.total][r.type] || 0) + 1;
+            n++;
+
+            // The reading, re-derived rather than trusted.
+            const sum = a + b + c;
+            const trip = a === b && b === c;
+            const want = trip ? 'triple' : (sum <= 10 ? 'small' : 'big');
+            check(r.total === sum, `dice: ${a}+${b}+${c} came to ${r.total}`);
+            check(r.type === want, `dice: ${a}+${b}+${c} read as ${r.type}, wanted ${want}`);
+            if (trip) check(r.face === a, `dice: a triple of ${a} reported a face of ${r.face}`);
+            else check(r.face === null, 'dice: a face was reported on a hand that is not a triple');
+        }
+
+        check(n === 216, `dice: ${n} throws enumerated, there are 216`);
+        check(tally.unknown === 0, `dice: ${tally.unknown} throws read as nothing at all`);
+        check(tally.triple === 6, `dice: ${tally.triple} triples, there are 6`);
+        check(tally.small === 105, `dice: ${tally.small} smalls, wanted 105`);
+        check(tally.big === 105, `dice: ${tally.big} bigs, wanted 105`);
+        check(tally.small + tally.big + tally.triple === 216, 'dice: the three kinds do not add up');
+
+        // 3 and 18 can only be reached by a triple, so neither is ever 小 or 大.
+        for (const edge of [3, 18]) {
+            check(Object.keys(totals[edge]).join() === 'triple',
+                `dice: a total of ${edge} was read as something other than a 围骰`);
+        }
+        // And every total inside a range that is not a triple reads that way.
+        for (let s = 4; s <= 10; s++) check(!totals[s].big, `dice: a total of ${s} was read as 大`);
+        for (let s = 11; s <= 17; s++) check(!totals[s].small, `dice: a total of ${s} was read as 小`);
+
+        console.log('  all 216 throws read — 6 围骰, 105 小, 105 大, and nothing left over');
+        console.log('  ✓ 3 and 18 are only ever 围骰, so neither range can reach them');
+    }
+
+    /* --- the worked examples from the rules ---------------------------------- */
+
+    const CASES = [
+        [[1, 2, 3], 6,  'small'],
+        [[2, 3, 4], 9,  'small'],
+        [[1, 4, 6], 11, 'big'],
+        [[3, 4, 5], 12, 'big'],
+        [[5, 5, 2], 12, 'big'],
+        [[1, 1, 1], 3,  'triple'],
+        [[2, 2, 2], 6,  'triple'],
+        [[4, 4, 4], 12, 'triple'],
+        [[6, 6, 6], 18, 'triple'],
+        // The one the priority rule exists for.
+        [[5, 5, 5], 15, 'triple'],
+    ];
+    for (const [dice, total, type] of CASES) {
+        const r = D.read(dice);
+        check(r.total === total && r.type === type,
+            `dice: ${dice.join('+')} read as ${r.type} ${r.total}, wanted ${type} ${total}`);
+    }
+    console.log(`  ${CASES.length} worked examples, including the fifteen that is not a 大`);
+
+    /* --- 大 and 小 both lose to a 围骰 ---------------------------------------- */
+
+    {
+        const trip = D.read([5, 5, 5]);
+        check(!D.wins('big', trip), 'dice: 大 should lose to a 围骰 inside its range');
+        check(!D.wins('small', trip), 'dice: 小 should lose to a 围骰');
+        check(D.wins('triple', trip), 'dice: 围骰 should win on a 围骰');
+        const small = D.read([1, 2, 3]);
+        check(D.wins('small', small) && !D.wins('big', small) && !D.wins('triple', small),
+            'dice: a small throw paid the wrong side');
+    }
+
+    /* --- the throw comes from the table's own stream --------------------------- */
+
+    {
+        const a = new CV.RNG(4242), b = new CV.RNG(4242);
+        for (let i = 0; i < 50; i++) {
+            check(D.roll(a).join() === D.roll(b).join(), 'dice: the same seed threw differently');
+        }
+        const rng = new CV.RNG(9);
+        for (let i = 0; i < 3000; i++) {
+            const dice = D.roll(rng);
+            check(dice.length === 3, 'dice: something other than three dice was thrown');
+            check(dice.every((x) => x >= 1 && x <= 6), 'dice: a die came up outside one to six');
+        }
+    }
+
+    /* --- whole throws ---------------------------------------------------------- */
+
+    {
+        const master = new CV.RNG(31337);
+        const ROUNDS = Math.max(600, HANDS);
+        const t0 = Date.now();
+        const staked = { big: 0, small: 0, triple: 0 };
+        const net = { big: 0, small: 0, triple: 0 };
+        let triples = 0;
+
+        for (let g = 0; g < ROUNDS; g++) {
+            const n = master.range(1, 6);
+            const room = CV.Registry.ROOMS[master.int(4)].id;
+            const e = new game.Engine({
+                rng: new CV.RNG(master.int(1e9)), config: { room },
+                seats: Array.from({ length: n }, (_, i) => new CV.Seat(i, {
+                    kind: 'ai', name: 'S' + i, coins: master.range(2000, 90000), isYou: i === 0,
+                })),
+            });
+            const ai = new game.AI(e);
+            e.start();
+            let steps = 0;
+            while (!e.isOver()) {
+                const a = ai.decide(e.turn);
+                check(!!a, 'dice: the AI had nothing to do');
+                if (!a) break;
+                check(e.apply(a), `dice: engine refused ${JSON.stringify(a)}`);
+                if (++steps > 20) { check(false, 'dice: a throw ran past 20 actions'); break; }
+            }
+
+            check(e.dice && e.dice.length === 3, 'dice: the round ended without a throw');
+            check(e.outcome.type !== 'unknown', 'dice: a throw read as nothing');
+            if (e.outcome.type === 'triple') triples++;
+
+            for (const s of e.seats) {
+                if (s.out) continue;
+                check(s.coins >= 0, 'dice: a seat was taken below zero');
+                check(s.coins === s.startCoins + s.net, 'dice: coins do not reconcile');
+                // A win pays the table's price and a loss costs the stake.
+                const won = D.wins(s.side, e.outcome);
+                check(s.outcome === (won ? 'win' : 'loss'), 'dice: the outcome disagrees with the throw');
+                check(s.net === (won ? s.bet * D.PAYS[s.side] : -s.bet),
+                    `dice: a ${s.side} bet of ${s.bet} netted ${s.net}`);
+                staked[s.side] += s.bet;
+                net[s.side] += s.net;
+            }
+        }
+
+        const pct = (k) => (staked[k] ? (net[k] / staked[k] * 100).toFixed(1) : '—');
+        console.log(`  ${ROUNDS} throws, ${Date.now() - t0} ms — 围骰 came up `
+            + `${(triples / ROUNDS * 100).toFixed(1)}% of the time (2.8% expected)`);
+        console.log(`  return on stake: 大 ${pct('big')}% · 小 ${pct('small')}% · 围骰 ${pct('triple')}%`);
+        // 大 and 小 lose to a triple, which is exactly six throws in 216.
+        for (const side of ['big', 'small']) {
+            const edge = net[side] / staked[side] * 100;
+            check(edge > -12 && edge < 6, `dice: ${side} returned ${edge.toFixed(1)}%, which is not the book`);
+        }
+    }
+
+    /* --- what a host may broadcast ---------------------------------------------- */
+
+    {
+        const e = new game.Engine({
+            rng: new CV.RNG(2), config: { room: 'beginner' },
+            seats: [0, 1, 2].map((i) => new CV.Seat(i, { kind: 'ai', name: 'S' + i, coins: 4000, isYou: i === 0 })),
+        });
+        e.start();
+        e.apply({ type: 'wager', seat: 0, side: 'big', amount: 10 });
+        for (let viewer = 0; viewer < 3; viewer++) {
+            const view = e.snapshotFor(viewer);
+            check(!view.rng, 'dice: the snapshot carries the RNG');
+            check(view.dice === null, 'dice: the dice went out before they were thrown');
+            view.seats.forEach((s, i) => {
+                if (i !== viewer && e.seats[i].side) {
+                    check(s.side === 'hidden', 'dice: another seat\'s pick is visible before the throw');
+                }
+            });
+        }
+    }
+    console.log('  ✓ no dice and no pick on the wire before the throw');
+
+    for (const key of game.rules) check(CV.t(key) !== key, `dice: rule key ${key} has no text`);
+    console.log('  ✓ rules card resolves');
+}
+auditDice();
 
 /* ---- what a host is allowed to broadcast ------------------------------- */
 

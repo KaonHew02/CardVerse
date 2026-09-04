@@ -567,3 +567,39 @@
 .lami-pick.is-on .tile { box-shadow: 0 0 0 2px var(--accent), 0 6px 12px rgba(0,0,0,.5); }
 .lami-pick:disabled { cursor: default; }
 .lami-pick:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* ---- 骰子 --------------------------------------------------------------- */
+
+.dice-pit { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 10px 0 4px; }
+.dice-row { display: flex; gap: 14px; }
+
+/* A die is a three-by-three grid with the pips switched on. No sprite, so a
+ * new die colour is one rule. */
+.die {
+    display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(3, 1fr);
+    width: 58px; height: 58px; padding: 7px; border-radius: 12px; flex: none;
+    background: linear-gradient(160deg, #fffdf5, #e7e0cf);
+    box-shadow: inset 0 -4px 0 rgba(0,0,0,.14), 0 4px 10px rgba(0,0,0,.45);
+}
+.die i { border-radius: 50%; }
+.die i.on { background: #1b2430; box-shadow: inset 0 1px 1px rgba(255,255,255,.35); }
+.die.is-blank { opacity: .35; }
+.die.is-rolling { animation: diceTumble 240ms linear infinite; }
+@keyframes diceTumble {
+    0%   { transform: rotate(-8deg) translateY(0); }
+    50%  { transform: rotate(8deg) translateY(-6px); }
+    100% { transform: rotate(-8deg) translateY(0); }
+}
+
+.dice-call { min-height: 1.6em; font-size: 1.25rem; font-weight: 800; color: var(--accent); }
+.dice-call.is-triple { color: var(--good); font-size: 1.45rem; }
+
+/* The three sides, each in its own colour so a glance is enough. */
+.dice-sides { gap: 8px; }
+.dice-side { flex-direction: column; gap: 2px; min-width: 96px; padding: 10px 14px; }
+.dice-side small { font-weight: 400; opacity: .7; font-size: .72rem; }
+.dice-side.is-on { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(245,185,66,.25); }
+.dice-pick { font-weight: 800; padding: 1px 9px; border-radius: 999px; background: rgba(0,0,0,.3); }
+.dice-pick.is-big { color: #ff9d6c; }
+.dice-pick.is-small { color: #7fd1ff; }
+.dice-pick.is-triple { color: var(--good); }

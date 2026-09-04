@@ -38,6 +38,7 @@ keeps it a game hub.
 | 🀄 **Mahjong** | ✅ 136 tiles at four seats; dots, flowers and 飞 at three, with a 5番 floor and 爆番 |
 | 🐮 **斗牛** | ✅ 宝宝, Pic + Black Ace, 五个 Pic, and the multiplier table |
 | 🧩 **Lami** | ✅ rummy on tiles — runs, sets, jokers, dice for the opener |
+| 🎲 **骰子** | ✅ three dice — 大 / 小 / 围骰, checked over all 216 throws |
 | How-to-play card before a first hand | ✅ per game, in both languages |
 | Online multiplayer | ⏳ Phase 5 — see `js/core/transport.js` |
 
@@ -76,6 +77,7 @@ js/games/<game>/      engine.js · ai.js · view.js · index.js (registers itsel
   mahjong/            麻将 — tiles · win · fan · pay, each its own file
   bullbull/           斗牛 — hands.js reads it, engine.js prices it
   lami/               Lami — rummy melds; shares nothing with mahjong/
+  dice/               骰子 — dice.js reads the throw, engine.js prices it
 js/ui/                shell · lobby · play · result · profile · achievements ·
                       statistics · missions · settings · cardview
 js/save.js            Export / Import envelope

@@ -149,3 +149,9 @@
     .lami-board { min-height: 70px; padding: 6px; gap: 5px; }
     .lami-tiles { gap: 2px; }
 }
+
+@media (max-width: 720px) {
+    .die { width: 46px; height: 46px; padding: 5px; border-radius: 9px; }
+    .dice-row { gap: 10px; }
+    .dice-side { min-width: 0; flex: 1; padding: 8px 6px; }
+}
