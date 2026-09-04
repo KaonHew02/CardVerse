@@ -170,12 +170,26 @@
         /**
          * The Banker's drawing table — the one rule in baccarat anybody has to
          * look up. `third` is the Player's third card, or null if it stood.
+         *
+         *   Player stood      → draw on 0-5, stand on 6-7
+         *   Banker 0-2        → draw
+         *   Banker 3          → draw on a third card of 0-7, stand on 8-9
+         *   Banker 4          → draw on 2-7
+         *   Banker 5          → draw on 4-7
+         *   Banker 6          → draw on 6-7
+         *   Banker 7          → stand
+         *   Banker 8-9        → natural, never reaches here
+         *
+         * Note on the Banker-3 row: this is the house table as specified, and
+         * it differs from the casino standard, where a Banker 3 *does* draw
+         * against a player third card of 9 and stands only on 8. Deliberate —
+         * do not "fix" it back without asking.
          */
         bankerDraws(b, third) {
             if (third === null) return b <= 5;      // same rule the Player used
-            const v = pip(third);
+            const v = pip(third);                    // 10/J/Q/K are 0, A is 1
             if (b <= 2) return true;
-            if (b === 3) return v !== 8;
+            if (b === 3) return v <= 7;
             if (b === 4) return v >= 2 && v <= 7;
             if (b === 5) return v >= 4 && v <= 7;
             if (b === 6) return v === 6 || v === 7;

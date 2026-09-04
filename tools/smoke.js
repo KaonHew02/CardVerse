@@ -306,6 +306,65 @@ console.log('\n🪙 Rewards pipeline');
     check(ss.spectator && CV.Profile.get().coins === pc, 'spectator table changed the profile');
 }
 
+/* ---- the baccarat drawing table, exhaustively --------------------------- */
+
+/**
+ * Every cell of the third-card table, checked against the rules as written
+ * rather than against whatever hands happened to come up. A sampled game can
+ * play thousands of rounds without once putting a Banker 3 against a player
+ * third card of 9 — which is exactly the cell that was wrong.
+ */
+function auditBaccaratTable() {
+    console.log('\n📐 百家乐 drawing table');
+    const game = CV.Registry.get('baccarat');
+    const e = new game.Engine({
+        rng: new CV.RNG(1),
+        seats: [new CV.Seat(0, { kind: 'ai', coins: 1000 })],
+        config: {},
+    });
+
+    // A card of each pip value 0-9. Tens and pictures are 0; an ace is 1.
+    const cardOf = (v) => (v === 0 ? { r: 13, s: 'S', id: 'K' }
+        : v === 1 ? { r: 14, s: 'S', id: 'A' }
+        : { r: v, s: 'S', id: 'c' + v });
+
+    // Player stood: banker draws on 0-5, stands on 6-7.
+    for (let b = 0; b <= 7; b++) {
+        check(e.bankerDraws(b, null) === (b <= 5),
+            `baccarat: player stood, banker ${b} should ${b <= 5 ? 'draw' : 'stand'}`);
+    }
+
+    // Player drew: one row per banker total, exactly as the house table reads.
+    const draws = (b, v) => {
+        if (b <= 2) return true;
+        if (b === 3) return v <= 7;              // stands on 8-9
+        if (b === 4) return v >= 2 && v <= 7;
+        if (b === 5) return v >= 4 && v <= 7;
+        if (b === 6) return v === 6 || v === 7;
+        return false;                            // 7 stands
+    };
+
+    let cells = 0;
+    for (let b = 0; b <= 7; b++) {
+        for (let v = 0; v <= 9; v++) {
+            const got = e.bankerDraws(b, cardOf(v));
+            check(got === draws(b, v),
+                `baccarat: banker ${b} v player third ${v} gave ${got ? 'draw' : 'stand'}, `
+                + `wanted ${draws(b, v) ? 'draw' : 'stand'}`);
+            cells++;
+        }
+    }
+    console.log(`  ${cells + 8} cells checked — the stand row and every draw row`);
+
+    // Scoring keeps only the last digit, and the pip values are the odd ones.
+    check(CV.BaccaratTotal([cardOf(7), cardOf(8)]) === 5, 'baccarat: 7 + 8 should be 5');
+    check(CV.BaccaratTotal([cardOf(9), cardOf(8), cardOf(6)]) === 3, 'baccarat: 9 + 8 + 6 should be 3');
+    check(CV.BaccaratTotal([cardOf(0), cardOf(0)]) === 0, 'baccarat: two pictures should be 0');
+    check(CV.BaccaratTotal([cardOf(1), cardOf(0)]) === 1, 'baccarat: ace + picture should be 1');
+    console.log('  ✓ scoring keeps only the last digit');
+}
+auditBaccaratTable();
+
 /* ---- what a host is allowed to broadcast ------------------------------- */
 
 /**

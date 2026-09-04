@@ -334,18 +334,18 @@
 
 
         /* 百家乐 */
-        'bac.player': 'Player', 'bac.banker': 'Banker', 'bac.tie': 'Tie',
-        'bac.pays.player': 'pays 1:1', 'bac.pays.banker': 'pays 1:1 less 5%', 'bac.pays.tie': 'pays 8:1',
+        'bac.player': '闲 Player', 'bac.banker': '庄 Banker', 'bac.tie': '和 Tie',
+        'bac.pays.player': 'pays 1:1', 'bac.pays.banker': 'pays 0.95:1', 'bac.pays.tie': 'pays 8:1',
         'bac.place': 'Place bet', 'bac.yourBet': 'Choose a side and a stake',
         'bac.dealing': 'Dealing…', 'bac.wins': '{side} wins',
         'bac.win': 'WON', 'bac.push': 'PUSH', 'bac.loss': 'LOST',
-        'bac.rules': 'Eight decks · Banker pays 1:1 less 5% · Tie pays 8:1',
+        'bac.rules': 'Eight decks · 闲 1:1 · 庄 0.95:1 · 和 8:1',
         'bac.detail': 'Player {p} · Banker {b} — {side}',
         'bac.rule1': 'Back the Player hand, the Banker hand, or a Tie. You are betting on an outcome, not playing a hand.',
-        'bac.rule2': 'Cards count face value, aces are 1, and tens and pictures are 0. Only the last digit counts — 7 + 8 is 5, not 15.',
-        'bac.rule3': 'Both hands are dealt two cards. Eight or nine is a natural and ends it there.',
-        'bac.rule4': 'Otherwise a third card is drawn by a fixed table — nobody chooses. The Player hand draws on 0–5, and the Banker follows a longer rule that depends on what the Player drew.',
-        'bac.rule5': 'Player pays 1:1. Banker pays 1:1 less 5% commission, because it wins slightly more often. Tie pays 8:1 and returns the other two bets.',
+        'bac.rule2': 'Aces are 1, 2–9 are face value, and tens and pictures are 0. Only the last digit of the total counts — 7 + 8 is 5, and 9 + 8 + 6 is 3.',
+        'bac.rule3': 'Two cards to each hand. If either shows 8 or 9 that is a natural — no third cards are drawn, the scores are compared.',
+        'bac.rule4': 'Otherwise the Player hand draws on 0–5 and stands on 6–7. The Banker then follows its own table: 0–2 always draws, 7 always stands, and 3 to 6 depend on the Player’s third card. Nobody chooses any of it.',
+        'bac.rule5': 'Higher score wins, equal scores are a tie. 闲 pays 1:1; 庄 pays 0.95:1, because it wins slightly more often; 和 pays 8:1. A tie returns a 闲 or 庄 stake untouched.',
 
         /* how to play */
         'rules.title': 'How to play {game}',
@@ -632,17 +632,17 @@
 
 
         'bac.player': '闲', 'bac.banker': '庄', 'bac.tie': '和',
-        'bac.pays.player': '赔 1:1', 'bac.pays.banker': '赔 1:1 抽水 5%', 'bac.pays.tie': '赔 8:1',
+        'bac.pays.player': '赔 1:1', 'bac.pays.banker': '赔 0.95:1', 'bac.pays.tie': '赔 8:1',
         'bac.place': '下注', 'bac.yourBet': '选一边，再下注',
         'bac.dealing': '发牌中…', 'bac.wins': '{side}赢',
         'bac.win': '赢', 'bac.push': '和', 'bac.loss': '输',
-        'bac.rules': '八副牌 · 庄赔 1:1 抽水 5% · 和赔 8:1',
+        'bac.rules': '八副牌 · 闲 1:1 · 庄 0.95:1 · 和 8:1',
         'bac.detail': '闲 {p} · 庄 {b} — {side}',
         'bac.rule1': '压闲、压庄或压和。你赌的是结果，不是自己出牌。',
-        'bac.rule2': '牌面算点数，A 算 1，10 和公牌算 0。只看个位——7 + 8 是 5，不是 15。',
-        'bac.rule3': '两边各发两张。八点或九点是例牌，当场定输赢。',
-        'bac.rule4': '否则按固定规则补第三张，没人可以选。闲家 0–5 补牌，庄家的规则要看闲家补到什么。',
-        'bac.rule5': '闲赔 1:1。庄赢面略大，所以赔 1:1 再抽 5% 水。和赔 8:1，并退回闲庄的注。',
+        'bac.rule2': 'A 算 1，2–9 算牌面，10 和公牌算 0。只看总和的个位——7 + 8 是 5，9 + 8 + 6 是 3。',
+        'bac.rule3': '两边各发两张。任一边是 8 或 9 就是例牌——不再补牌，直接比点数。',
+        'bac.rule4': '否则闲家 0–5 补牌，6–7 不补。庄家再看自己的表：0–2 一定补，7 一定不补，3 到 6 要看闲家的第三张。全部自动，没人可以选。',
+        'bac.rule5': '点数大的赢，一样就是和。闲赔 1:1；庄赢面略大，赔 0.95:1；和赔 8:1。开和时，压闲压庄的注码原封退回。',
 
         'rules.title': '{game}怎么玩',
         'rules.play': '明白了 — 开牌',
