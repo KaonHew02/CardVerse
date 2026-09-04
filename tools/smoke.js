@@ -51,6 +51,8 @@ function load(rel) {
     'js/games/dragongate/engine.js', 'js/games/dragongate/index.js',
     'js/games/bullbull/hands.js', 'js/games/bullbull/engine.js',
     'js/games/bullbull/ai.js', 'js/games/bullbull/index.js',
+    'js/games/lami/melds.js', 'js/games/lami/engine.js',
+    'js/games/lami/ai.js', 'js/games/lami/index.js',
     'js/games/mahjong/tiles.js', 'js/games/mahjong/win.js', 'js/games/mahjong/fan.js',
     'js/games/mahjong/pay.js', 'js/games/mahjong/engine.js',
     'js/games/mahjong/ai.js', 'js/games/mahjong/index.js',
@@ -217,7 +219,8 @@ console.log(`CardVerse smoke — ${HANDS} hands per game\n`);
  * playing each other for points rather than a table paying out. Each has its
  * own audit further down.
  */
-const OWN_AUDIT = new Set(['slots', 'dragongate', 'doudizhu', 'bigtwo', 'poker', 'mahjong', 'bullbull']);
+const OWN_AUDIT = new Set(['slots', 'dragongate', 'doudizhu', 'bigtwo', 'poker', 'mahjong',
+                           'bullbull', 'lami']);
 
 for (const game of CV.Registry.playable()) {
     if (!game.AI || OWN_AUDIT.has(game.code)) continue;
@@ -2419,6 +2422,277 @@ function auditBullBull() {
     console.log('  ✓ rules card resolves');
 }
 auditBullBull();
+
+/* ---- Lami ---------------------------------------------------------------- */
+
+let lamiUid = 0;
+/** "C3 C4 C5" — suit letter then rank. `X` is a joker. */
+function lamiTiles(str) {
+    return str.split(/\s+/).filter(Boolean).map((tok) => {
+        if (tok === 'X') return { joker: true, id: 'x' + (lamiUid++) };
+        const s = tok[0], r = Number(tok.slice(1));
+        if (!'CDHS'.includes(s) || !(r >= 1 && r <= 13)) throw new Error('bad tile ' + tok);
+        return { r, s, id: 'l' + (lamiUid++) };
+    });
+}
+
+function auditLami() {
+    console.log('\n🧩 Lami');
+    const game = CV.Registry.get('lami');
+    const L = CV.Lami;
+
+    /* --- the box ------------------------------------------------------------ */
+
+    {
+        const box = L.build();
+        const jokers = box.filter(L.isJoker);
+        const real = box.filter((x) => !L.isJoker(x));
+        check(real.length === 104, `lami: ${real.length} numbered tiles, wanted 2 × 52`);
+        check(jokers.length === 2, `lami: ${jokers.length} jokers, wanted 2`);
+        check(new Set(box.map((x) => x.id)).size === box.length, 'lami: the box holds a duplicate id');
+        for (const s of L.SUITS) {
+            const suit = real.filter((x) => x.s === s);
+            check(suit.length === 26, `lami: ${suit.length} tiles in ${s}, wanted 2 × 13`);
+            check(new Set(suit.map((x) => x.r)).size === 13, `lami: ${s} is not 1 to 13`);
+        }
+        console.log(`  ${box.length} tiles — four suits of 1 to 13, two of each, and two jokers`);
+    }
+
+    /* --- what is a meld ------------------------------------------------------ */
+
+    const read = (str) => { const m = L.meld(lamiTiles(str)); return m ? m.type : null; };
+    const MELDS = [
+        // Runs, straight from the rules.
+        ['C3 C4 C5',        'run'],
+        ['D7 D8 D9 D10',    'run'],
+        ['H8 H9 X',         'run'],      // the joker plays the ten
+        ['S11 S12 S13',     'run'],
+        ['S12 S13 X',       'run'],      // the joker goes below, not past the king
+        // Sets, straight from the rules.
+        ['C7 D7 H7 S7',     'set'],
+        ['C13 D13 H13',     'set'],
+        ['C5 D5 X',         'set'],
+        // And the ones that are not melds at all.
+        ['C3 C4',           null],       // two is not enough
+        ['C3 D4 H5',        null],       // a run is one suit
+        ['C3 C5 C6',        null],       // and consecutive
+        ['C3 C3 C4',        null],       // with no tile twice
+        ['C7 D7',           null],       // two is not enough for a set either
+        ['C7 C7 D7',        null],       // and a suit cannot appear twice
+        ['C7 D7 H7 S7 X',   null],       // five is past the four suits
+        ['S12 S13 S1',      null],       // a run does not wrap past the king
+        ['C1 X X',          'run'],      // two jokers still need a real tile
+        ['X X X',           null],       // and three jokers are nothing at all
+    ];
+    for (const [str, want] of MELDS) {
+        check(read(str) === want, `lami: "${str}" read as ${read(str)}, wanted ${want}`);
+    }
+    console.log(`  ${MELDS.length} melds read, the ones that are not melds included`);
+
+    /* --- adding to what is on the table -------------------------------------- */
+
+    {
+        // The example from the rules: ♠3-4-5-6 becomes ♠3-4-5-6-7.
+        const table = lamiTiles('S3 S4 S5 S6');
+        check(!!L.extend(table, lamiTiles('S7')), 'lami: a run should take the next tile up');
+        check(!!L.extend(table, lamiTiles('S2')), 'lami: a run should take the next tile down');
+        check(!L.extend(table, lamiTiles('S9')), 'lami: a run should not take a tile that does not join');
+        check(!L.extend(table, lamiTiles('H7')), 'lami: a run should not take another suit');
+
+        const set = lamiTiles('C7 D7 H7');
+        check(!!L.extend(set, lamiTiles('S7')), 'lami: a set of three should take the fourth suit');
+        check(!L.extend(set, lamiTiles('C7')), 'lami: a set should not take a suit it already holds');
+        console.log('  ✓ a run takes either end, a set takes the suit it is missing');
+    }
+
+    /* --- what a tile costs when it is left over ------------------------------ */
+
+    {
+        for (let r = 1; r <= 13; r++) {
+            check(L.points(lamiTiles('C' + r)[0]) === r, `lami: a ${r} should cost ${r}`);
+        }
+        check(L.points(lamiTiles('X')[0]) === L.RULES.jokerPoints,
+            'lami: a joker should cost what the table says it costs');
+        check(L.handPoints(lamiTiles('C1 D13 X')) === 1 + 13 + L.RULES.jokerPoints,
+            'lami: a hand adds up to the sum of its tiles');
+    }
+
+    /* --- findMelds only offers real melds ------------------------------------ */
+
+    {
+        const rng = new CV.RNG(4747);
+        let offered = 0, held = 0;
+        for (let i = 0; i < 400; i++) {
+            const box = L.build();
+            rng.shuffle(box);
+            const rack = box.slice(0, 14);
+            const ids = new Set(rack.map((x) => x.id));
+            for (const found of L.findMelds(rack)) {
+                check(!!L.meld(found), 'lami: findMelds offered something that is not a meld');
+                check(found.every((x) => ids.has(x.id)), 'lami: findMelds offered a tile not in the rack');
+                check(new Set(found.map((x) => x.id)).size === found.length,
+                    'lami: findMelds used a tile twice');
+                offered++;
+            }
+            held += rack.length;
+        }
+        console.log(`  ${offered.toLocaleString('en-US')} melds suggested from ${held / 14} racks, every one legal`);
+    }
+
+    /* --- the throw ------------------------------------------------------------ */
+
+    {
+        // Highest starts, and a tie throws again — the procedure as written.
+        let ties = 0;
+        for (let i = 0; i < 200; i++) {
+            const e = new game.Engine({
+                rng: new CV.RNG(1000 + i), config: { room: 'beginner' },
+                seats: [0, 1, 2, 3].map((n) => new CV.Seat(n, { kind: 'ai', name: 'S' + n, coins: 9000 })),
+            });
+            e.start();
+            check(Array.isArray(e.dice) && e.dice.length >= 1, 'lami: nobody threw for the start');
+            const first = e.dice[0];
+            const best = Math.max(...first.map((x) => x.roll));
+            const tied = first.filter((x) => x.roll === best);
+            if (tied.length > 1) {
+                ties++;
+                check(e.dice.length > 1, 'lami: a tied throw was not thrown again');
+                check(e.dice[1].length === tied.length, 'lami: the wrong players threw again');
+            } else {
+                check(e.starter === tied[0].seat, 'lami: the highest throw did not open');
+            }
+            check(e.dice.every((round) => round.every((x) => x.roll >= 1 && x.roll <= 6)),
+                'lami: a die came up outside one to six');
+        }
+        console.log(`  ✓ highest throw opens, and ${ties} of 200 tables had to throw again`);
+    }
+
+    /* --- whole rounds ---------------------------------------------------------- */
+
+    const master = new CV.RNG(90210);
+    const ROUNDS = Math.max(60, Math.round(HANDS / 25));
+    const t0 = Date.now();
+    let outs = 0, stalls = 0, melds = 0, leftover = 0;
+
+    for (let g = 0; g < ROUNDS; g++) {
+        const n = master.range(2, 4);
+        const room = CV.Registry.ROOMS[master.int(4)].id;
+        const e = new game.Engine({
+            rng: new CV.RNG(master.int(1e9)), config: { room },
+            seats: Array.from({ length: n }, (_, i) => new CV.Seat(i, {
+                kind: 'ai', name: 'S' + i, coins: master.range(2000, 60000), isYou: i === 0,
+            })),
+        });
+        const ai = new game.AI(e);
+        e.start();
+
+        const box = L.build(e.rules).length;
+        check(e.seats.every((s) => s.rack.length === e.rules.hand),
+            'lami: somebody was not dealt a full rack');
+        check(e.poolLeft === box - n * e.rules.hand, 'lami: the pool is the wrong size');
+
+        let steps = 0;
+        while (!e.isOver()) {
+            const seat = e.turn;
+            const action = ai.decide(seat);
+            check(!!action, 'lami: the AI had nothing to do');
+            if (!action) break;
+            if (action.type === 'play') {
+                const tiles = action.tiles.map((id) => e.seats[seat].rack.find((x) => x.id === id));
+                check(tiles.every(Boolean), 'lami: the AI played a tile it does not hold');
+                check(!!L.meld(tiles.filter(Boolean), e.rules), 'lami: the AI laid something that is not a meld');
+            }
+            check(e.apply(action), `lami: engine refused ${action.type}`);
+            if (++steps > 900) { check(false, 'lami: a round ran past 900 actions' ); break; }
+        }
+
+        // Every tile is somewhere, and only in one place.
+        const seen = e.seats.flatMap((s) => s.rack)
+            .concat(e.table.flatMap((m) => m.tiles), e.pool);
+        check(seen.length === box, `lami: ${seen.length} tiles accounted for, the box holds ${box}`);
+        check(new Set(seen.map((x) => x.id)).size === box, 'lami: a tile is in two places at once');
+
+        // Everything on the table is still a meld.
+        for (const m of e.table) {
+            check(!!L.meld(m.tiles, e.rules), 'lami: something on the table is not a meld');
+            check(m.tiles.length >= Math.min(e.rules.minRun, e.rules.minSet), 'lami: a meld is too short');
+        }
+
+        // The count, and the coins that follow from it.
+        for (const s of e.seats) {
+            check(s.points === L.handPoints(s.rack), 'lami: a hand was counted wrong');
+            check(s.coins >= 0, 'lami: a seat was taken below zero');
+            check(s.coins === s.startCoins + s.net, 'lami: coins do not reconcile');
+        }
+        check(e.seats.reduce((t, s) => t + s.net, 0) === 0, 'lami: the table is not zero-sum');
+
+        const low = Math.min(...e.seats.map((s) => s.points));
+        const r = e.result();
+        check(r.ranks[0].rank === 1 && e.seats[r.ranks[0].seat].points === low,
+            'lami: the smallest hand did not come first');
+        // The winner opens the next round.
+        check(e.shoeState.starter >= 0, 'lami: nobody was set to open the next round');
+        if (e.winner >= 0) {
+            check(e.shoeState.starter === e.winner, 'lami: the winner does not open the next round');
+        }
+
+        if (e.seats.some((s) => !s.rack.length)) outs++; else stalls++;
+        melds += e.table.length;
+        leftover += e.seats.reduce((t, s) => t + s.points, 0) / e.seats.length;
+    }
+
+    console.log(`  ${ROUNDS} rounds, ${Date.now() - t0} ms — ${outs} ended with a rack emptied, `
+        + `${stalls} on a stall`);
+    console.log(`  ${(melds / ROUNDS).toFixed(1)} melds laid a round · `
+        + `${(leftover / ROUNDS).toFixed(1)} points left in an average hand`);
+    check(melds > 0, 'lami: nothing was ever laid on the table');
+
+    /* --- the previous winner opens the next round ------------------------------- */
+
+    {
+        const seats = [0, 1, 2].map((i) => new CV.Seat(i, { kind: 'ai', name: 'S' + i, coins: 9000 }));
+        const first = new game.Engine({ rng: new CV.RNG(5), config: { room: 'beginner' }, seats });
+        const ai = new game.AI(first);
+        first.start();
+        while (!first.isOver()) { const a = ai.decide(first.turn); if (!a || !first.apply(a)) break; }
+        const next = new game.Engine({
+            rng: new CV.RNG(6), config: { room: 'beginner', shoe: first.shoeState },
+            seats: [0, 1, 2].map((i) => new CV.Seat(i, { kind: 'ai', name: 'S' + i, coins: 9000 })),
+        });
+        next.start();
+        check(next.starter === first.shoeState.starter, 'lami: the carried starter was ignored');
+        check(next.dice === null, 'lami: a second round threw the dice again');
+        console.log('  ✓ the first round is thrown for, and the winner opens the next');
+    }
+
+    /* --- what a host may broadcast ---------------------------------------------- */
+
+    {
+        const e = new game.Engine({
+            rng: new CV.RNG(8), config: { room: 'beginner' },
+            seats: [0, 1, 2].map((i) => new CV.Seat(i, { kind: 'ai', name: 'S' + i, coins: 9000, isYou: i === 0 })),
+        });
+        e.start();
+        for (let viewer = 0; viewer < 3; viewer++) {
+            const view = e.snapshotFor(viewer);
+            const wire = JSON.stringify(view);
+            check(!view.rng, 'lami: the snapshot carries the RNG');
+            check(typeof view.pool === 'number', 'lami: the pool itself went out on the wire');
+            view.seats.forEach((s, i) => {
+                if (i === viewer) check(s.rack.every(Boolean), 'lami: your own rack was redacted from you');
+                else check(s.rack.every((x) => x === null), 'lami: another rack went out on the wire');
+            });
+            for (const tile of e.pool.slice(-8)) {
+                check(!wire.includes('"' + tile.id + '"'), `lami: a tile still in the pool (${tile.id}) is on the wire`);
+            }
+        }
+    }
+    console.log('  ✓ no rack but your own, and nothing still in the pool');
+
+    for (const key of game.rules) check(CV.t(key) !== key, `lami: rule key ${key} has no text`);
+    console.log('  ✓ rules card resolves');
+}
+auditLami();
 
 /* ---- what a host is allowed to broadcast ------------------------------- */
 

@@ -531,3 +531,39 @@
 .tile-fly { background: linear-gradient(150deg, #ffd88a, #e0a63c); color: #4a2c00; }
 .tile-flower { background: linear-gradient(150deg, #ffe9f2, #f6c9dc); color: #8a2a53; }
 .mj-flowers { background: rgba(246,201,220,.22); color: #ffd8e8; }
+
+/* ---- Lami --------------------------------------------------------------- */
+
+/* Four suits that have to be told apart at a glance, so four colours —
+ * two reds and two blacks would make a run of hearts read as diamonds. */
+.lami-C { color: #1d7a45; }
+.lami-D { color: #1d4f9c; }
+.lami-H { color: #c62828; }
+.lami-S { color: #1b2430; }
+.tile-joker { background: linear-gradient(150deg, #ffe9b0, #e6b84a); color: #4a2c00; }
+
+.lami { display: flex; flex-direction: column; gap: 10px; min-height: 60vh; }
+.lami-seats { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; }
+.lami-seat { flex: 0 1 200px; }
+.lami-count { margin-left: auto; background: rgba(0,0,0,.35); color: #fff; }
+
+.lami-board {
+    display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; align-content: flex-start;
+    min-height: 96px; padding: 10px; border-radius: 14px; background: rgba(0,0,0,.16);
+}
+.lami-empty { color: rgba(255,255,255,.55); align-self: center; margin: auto; font-size: .9rem; }
+.lami-meld {
+    display: inline-flex; gap: 1px; padding: 5px; border-radius: 9px; border: 2px solid transparent;
+    background: rgba(255,255,255,.05); cursor: default;
+}
+/* A meld the selection would actually go onto says so before it is tried. */
+.lami-meld.can-take { border-color: rgba(61,220,151,.55); cursor: pointer; }
+.lami-meld.is-aimed { border-color: var(--good); background: rgba(61,220,151,.16); }
+
+.lami-rack { display: flex; flex-direction: column; align-items: center; gap: 8px; margin-top: auto; }
+.lami-tiles { display: flex; gap: 3px; flex-wrap: wrap; justify-content: center; padding-top: 14px; }
+.lami-pick { background: none; border: 0; padding: 0; line-height: 0; cursor: pointer; transition: transform 120ms; }
+.lami-pick.is-on { transform: translateY(-12px); }
+.lami-pick.is-on .tile { box-shadow: 0 0 0 2px var(--accent), 0 6px 12px rgba(0,0,0,.5); }
+.lami-pick:disabled { cursor: default; }
+.lami-pick:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }

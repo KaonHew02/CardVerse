@@ -142,3 +142,10 @@
     .tile-sm b { font-size: .66rem; }
     .tile-sm i { display: none; }
 }
+
+@media (max-width: 720px) {
+    .lami { min-height: 0; }
+    .lami-seat { flex: 1 1 46%; }
+    .lami-board { min-height: 70px; padding: 6px; gap: 5px; }
+    .lami-tiles { gap: 2px; }
+}
