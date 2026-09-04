@@ -1,16 +1,20 @@
 /**
- * CardVerse — Russian Roulette Party's entry in the hub.
+ * CardVerse — 轮盘's entry in the hub.
  *
- * Survival is the mode that ships, which the rules call the recommended one:
- * three HP each, out at zero, last one standing wins. Classic is the same loop
- * without the elimination and Risk & Reward needs a different turn entirely —
- * both are listed as later versions in the rules and neither is here.
+ * Single-zero (European) roulette. The prices are the standard ones and are
+ * not a design choice: each is the fair inverse of its own chance with one
+ * pocket held back, which is what makes every bet on the layout return the
+ * same −2.70%. See wheel.js, where they live, and the audit, which checks
+ * that identity holds for all of them.
  *
- * Coins are an ante rather than a bet: everyone pays the room's stake in and
- * the winner takes the pot. The rules' own score is kept alongside it and is
- * what drives XP and the stats page.
+ * **What is not here.** Splits, corners, streets and lines are real bets and
+ * are priced in wheel.js, but they are not on the table yet — they need
+ * edge-of-cell targets to place, and a spot you cannot reliably hit is worse
+ * than one that is honestly absent. Straight numbers, dozens, columns and the
+ * even-money spots are all live. En prison and la partage are variants and
+ * are deliberately not implemented: on this table zero takes the outside bets.
  *
- * Virtual coins only, and the spinner is an abstract arcade device.
+ * Virtual coins only — no purchase, top-up or cash-out, in either direction.
  */
 
 (() => {
@@ -20,34 +24,37 @@
 
     CV.Registry.add({
         code: 'roulette',
-        name: 'Roulette Party',
-        icon: '🎯',
-        blurb: 'Spin. Risk. Survive. Three hearts each and one slot in six that bites.',
-        category: 'party',
-        players: [2, 8],
+        name: '轮盘',
+        icon: '🎡',
+        blurb: 'Cover the layout, then one ball settles the table. Single zero.',
+        category: 'table',
+        players: [1, 6],
         wagers: true,
         Engine: CV.RouletteEngine,
         AI:     CV.RouletteAI,
         View:   CV.RouletteView,
 
-        rules: ['rr.rule1', 'rr.rule2', 'rr.rule3', 'rr.rule4',
-                'rr.rule5', 'rr.rule6', 'rr.rule7'],
+        rules: ['rl.rule1', 'rl.rule2', 'rl.rule3', 'rl.rule4',
+                'rl.rule5', 'rl.rule6', 'rl.rule7'],
 
         extraLabels: {
-            rrGames: 'Games played', rrWins: 'Games won', rrScore: 'Points scored',
-            rrHp: 'Hearts left over', forfeits: 'Walked away',
+            rlSpins: 'Spins played', rlBets: 'Spots covered', rlHits: 'Spots that paid',
+            rlStraight: 'Numbers hit straight', rlZero: 'Zeros seen',
+            forfeits: 'Walked away',
         },
 
         achievements: [
-            { id: 'rr-first', name: 'Last One Standing', icon: '🎯', desc: 'Win your first party.',
-              reward: { coins: 250, xp: 60 }, check: (c) => (c.gameStats.extra.rrWins || 0) >= 1 },
-            { id: 'rr-clean', name: 'Untouched', icon: '💚', desc: 'Win without losing a single heart.',
-              reward: { coins: 900, xp: 180 },
-              check: (c) => c.entry.outcome === 'win' && (c.mine.extra.rrHp || 0) >= 3 },
-            { id: 'rr-score', name: 'High Roller', icon: '⭐', desc: 'Finish a party on 300 points or more.',
-              reward: { coins: 700, xp: 150 }, check: (c) => (c.mine.extra.rrScore || 0) >= 300 },
-            { id: 'rr-wins-25', name: 'Party Animal', icon: '🎉', desc: 'Win 25 parties.',
-              reward: { coins: 1500, xp: 300 }, check: (c) => (c.gameStats.extra.rrWins || 0) >= 25 },
+            { id: 'rl-first', name: 'On the Wheel', icon: '🎡', desc: 'Win your first spin.',
+              reward: { coins: 200, xp: 50 },
+              check: (c) => c.entry.outcome === 'win' && (c.gameStats.extra.rlSpins || 0) >= 1 },
+            { id: 'rl-straight', name: 'Straight Up', icon: '🎯', desc: 'Hit a number straight up.',
+              reward: { coins: 800, xp: 160 }, check: (c) => (c.mine.extra.rlStraight || 0) >= 1 },
+            { id: 'rl-zero', name: 'The House Pocket', icon: '🟢', desc: 'Be at the table when zero comes up.',
+              reward: { coins: 150, xp: 40 }, check: (c) => (c.mine.extra.rlZero || 0) >= 1 },
+            { id: 'rl-spread', name: 'Covering the Cloth', icon: '🪙', desc: 'Cover five spots on one spin.',
+              reward: { coins: 400, xp: 90 }, check: (c) => (c.mine.extra.rlBets || 0) >= 5 },
+            { id: 'rl-wins-25', name: 'Regular', icon: '🏆', desc: 'Win 25 spins.',
+              reward: { coins: 1500, xp: 300 }, check: (c) => (c.gameStats.wins || 0) >= 25 },
         ],
     });
 })();

@@ -1,22 +1,25 @@
 /**
- * CardVerse — Russian Roulette Party.
+ * CardVerse — 轮盘 (Roulette).
  *
- * A party game on an abstract six-slot spinner. Everyone starts on three HP,
- * takes a turn to spin and then pull, and drops out at zero. Last one left
- * wins. Nothing here models a weapon; see `chamber.js`.
+ * Seats cover the layout in turn, then one ball settles every bet at the
+ * table at once. That is the shape of the real game: nobody here is playing
+ * against anybody else, everyone is playing against the wheel, and the same
+ * pocket pays all of them or none of them.
  *
- * The turn is two steps on purpose: **the result is fixed when you spin and
- * hidden until you pull.** That is what makes the re-spin a decision rather
- * than a redraw of something you have already seen — and it is why the engine
- * never looks at the slot until `pull`.
+ * **The number is drawn when the wheel is spun and not one moment before.**
+ * `spin()` takes it from the table's own stream after the last seat has said
+ * it is done, so there is nothing for a view to leak and no way for a bet to
+ * be quietly matched against a number that already exists. Until then
+ * `number` is null, including in every snapshot that goes out.
  *
- * Between rounds one of four things can happen to the seat about to play: a
- * shield, doubled damage, a lucky spin, or the order reversing. They are the
- * events from the rules and they live in one table.
+ * **Stakes come off the moment a chip is placed**, not when the wheel turns,
+ * so a seat can never cover more of the layout than it can afford. Clearing
+ * hands all of it straight back.
  *
- * Coins are an ante: everyone pays in, the winner takes the pot. The score in
- * the rules is kept separately and drives XP and the stats page, because it
- * measures a different thing.
+ * The pockets, the prices, and the rule that zero takes the outside bets all
+ * live in wheel.js. Nothing about the odds is decided here.
+ *
+ * Virtual coins only — no purchase, top-up or cash-out, in either direction.
  */
 
 (() => {
@@ -25,286 +28,253 @@
     const t = (k, p) => window.CV.t(k, p);
 
     const CV = window.CV;
-    const R = CV.Roulette;
-
-    /** Scoring, straight from the rules. */
-    const SCORE = { win: 100, perHp: 10 };
-
-    /** What happens between rounds, and how often anything does. */
-    const EVENT_ODDS = 0.22;
-    const EVENTS = ['shield', 'double', 'lucky', 'reverse'];
+    const W = CV.Wheel;
 
     class RouletteEngine extends CV.GameEngine {
 
-        static get code() { return 'roulette'; }
-        static get publicConfig() { return ['room', 'hp']; }
+        static get publicConfig() { return ['room']; }
 
-        static get defaults() { return { room: 'beginner', hp: 3, finalHp: 2 }; }
+        static get defaults() { return { room: 'beginner' }; }
 
         constructor(opts) {
             super(opts);
             const room = CV.Registry.room(this.config.room);
-            this.ante = room.bet[0];
+            this.minBet = room.bet[0];
+            this.maxBet = room.bet[1];
 
-            this.chamber = new R.Chamber(this.rng);
-            this.dir = 1;              // reversed by an event
-            this.final = false;        // the last two are playing the final
-            this.event = null;         // what happened at the top of this turn
-            this.last = null;          // the slot just opened, for the screen
-            this.winner = -1;
-            this.turns = 0;
+            this.number = null;    // the pocket, once the ball has settled
             this.cached = null;
 
             for (const s of this.seats) {
                 s.startCoins = s.coins;
-                s.net = 0;
-                s.hp = this.config.hp;
-                s.score = 0;
-                s.alive = true;
-                s.shield = false;
-                s.doubled = false;
-                s.lucky = false;
-                s.respins = 1;
-                s.out = s.coins < this.ante;
+                s.net    = 0;
+                s.bets   = [];     // [{ kind, value, amount, won, back }]
+                s.staked = 0;
+                s.payout = 0;
+                s.done   = false;
+                s.out    = s.coins < this.minBet;
             }
         }
 
-        get alive() { return this.seats.filter((s) => s.alive && !s.out); }
+        /** Your chair, which is not the same thing as whose turn it is. */
+        get seat() { return this.seats[this.youSeat] || this.seats[0]; }
 
-        /* ---- the deal ------------------------------------------------------- */
+        /** The seat covering the layout right now. */
+        get better() { return this.seats[this.turn] || null; }
+
+        get colour() { return this.number === null ? null : W.colourOf(this.number); }
+
+        /* ---- phases ------------------------------------------------------- */
 
         start() {
-            const playing = this.seats.filter((s) => !s.out);
-            for (const s of this.seats) if (s.out) s.alive = false;
-            if (playing.length < 2) { this.phase = 'over'; this.over = true; return; }
-
-            // Everyone antes; the pot is what the last one standing takes.
-            this.pot = 0;
-            for (const s of playing) {
-                s.coins -= this.ante;
-                s.net -= this.ante;
-                this.pot += this.ante;
-            }
-
             this.round = 1;
-            this.phase = 'spin';
-            this.turn = this.seats.findIndex((s) => s.alive);
-            this.chamber.load(this.round, this.final);
-            this.emit('start', { hp: this.config.hp, pot: this.pot, slots: this.chamber.left });
-            this.beginTurn();
-        }
-
-        /* ---- a turn ---------------------------------------------------------- */
-
-        beginTurn() {
-            const s = this.seats[this.turn];
-            s.respins = 1;
-            // `last` is not cleared: the table keeps showing what just
-            // happened while the next player is winding up, which is most of
-            // what makes a turn readable.
-            this.event = this.rollEvent(s);
-            this.phase = 'spin';
-            this.emit('turn', {
-                seat: this.turn, round: this.round, event: this.event,
-                slots: this.chamber.left, counts: this.chamber.counts,
-            });
-        }
-
-        /** One of the four events from the rules, or nothing at all. */
-        rollEvent(s) {
-            if (this.turns < this.seats.length) return null;   // not on the opening lap
-            if (!this.rng.chance(EVENT_ODDS)) return null;
-            const kind = this.rng.pick(EVENTS);
-            if (kind === 'shield')  s.shield = true;
-            if (kind === 'double')  s.doubled = true;
-            if (kind === 'lucky')   s.lucky = true;
-            if (kind === 'reverse') this.dir = -this.dir;
-            this.emit('event', { seat: this.turn, kind });
-            return kind;
+            this.phase = 'betting';
+            const first = this.seats.findIndex((s) => !s.out);
+            if (first < 0) { this.over = true; this.phase = 'over'; return; }
+            this.turn = first;
+            this.emit('betting', { seat: this.turn });
         }
 
         legalActions(seat) {
-            if (this.over || seat !== this.turn) return [];
+            if (this.over || seat !== this.turn || this.phase !== 'betting') return [];
             const s = this.seats[seat];
-            if (!s.alive) return [];
-            if (this.phase === 'spin') return [{ type: 'spin', label: t('rr.spin') }];
-            if (this.phase === 'pull') {
-                const out = [{ type: 'pull', label: t('rr.pull') }];
-                if (s.respins > 0) out.push({ type: 'respin', label: t('rr.respin') });
-                return out;
+            if (!s || s.out || s.done) return [];
+
+            const out = [];
+            const max = Math.min(this.maxBet, s.coins);
+            if (max >= this.minBet) {
+                out.push({ type: 'place', min: this.minBet, max, kinds: W.KINDS, label: t('rl.place') });
             }
-            return [];
+            if (s.bets.length) out.push({ type: 'clear', label: t('rl.clear') });
+            // Always available: a seat may sit a spin out, and one that has
+            // run short of the minimum has nothing else left to do.
+            out.push({ type: 'done', label: s.bets.length ? t('rl.spin') : t('rl.pass') });
+            return out;
+        }
+
+        /**
+         * The layout is a combinatorial space — a kind, and for some kinds a
+         * value — so there is no affordance per spot for the base class to
+         * match against, and its generic field-by-field comparison would
+         * refuse every chip. Same pattern as 斗地主 and 麻将:
+         * `legalActions` lists what you may do, and this says whether the
+         * particular bet in hand is one of them.
+         */
+        isLegal(seat, action) {
+            const at = this.legalActions(seat).find((a) => a.type === action.type);
+            if (!at) return false;
+            if (action.type !== 'place') return true;
+            if (!W.valid(action.bet)) return false;
+            const chip = Math.round(action.amount);
+            return chip >= at.min && chip <= at.max;
         }
 
         handle(action) {
-            if (action.type === 'spin')   return this.doSpin(action.seat, false);
-            if (action.type === 'respin') return this.doSpin(action.seat, true);
-            if (action.type === 'pull')   return this.doPull(action.seat);
+            if (action.seat !== undefined && action.seat !== this.turn) return false;
+            if (action.type === 'place') return this.place(action.bet, action.amount);
+            if (action.type === 'clear') return this.clearBets();
+            if (action.type === 'done')  return this.closeSeat();
             return false;
         }
 
+        /* ---- covering the layout ------------------------------------------- */
+
         /**
-         * The device points somewhere and stops. What it points at is decided
-         * now and stays hidden until the pull, which is the whole reason a
-         * re-spin is a choice.
+         * Put one chip on one spot.
+         *
+         * Chips already on that spot are added to rather than listed twice, so
+         * the table shows one pile per spot the way a real layout does.
          */
-        doSpin(seat, again) {
-            const s = this.seats[seat];
-            if (again) {
-                if (s.respins <= 0) return false;
-                s.respins--;
-            }
-            const left = this.chamber.spin(this.round, this.final);
-            this.phase = 'pull';
-            this.emit('spin', { seat, again, slots: left, respins: s.respins });
+        place(bet, amount) {
+            if (this.phase !== 'betting') return false;
+            const s = this.better;
+            if (!s || s.done || !W.valid(bet)) return false;
+
+            const chip = Math.round(amount);
+            if (!(chip >= this.minBet) || chip > Math.min(this.maxBet, s.coins)) return false;
+
+            s.coins  -= chip;
+            s.net    -= chip;
+            s.staked += chip;
+
+            const value = bet.value === undefined ? null : bet.value;
+            const key = W.keyOf(bet);
+            const at = s.bets.find((b) => W.keyOf(b) === key);
+            if (at) at.amount += chip;
+            else s.bets.push({ kind: bet.kind, value, amount: chip, won: false, back: 0 });
+
+            this.emit('placed', { seat: this.turn, kind: bet.kind, value, amount: chip });
             return true;
         }
 
-        doPull(seat) {
-            const slot = this.chamber.pull();
-            if (!slot) return false;
-            const s = this.seats[seat];
-
-            let hp = slot.hp;
-            let points = slot.points;
-            let blocked = false;
-
-            if (hp < 0 && s.doubled) hp *= 2;                 // 双倍伤害
-            if (hp < 0 && s.shield) { hp = 0; blocked = true; } // 护盾
-            if (slot.key === 'SAFE' && s.lucky) points = 50;   // 幸运一转
-
-            s.shield = false;
-            s.doubled = false;
-            s.lucky = false;
-
-            s.hp = Math.max(0, s.hp + hp);
-            s.score += points;
-            this.last = { seat, slot: slot.key, hp, points, blocked };
-            this.turns++;
-            this.emit('pull', Object.assign({ left: this.chamber.left }, this.last));
-
-            if (s.hp === 0) {
-                s.alive = false;
-                this.emit('eliminated', { seat });
-            }
-            return this.advance();
-        }
-
-        /* ---- whose turn, and when it stops ------------------------------------ */
-
-        advance() {
-            const live = this.alive;
-            if (live.length <= 1) {
-                this.winner = live.length ? live[0].index : -1;
-                return this.finishGame();
-            }
-
-            // The last two play the final round on two HP and a meaner device.
-            // "The last two remaining" means the field shrank to two — a game
-            // that only ever had two players is just the ordinary game, and
-            // starting it on the final would be over in half a minute.
-            if (!this.final && live.length === 2 && this.seats.filter((x) => !x.out).length > 2) {
-                this.final = true;
-                for (const s of live) s.hp = this.config.finalHp;
-                this.chamber.load(this.round, true);
-                this.emit('final', { seats: live.map((s) => s.index), hp: this.config.finalHp });
-            }
-
-            const n = this.seats.length;
-            let next = this.turn;
-            for (let k = 0; k < n; k++) {
-                next = (next + this.dir + n) % n;
-                if (this.seats[next].alive) break;
-            }
-            // A full lap of the table is a round.
-            if ((this.dir > 0 && next <= this.turn) || (this.dir < 0 && next >= this.turn)) {
-                this.round++;
-                this.emit('round', { round: this.round });
-            }
-            this.turn = next;
-            this.beginTurn();
+        /** Take it all back. Nothing is risked until the ball drops. */
+        clearBets() {
+            if (this.phase !== 'betting') return false;
+            const s = this.better;
+            if (!s || s.done || !s.bets.length) return false;
+            s.coins += s.staked;
+            s.net   += s.staked;
+            s.staked = 0;
+            s.bets   = [];
+            this.emit('cleared', { seat: this.turn });
             return true;
         }
 
-        finishGame() {
-            // The rules' final score: what you collected, plus the win, plus
-            // what you had left.
+        /** This seat is finished. When the last one is, the wheel turns. */
+        closeSeat() {
+            if (this.phase !== 'betting') return false;
+            const s = this.better;
+            if (!s || s.done) return false;
+            s.done = true;
+            this.emit('ready', { seat: this.turn, bets: s.bets.length });
+
+            const next = this.seats.findIndex((x, i) => i > this.turn && !x.out && !x.done);
+            if (next >= 0) {
+                this.turn = next;
+                this.emit('betting', { seat: this.turn });
+                return true;
+            }
+            this.spin();
+            return true;
+        }
+
+        /* ---- the spin ------------------------------------------------------ */
+
+        /** Every pocket equally likely, drawn only once every seat is done. */
+        spin() {
+            this.phase = 'spinning';
+            this.number = W.spin(this.rng);
+            this.emit('spin', { number: this.number, colour: W.colourOf(this.number) });
+            this.settle();
+        }
+
+        /**
+         * Pay the table.
+         *
+         * A winning bet returns its stake alongside its price, which is why
+         * the multiplier is `PAYS + 1`: the stake came off when the chip was
+         * placed, so paying only the price would quietly keep it.
+         */
+        settle() {
             for (const s of this.seats) {
                 if (s.out) continue;
-                if (s.index === this.winner) s.score += SCORE.win;
-                s.score += s.hp * SCORE.perHp;
-            }
-            if (this.winner >= 0) {
-                this.seats[this.winner].coins += this.pot;
-                this.seats[this.winner].net += this.pot;
+                let paid = 0;
+                for (const b of s.bets) {
+                    b.won  = W.wins(b, this.number);
+                    b.back = b.won ? b.amount * (W.PAYS[b.kind] + 1) : 0;
+                    paid  += b.back;
+                }
+                s.payout = paid;
+                s.coins += paid;
+                s.net   += paid;
             }
             this.phase = 'over';
-            this.emit('winner', { seat: this.winner, pot: this.pot });
+            this.emit('paid', { number: this.number });
             this.finish();
-            return true;
         }
 
-        /* ---- the result -------------------------------------------------------- */
+        isOver() { return this.over; }
+
+        /* ---- result --------------------------------------------------------- */
 
         result() {
             if (this.cached) return this.cached;
-            const rows = this.seats.filter((s) => !s.out).map((s) => ({
-                seat: s.index,
-                name: s.name,
-                coins: s.net,
-                stake: this.ante,
-                score: Math.max(0, Math.min(500, s.score)),
-                ratio: s.index === this.winner ? 1000 : s.score,
-                outcome: s.index === this.winner ? 'win' : 'loss',
-                note: s.index === this.winner
-                    ? t('rr.survived', { n: s.score })
-                    : t('rr.knockedOut', { n: s.score }),
-                hands: [],
-                extra: {
-                    rrGames: 1,
-                    rrWins: s.index === this.winner ? 1 : 0,
-                    rrScore: s.score,
-                    rrHp: s.hp,
-                    rrSpins: 0,
-                    forfeits: 0,
-                },
-            }));
-
-            rows.sort((a, b) => b.ratio - a.ratio);
-            let place = 0, last = null;
-            rows.forEach((r, idx) => { if (r.ratio !== last) { place = idx + 1; last = r.ratio; } r.rank = place; });
-
-            const champ = this.seats[this.winner];
-            this.cached = new CV.GameResult({
-                ranks: rows,
-                detail: champ
-                    ? t('rr.detail', { name: champ.name, n: this.round, s: champ.score })
-                    : t('rr.detailNone'),
+            const n = this.number;
+            const landed = t('rl.landed', {
+                n: n === null ? '?' : n,
+                colour: n === null ? '' : t('rl.' + W.colourOf(n)),
             });
+
+            const played = this.seats.filter((s) => !s.out);
+            const rows = played.map((s) => {
+                const hits = s.bets.filter((b) => b.won).length;
+                return {
+                    seat: s.index,
+                    name: s.name,
+                    coins: s.net,
+                    stake: s.staked,
+                    score: s.payout,
+                    ratio: s.staked ? Math.round((s.net / s.staked) * 1000) / 1000 : 0,
+                    outcome: s.net > 0 ? 'win' : s.net < 0 ? 'loss' : 'draw',
+                    note: s.bets.length ? t('rl.note', { n: s.bets.length, hits }) : t('rl.passed'),
+                    hands: [],
+                    extra: {
+                        rlSpins: 1,
+                        rlBets: s.bets.length,
+                        rlHits: hits,
+                        rlStraight: s.bets.filter((b) => b.won && b.kind === 'straight').length,
+                        rlZero: n === 0 ? 1 : 0,
+                        forfeits: 0,
+                    },
+                };
+            });
+
+            // The wheel sits in the table at a return of zero, the same way the
+            // dealer does elsewhere — otherwise everyone at a losing table is
+            // still ranked against each other for a gold medal.
+            const pot = rows.reduce((a, r) => a + r.coins, 0);
+            rows.push({
+                seat: -1, name: t('rl.house'), house: true,
+                coins: -pot, ratio: 0, score: 0, outcome: 'house',
+                note: landed, extra: {},
+            });
+
+            rows.sort((a, b) => b.ratio - a.ratio || b.coins - a.coins);
+            let place = 0, last = null;
+            rows.forEach((r, i) => { if (r.ratio !== last) { place = i + 1; last = r.ratio; } r.rank = place; });
+
+            this.cached = new CV.GameResult({ ranks: rows, detail: landed });
             return this.cached;
         }
 
-        /* ---- state -------------------------------------------------------------- */
-
         snapshot() {
+            // `number` is null until the ball has settled, so there is nothing
+            // here to read ahead of the spin.
             return Object.assign(super.snapshot(), {
-                chamber: this.chamber.snapshot(),
-                dir: this.dir,
-                final: this.final,
-                event: this.event,
-                last: this.last,
-                winner: this.winner,
-                pot: this.pot,
+                number: this.number,
+                colour: this.colour,
             });
         }
-
-        /**
-         * Nothing is hidden from anyone. Everything about this game — the HP,
-         * the score, what is left in the device — is on the table by design,
-         * and the one thing that is not (which slot the spin is on) is not in
-         * the snapshot at all.
-         */
-        redactSeat(seat) { return seat; }
     }
 
     CV.RouletteEngine = RouletteEngine;

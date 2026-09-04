@@ -157,9 +157,9 @@
 }
 
 @media (max-width: 720px) {
-    .rr { min-height: 0; }
-    .rr-seat { flex: 1 1 44%; max-width: none; }
-    .rr-ring { width: 118px; height: 118px; }
-    .rr-slot { width: 18px; height: 18px; margin: -9px; transform: rotate(var(--a)) translateY(-44px); }
-    .rr-call { font-size: 1.6rem; }
+    .rl { min-height: 0; }
+    .rl-wheel { width: 176px; height: 176px; }
+    .rl-board { max-width: 100%; grid-template-columns: 30px repeat(12, 1fr) 36px; gap: 2px; }
+    .rl-cell { min-height: 26px; padding: 3px 1px; }
+    .rl-cell b { font-size: .62rem; }
 }

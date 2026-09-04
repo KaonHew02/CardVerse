@@ -51,7 +51,7 @@ function load(rel) {
     'js/games/dragongate/engine.js', 'js/games/dragongate/ai.js', 'js/games/dragongate/index.js',
     'js/games/bullbull/hands.js', 'js/games/bullbull/engine.js',
     'js/games/bullbull/ai.js', 'js/games/bullbull/index.js',
-    'js/games/roulette/chamber.js', 'js/games/roulette/engine.js',
+    'js/games/roulette/wheel.js', 'js/games/roulette/engine.js',
     'js/games/roulette/ai.js', 'js/games/roulette/index.js',
     'js/games/dice/dice.js', 'js/games/dice/engine.js',
     'js/games/dice/ai.js', 'js/games/dice/index.js',
@@ -3078,292 +3078,340 @@ auditDice();
 /* ---- Roulette Party ------------------------------------------------------ */
 
 function auditRoulette() {
-    console.log('\n🎯 Roulette Party');
+    console.log('\n\u{1F3A1} \u8f6e\u76d8');
     const game = CV.Registry.get('roulette');
-    const R = CV.Roulette;
+    const W = CV.Wheel;
 
-    /* --- the device --------------------------------------------------------- */
+    /* --- the wheel itself ------------------------------------------------ */
 
+    check(W.POCKETS === 37, `roulette: ${W.POCKETS} pockets \u2014 a single-zero wheel has 37`);
+    check(W.ORDER.length === 37, `roulette: the rim carries ${W.ORDER.length} pockets`);
     {
-        for (const stage of R.STAGES) {
-            check(stage.slots.length === 6, `mj: a stage has ${stage.slots.length} slots, wanted 6`);
-            check(stage.slots.every((k) => R.SLOTS[k]), 'rr: a stage holds a slot that is not a kind');
-        }
-        check(R.FINAL.length === 6, 'rr: the final layout is not six slots');
-        // The rules' own example: four safe, a bonus and a danger.
-        const first = R.layoutFor(1, false);
-        check(first.filter((k) => k === 'SAFE').length === 4, 'rr: the opening layout should hold four safe slots');
-        check(first.filter((k) => k === 'BONUS').length === 1, 'rr: the opening layout should hold one bonus');
-        check(first.filter((k) => k === 'DANGER').length === 1, 'rr: the opening layout should hold one danger');
-        // And the final: half of it dangerous.
-        const fin = R.layoutFor(1, true);
-        check(fin.filter((k) => k === 'DANGER').length === 3 && fin.filter((k) => k === 'SAFE').length === 3,
-            'rr: the final should be three safe and three danger');
-
-        // What each slot does, straight from the rules.
-        check(R.SLOTS.SAFE.hp === 0 && R.SLOTS.SAFE.points === 10, 'rr: SAFE should be +10 and no damage');
-        check(R.SLOTS.BONUS.hp === 0 && R.SLOTS.BONUS.points === 30, 'rr: BONUS should be +30 and no damage');
-        check(R.SLOTS.TRAP.hp === -1 && R.SLOTS.TRAP.points === 0, 'rr: TRAP should cost a heart and no points');
-        check(R.SLOTS.DANGER.hp === -1 && R.SLOTS.DANGER.points === -20, 'rr: DANGER should cost a heart and 20');
-        console.log('  the opening layout is the rules\' own, and the final is half danger');
+        const seen = new Set(W.ORDER);
+        check(seen.size === 37, 'roulette: a pocket appears twice on the rim');
+        for (let n = 0; n <= 36; n++) check(seen.has(n), `roulette: ${n} is missing from the rim`);
+    }
+    {
+        const by = { red: 0, black: 0, green: 0 };
+        for (let n = 0; n <= 36; n++) by[W.colourOf(n)]++;
+        check(by.red === 18 && by.black === 18 && by.green === 1,
+            `roulette: ${by.red} red, ${by.black} black, ${by.green} green \u2014 wanted 18/18/1`);
+        check(W.colourOf(0) === 'green', 'roulette: zero is not the green pocket');
     }
 
-    /* --- slots are used up, and the sixth is a certainty ---------------------- */
+    /* --- the edge is the same on every bet, exactly ---------------------- */
+
+    /**
+     * Each price is the fair inverse of its own chance with one pocket held
+     * back, so a winning bet always brings back 36 units for every 37 the
+     * layout covers. That reduces to one integer identity per bet, which is
+     * checked here rather than by comparing floating-point percentages.
+     */
+    {
+        const kinds = Object.keys(W.PAYS);
+        for (const k of kinds) {
+            const covers = W.COVERS[k];
+            check(covers > 0, `roulette: ${k} covers nothing`);
+            check(covers * (W.PAYS[k] + 1) === 36,
+                `roulette: ${k} covers ${covers} and pays ${W.PAYS[k]} \u2014 `
+                + `returns ${covers * (W.PAYS[k] + 1)}/37, not 36/37`);
+        }
+        const edge = -1 / 37;
+        const worst = Math.max(...kinds.map((k) =>
+            Math.abs(((W.COVERS[k] / 37) * (W.PAYS[k] + 1) - 1) - edge)));
+        check(worst < 1e-12, `roulette: a price drifts from the flat edge by ${worst}`);
+        console.log(`  ${kinds.length} prices \u2014 every one returns exactly `
+            + `${(edge * 100).toFixed(2)}%, single zero`);
+    }
+
+    /* --- every bet against every pocket, re-derived ----------------------- */
+
+    /** The rules as written, worked out here rather than asked of the wheel. */
+    const RED = [1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36];
+    const truth = (bet, n) => {
+        if (bet.kind === 'straight') return n === bet.value;
+        // Zero is the house's pocket and takes every outside bet.
+        if (n === 0) return false;
+        switch (bet.kind) {
+            case 'red':    return RED.indexOf(n) >= 0;
+            case 'black':  return RED.indexOf(n) < 0;
+            case 'odd':    return n % 2 === 1;
+            case 'even':   return n % 2 === 0;
+            case 'low':    return n <= 18;
+            case 'high':   return n >= 19;
+            case 'dozen':  return n > (bet.value - 1) * 12 && n <= bet.value * 12;
+            case 'column': return n % 3 === bet.value % 3;
+            default:       return false;
+        }
+    };
+
+    const everyBet = [];
+    for (let n = 0; n <= 36; n++) everyBet.push({ kind: 'straight', value: n });
+    for (const k of ['red', 'black', 'odd', 'even', 'low', 'high']) everyBet.push({ kind: k });
+    for (const v of [1, 2, 3]) everyBet.push({ kind: 'dozen', value: v });
+    for (const v of [1, 2, 3]) everyBet.push({ kind: 'column', value: v });
 
     {
-        const rng = new CV.RNG(11);
-        for (let trial = 0; trial < 400; trial++) {
-            const c = new R.Chamber(rng);
-            c.load(1, false);
-            check(c.left === 6, 'rr: a fresh device does not hold six');
-            const seen = [];
-            for (let i = 0; i < 6; i++) {
-                check(c.spin(1, false) === 6 - i, 'rr: the spin miscounted what is left');
-                const slot = c.pull();
-                check(!!slot, 'rr: a pull after a spin came back empty');
-                check(c.left === 5 - i, 'rr: a pull did not use the slot up');
-                seen.push(slot.key);
+        let cells = 0;
+        for (const bet of everyBet) {
+            let hits = 0;
+            for (let n = 0; n <= 36; n++) {
+                const got = W.wins(bet, n);
+                check(got === truth(bet, n),
+                    `roulette: ${W.keyOf(bet)} on ${n} said ${got}`);
+                if (got) hits++;
+                cells++;
             }
-            // Six pulls empty it, and they are exactly what was loaded.
-            check(seen.slice().sort().join() === R.layoutFor(1, false).slice().sort().join(),
-                'rr: what came out is not what went in');
-            // A pull without a spin does nothing.
-            check(c.pull() === null, 'rr: a pull without a spin opened something');
+            check(hits === W.COVERS[bet.kind],
+                `roulette: ${W.keyOf(bet)} covers ${hits} pockets, priced for ${W.COVERS[bet.kind]}`);
         }
-        console.log('  ✓ 400 devices emptied — six pulls take exactly the six that were loaded');
+        console.log(`  ${cells.toLocaleString('en-US')} bet/pocket cells checked against the rules as written`);
     }
 
-    /* --- a re-spin is another draw, and the audit says so --------------------- */
+    /* --- zero takes the outside, and that is not an accident -------------- */
 
     {
-        // Over many draws from the same fresh device, the first spin and a
-        // re-spin land on the same distribution. That is the point: it is a
-        // nerve button, not an edge.
-        const rng = new CV.RNG(77);
-        const first = {}, again = {};
-        for (let i = 0; i < 60000; i++) {
-            const c = new R.Chamber(rng);
-            c.load(1, false);
-            c.spin(1, false);
-            const a = c.slots[c.at];
-            first[a] = (first[a] || 0) + 1;
-            c.spin(1, false);
-            const b = c.slots[c.at];
-            again[b] = (again[b] || 0) + 1;
+        const outside = everyBet.filter((b) => b.kind !== 'straight');
+        for (const bet of outside) {
+            check(!W.wins(bet, 0), `roulette: ${W.keyOf(bet)} was paid on zero`);
         }
-        for (const k of Object.keys(first)) {
-            const d = Math.abs(first[k] - (again[k] || 0)) / first[k];
-            check(d < 0.08, `rr: ${k} came up ${(d * 100).toFixed(1)}% differently after a re-spin`);
+        check(W.wins({ kind: 'straight', value: 0 }, 0), 'roulette: zero straight up did not pay on zero');
+        console.log(`  \u2713 zero pays only itself \u2014 all ${outside.length} outside spots lose to it`);
+    }
+
+    /* --- the table pays what the wheel says ------------------------------ */
+
+    {
+        // One seat, one chip on every spot, over a rigged pocket: the payout
+        // has to be the stake back plus the price, on exactly the spots that
+        // cover that pocket and no others.
+        for (const want of [0, 1, 17, 26, 36]) {
+            const e = new game.Engine({
+                rng: new CV.RNG(11),
+                seats: [new CV.Seat(0, { kind: 'human', isYou: true, coins: 1000000 })],
+                config: { room: 'beginner' },
+            });
+            e.start();
+            // Through apply(), which is the path a real table takes: it runs
+            // the legality gate that handle() on its own skips right past.
+            for (const bet of everyBet) {
+                check(e.apply({ type: 'place', seat: 0, bet, amount: 10 }) === true,
+                    `roulette: the table refused a legal chip on ${W.keyOf(bet)}`);
+            }
+            const staked = e.seat.staked;
+            check(staked === everyBet.length * 10,
+                `roulette: staked ${staked} for ${everyBet.length} chips of 10`);
+
+            // Force the pocket, then settle by hand the way the engine does.
+            e.number = want;
+            e.settle();
+
+            let owed = 0;
+            for (const bet of everyBet) if (truth(bet, want)) owed += 10 * (W.PAYS[bet.kind] + 1);
+            check(e.seat.payout === owed,
+                `roulette: pocket ${want} paid ${e.seat.payout}, the layout owed ${owed}`);
+            check(e.seat.coins === e.seat.startCoins - staked + owed,
+                `roulette: coins do not reconcile on pocket ${want}`);
         }
-        console.log('  ✓ a re-spin draws from the same distribution — no edge, by design');
+        console.log('  \u2713 a full layout settles to the pocket, stake returned with the price');
     }
 
-    /* --- the events, one at a time -------------------------------------------- */
+    /* --- a table bets in turn, and one ball settles all of it ------------- */
 
-    const table = (n, seed) => new game.Engine({
-        rng: new CV.RNG(seed === undefined ? 3 : seed), config: { room: 'beginner' },
-        seats: Array.from({ length: n }, (_, i) => new CV.Seat(i, {
-            kind: 'ai', name: 'P' + i, coins: 9000, isYou: i === 0,
-        })),
-    });
-
-    {
-        // A shield turns the next hit into nothing.
-        const e = table(3);
-        e.start();
-        const s = e.seats[e.turn];
-        s.shield = true;
-        const hp = s.hp;
-        e.chamber.slots = ['DANGER'];
-        e.apply({ type: 'spin', seat: s.index });
-        e.apply({ type: 'pull', seat: s.index });
-        check(s.hp === hp, `rr: a shield let a hit through (${hp} → ${s.hp})`);
-        check(e.last.blocked, 'rr: the blocked hit was not reported as blocked');
-        check(!s.shield, 'rr: the shield was not used up');
-    }
-    {
-        // Doubled damage costs two hearts.
-        const e = table(3, 4);
-        e.start();
-        const s = e.seats[e.turn];
-        s.doubled = true;
-        e.chamber.slots = ['DANGER'];
-        e.apply({ type: 'spin', seat: s.index });
-        e.apply({ type: 'pull', seat: s.index });
-        check(s.hp === 1, `rr: doubled damage left ${s.hp} hearts, wanted 1`);
-    }
-    {
-        // A lucky spin turns the next safe slot into fifty.
-        const e = table(3, 5);
-        e.start();
-        const s = e.seats[e.turn];
-        s.lucky = true;
-        e.chamber.slots = ['SAFE'];
-        e.apply({ type: 'spin', seat: s.index });
-        e.apply({ type: 'pull', seat: s.index });
-        check(s.score === 50, `rr: a lucky safe scored ${s.score}, wanted 50`);
-    }
-    {
-        // A shield beats doubled damage — both at once is still nothing.
-        const e = table(3, 6);
-        e.start();
-        const s = e.seats[e.turn];
-        s.shield = true;
-        s.doubled = true;
-        const hp = s.hp;
-        e.chamber.slots = ['DANGER'];
-        e.apply({ type: 'spin', seat: s.index });
-        e.apply({ type: 'pull', seat: s.index });
-        check(s.hp === hp, 'rr: a shield should hold against doubled damage');
-    }
-    {
-        // Reverse turns the order around.
-        const e = table(4, 7);
-        e.start();
-        const before = e.turn;
-        e.dir = -1;
-        e.chamber.slots = ['SAFE'];
-        e.apply({ type: 'spin', seat: before });
-        e.apply({ type: 'pull', seat: before });
-        check(e.turn === (before - 1 + 4) % 4, `rr: reversed play went to ${e.turn}, not ${(before - 1 + 4) % 4}`);
-    }
-    console.log('  ✓ shield, double, lucky and reverse each do what the rules say');
-
-    /* --- the final round -------------------------------------------------------- */
+    /**
+     * Seeds for the loop below, scattered rather than counted.
+     *
+     * One roulette round is one engine taking exactly one number, so a loop
+     * over `seed = base + g` would be measuring mulberry32's *first* output
+     * across neighbouring seeds rather than the wheel. That first draw does
+     * carry mild structure \u2014 chi-square around 48 against an expected 36
+     * over 200k sequential seeds, where the same test on a single stream, or
+     * on the `Date.now() ^ Math.random()` seeding a real table actually uses,
+     * sits at 32 to 35. The game is unaffected; the harness would not be.
+     */
+    const scatter = (g) => (Math.imul(g + 1, 2654435761) ^ 0x9e3779b9) >>> 0;
 
     {
-        const e = table(4, 9);
-        e.start();
-        // Knock two out by hand and let the engine notice.
-        e.seats[2].hp = 1; e.seats[3].hp = 1;
-        let guard = 0;
-        while (e.alive.length > 2 && !e.isOver() && guard++ < 200) {
-            const s = e.seats[e.turn];
-            e.chamber.slots = [(s.index === 2 || s.index === 3) ? 'DANGER' : 'SAFE'];
-            e.apply({ type: 'spin', seat: e.turn });
-            e.apply({ type: 'pull', seat: e.turn });
+        let rounds = 0, spins = 0, staked = 0, net = 0;
+        const seen = new Set();
+        for (let g = 0; g < 400; g++) {
+            const seats = [new CV.Seat(0, { kind: 'human', isYou: true, coins: 20000 })];
+            for (let i = 1; i < 4; i++) seats.push(new CV.Seat(i, { kind: 'ai', name: 'S' + i, coins: 20000 }));
+            const e = new game.Engine({ rng: new CV.RNG(scatter(g)), seats, config: { room: 'beginner' } });
+            const ai = new CV.RouletteAI(e);
+            e.start();
+
+            let guard = 0;
+            while (!e.isOver() && guard++ < 200) {
+                const turn = e.turn;
+                // Nobody may touch the layout out of turn.
+                for (let i = 0; i < 4; i++) {
+                    if (i === turn) continue;
+                    check(e.legalActions(i).length === 0,
+                        `roulette: seat ${i} could bet on seat ${turn}'s turn`);
+                }
+                // And nothing may read the pocket before the ball is sent.
+                check(e.number === null, 'roulette: the pocket existed before the spin');
+                const move = ai.decide(turn);
+                check(!!move, `roulette: seat ${turn} had nothing to play`);
+                check(e.apply(move) === true,
+                    `roulette: the table refused its own AI's ${move.type}`);
+            }
+
+            check(e.isOver(), 'roulette: a four-seat spin never finished');
+            check(e.number !== null && e.number >= 0 && e.number <= 36,
+                `roulette: the ball settled on ${e.number}`);
+            seen.add(e.number);
+            spins++;
+
+            // Everyone settled against the same pocket, and the wheel holds
+            // the other side of whatever the table won or lost.
+            const rows = e.result().ranks;
+            const house = rows.find((r) => r.house);
+            const players = rows.filter((r) => !r.house);
+            check(players.length === 4, `roulette: ${players.length} seats in a four-seat recap`);
+            check(house && house.coins === -players.reduce((a, r) => a + r.coins, 0),
+                'roulette: the wheel does not hold the other side of the table');
+
+            for (const s of e.seats) {
+                staked += s.staked;
+                net += s.net;
+                for (const b of s.bets) {
+                    check(b.won === W.wins(b, e.number),
+                        `roulette: ${W.keyOf(b)} was settled against a different pocket`);
+                }
+            }
+            rounds++;
         }
-        check(e.final, 'rr: two left and the final never started');
-        for (const s of e.alive) check(s.hp === e.config.finalHp, `rr: a finalist has ${s.hp} hearts, wanted 2`);
-        const layout = e.chamber.layout;
-        check(layout.filter((k) => k === 'DANGER').length === 3, 'rr: the final device is not half danger');
-        console.log('  ✓ the last two go to 2 ❤️ on a device that is half danger');
+        check(seen.size > 30, `roulette: only ${seen.size} different pockets in ${spins} spins`);
+        const edge = (net / staked) * 100;
+        console.log(`  ${rounds} four-seat spins \u2014 ${seen.size} of the 37 pockets came up`);
+        console.log(`  \u2713 seats bet in turn and one ball settles them all, and the recap balances`);
+        // A wide band, on purpose. Most of these chips are on single numbers
+        // at 35 to 1, where a single hit moves the figure by whole percent.
+        // The exact statement about the edge is the price identity above;
+        // this is only here to catch a payout that is wildly wrong.
+        console.log(`  return on stake: ${edge.toFixed(2)}% (\u22122.70% expected, wide at this sample)`);
+        check(Math.abs(edge + 2.70) < 8,
+            `roulette: the table returned ${edge.toFixed(2)}%, nowhere near \u22122.70%`);
     }
 
-    // But a table that only ever had two is the ordinary game, not the final.
+    /* --- and it converges where the variance is small --------------------- */
+
+    /**
+     * Flat red, 120k spins. An even-money bet has a standard deviation of
+     * about 1 a unit, so the standard error here is near 0.29% and the true
+     * \u22122.70% sits comfortably inside a percent. This is the empirical
+     * counterpart to the price identity above \u2014 the same number, measured
+     * rather than derived.
+     */
     {
-        const e = table(2, 10);
-        e.start();
-        check(!e.final, 'rr: a two-player table started on the final');
-        check(e.seats.every((s) => s.hp === e.config.hp), 'rr: a two-player table did not start on three hearts');
+        const N = 120000;
+        let net = 0;
+        const rng = new CV.RNG(31337);
+        for (let i = 0; i < N; i++) net += W.wins({ kind: 'red' }, W.spin(rng)) ? 1 : -1;
+        const edge = (net / N) * 100;
+        const se = (1 / Math.sqrt(N)) * 100;
+        console.log(`  flat red over ${N.toLocaleString('en-US')} spins: ${edge.toFixed(3)}% `
+            + `(\u22122.70% \u00b1 ${(2 * se).toFixed(2)})`);
+        check(Math.abs(edge + 2.7027) < 3 * se,
+            `roulette: flat red returned ${edge.toFixed(3)}%, over 3 SE off \u22122.70%`);
     }
 
-    /* --- whole games ------------------------------------------------------------ */
+    /* --- the pockets come up evenly -------------------------------------- */
 
-    const master = new CV.RNG(2211);
-    const ROUNDS = Math.max(120, Math.round(HANDS / 12));
-    const t0 = Date.now();
-    let pulls = 0, rounds = 0, shields = 0, finals = 0;
-    const winScores = [];
+    /**
+     * A wheel that favours a pocket is not a wheel, and no amount of correct
+     * pricing would save it. 200k spins off one stream, chi-square against a
+     * flat 37: 36 is the expected value and 68 is the 0.1% tail.
+     */
+    {
+        const N = 200000;
+        const counts = new Array(37).fill(0);
+        const rng = new CV.RNG(20260904);
+        for (let i = 0; i < N; i++) counts[W.spin(rng)]++;
+        const exp = N / 37;
+        const chi = counts.reduce((a, c) => a + ((c - exp) * (c - exp)) / exp, 0);
+        check(chi < 68, `roulette: pockets came up unevenly \u2014 chi-square ${chi.toFixed(1)} over ${N} spins`);
+        const lo = Math.min.apply(null, counts), hi = Math.max.apply(null, counts);
+        console.log(`  ${N.toLocaleString('en-US')} spins \u2014 chi-square ${chi.toFixed(1)} on 36 df `
+            + `(${lo}\u2013${hi} a pocket, ${exp.toFixed(0)} expected)`);
+    }
 
-    for (let g = 0; g < ROUNDS; g++) {
-        const n = master.range(2, 8);
-        const room = CV.Registry.ROOMS[master.int(4)].id;
+    /* --- the gate refuses what it should -------------------------------- */
+
+    /**
+     * `legalActions` is the single source of legality and `apply` is the only
+     * way in, so the two have to agree. This is the check that would have
+     * caught the affordance carrying a field no action could ever match —
+     * which silently refused every chip while `handle()` on its own took them
+     * all quite happily.
+     */
+    {
         const e = new game.Engine({
-            rng: new CV.RNG(master.int(1e9)), config: { room },
-            seats: Array.from({ length: n }, (_, i) => new CV.Seat(i, {
-                kind: 'ai', name: 'P' + i, coins: master.range(500, 40000), isYou: i === 0,
-            })),
+            rng: new CV.RNG(4242),
+            seats: [new CV.Seat(0, { kind: 'human', isYou: true, coins: 5000 }),
+                    new CV.Seat(1, { kind: 'ai', name: 'A', coins: 5000 })],
+            config: { room: 'beginner' },
         });
-        const ai = new game.AI(e);
         e.start();
+        const lo = e.legalActions(0).find((a) => a.type === 'place').min;
+        const hi = e.legalActions(0).find((a) => a.type === 'place').max;
 
-        check(e.seats.every((s) => s.out || s.hp === 3), 'rr: somebody did not start on three hearts');
+        check(e.apply({ type: 'place', seat: 0, bet: { kind: 'red' }, amount: lo }) === true,
+            'roulette: a plain even-money chip was refused');
+        check(e.apply({ type: 'place', seat: 0, bet: { kind: 'straight', value: 17 }, amount: lo }) === true,
+            'roulette: a straight-up chip was refused');
+        check(e.apply({ type: 'place', seat: 0, bet: { kind: 'dozen', value: 2 }, amount: lo }) === true,
+            'roulette: a dozen was refused');
 
-        let steps = 0;
-        while (!e.isOver()) {
-            const seat = e.turn;
-            const before = e.seats[seat].hp;
-            const action = ai.decide(seat);
-            check(!!action, 'rr: the AI had nothing to do');
-            if (!action) break;
-            check(e.apply(action), `rr: engine refused ${action.type} in ${e.phase}`);
-            // A turn never costs more than two hearts, and never adds any.
-            const after = e.seats[seat].hp;
-            check(after <= before && before - after <= 2, `rr: a pull moved ${before} hearts to ${after}`);
-            if (++steps > 3000) { check(false, 'rr: a game ran past 3000 actions'); break; }
-        }
+        // And what it must not take.
+        check(e.apply({ type: 'place', seat: 0, bet: { kind: 'straight', value: 37 }, amount: lo }) === false,
+            'roulette: took a bet on a pocket that does not exist');
+        check(e.apply({ type: 'place', seat: 0, bet: { kind: 'dozen', value: 4 }, amount: lo }) === false,
+            'roulette: took a fourth dozen');
+        check(e.apply({ type: 'place', seat: 0, bet: { kind: 'basket' }, amount: lo }) === false,
+            'roulette: took a bet the table does not offer');
+        check(e.apply({ type: 'place', seat: 0, bet: { kind: 'red' }, amount: lo - 1 }) === false,
+            'roulette: took a chip under the table minimum');
+        check(e.apply({ type: 'place', seat: 0, bet: { kind: 'red' }, amount: hi + 1 }) === false,
+            'roulette: took a chip over the table maximum');
+        check(e.apply({ type: 'place', seat: 1, bet: { kind: 'red' }, amount: lo }) === false,
+            'roulette: took a chip from a seat whose turn it was not');
 
-        // Somebody is left, and everybody else is at zero.
-        check(e.winner >= 0, 'rr: nobody was left standing');
-        check(e.alive.length === 1, `rr: ${e.alive.length} players survived`);
-        for (const s of e.seats) {
-            if (s.out || s.index === e.winner) continue;
-            check(s.hp === 0, 'rr: a knocked-out player still has hearts');
-        }
-        check(e.seats[e.winner].hp >= 1, 'rr: the winner has no hearts left');
-
-        // The pot is the ante and it all goes one way.
-        const playing = e.seats.filter((s) => !s.out);
-        check(e.pot === playing.length * e.ante, 'rr: the pot is not what was paid in');
-        check(e.seats.reduce((t, s) => t + s.net, 0) === 0, 'rr: the table is not zero-sum');
-        for (const s of e.seats) {
-            check(s.coins >= 0, 'rr: a seat was taken below zero');
-            check(s.coins === s.startCoins + s.net, 'rr: coins do not reconcile');
-        }
-        check(e.seats[e.winner].net === e.pot - e.ante, 'rr: the winner did not take the pot');
-
-        // The win bonus and the survival bonus, both from the rules — checked
-        // against what was actually scored during play rather than against a
-        // floor, because a winner who took two hits can finish below one.
-        const r = e.result();
-        check(r.forSeat(e.winner).rank === 1, 'rr: the winner did not come first');
-        const earned = (i) => e.events
-            .filter((x) => x.type === 'pull' && x.seat === i)
-            .reduce((n, x) => n + x.points, 0);
-        check(e.seats[e.winner].score === earned(e.winner) + 100 + e.seats[e.winner].hp * 10,
-            'rr: the winner did not get exactly the win and survival bonuses');
-        for (const s of e.seats) {
-            if (s.out || s.index === e.winner) continue;
-            check(s.score === earned(s.index),
-                'rr: a knocked-out player was given a bonus they did not earn');
-        }
-
-        pulls += e.turns;
-        rounds += e.round;
-        if (e.final) finals++;
-        shields += e.events.filter((x) => x.type === 'event' && x.kind === 'shield').length;
-        winScores.push(e.seats[e.winner].score);
+        const staked = e.seats[0].staked;
+        check(staked === lo * 3, `roulette: ${staked} staked after three good chips and six bad`);
+        console.log('  \u2713 apply() takes the three good chips and refuses all six bad ones');
     }
 
-    const avg = (a) => a.reduce((n, x) => n + x, 0) / a.length;
-    console.log(`  ${ROUNDS} games, ${Date.now() - t0} ms — ${(pulls / ROUNDS).toFixed(0)} pulls and `
-        + `${(rounds / ROUNDS).toFixed(1)} rounds a game, ${finals} reached the final`);
-    console.log(`  winning score averages ${avg(winScores).toFixed(0)} · ${shields} shields handed out`);
-    // The rules ask for a short match; a pull is a few seconds.
-    check(pulls / ROUNDS < 110, `rr: ${(pulls / ROUNDS).toFixed(0)} pulls a game is longer than the rules ask for`);
-
-    /* --- what a host may broadcast ----------------------------------------------- */
+    /* --- nothing about the pocket goes out early ------------------------- */
 
     {
-        const e = table(4, 12);
+        const e = new game.Engine({
+            rng: new CV.RNG(77),
+            seats: [new CV.Seat(0, { kind: 'human', isYou: true, coins: 5000 }),
+                    new CV.Seat(1, { kind: 'ai', name: 'A', coins: 5000 })],
+            config: { room: 'beginner' },
+        });
         e.start();
-        e.apply({ type: 'spin', seat: e.turn });
-        for (let viewer = 0; viewer < 4; viewer++) {
-            const view = e.snapshotFor(viewer);
-            const wire = JSON.stringify(view);
-            check(!view.rng, 'rr: the snapshot carries the RNG');
-            // The one hidden thing in this game is which slot the spin is on,
-            // and it is not in the snapshot at all.
-            check(!/"at"\s*:/.test(wire), 'rr: the slot the spin landed on went out on the wire');
-            check(!/"slots"\s*:\s*\[/.test(wire), 'rr: the loaded slots went out in order');
-            check(typeof view.chamber.left === 'number', 'rr: the count of what is left should be public');
-        }
+        e.handle({ type: 'place', seat: 0, bet: { kind: 'red' }, amount: 10 });
+        const snap = JSON.stringify(e.snapshotFor(0));
+        check(snap.indexOf('"number":null') >= 0, 'roulette: the pocket was on the wire before the spin');
+        check(snap.indexOf('seed') < 0, 'roulette: the seed went out with the snapshot');
+        console.log('  \u2713 no pocket and no seed on the wire before the ball drops');
     }
-    console.log('  ✓ what is left is public, and the slot under the pointer is not on the wire');
 
-    for (const key of game.rules) check(CV.t(key) !== key, `rr: rule key ${key} has no text`);
-    console.log('  ✓ rules card resolves');
+    /* --- the words all resolve ------------------------------------------- */
+
+    for (const key of game.rules) {
+        check(CV.t(key) !== key, `roulette: rules line ${key} does not resolve`);
+    }
+    for (const key of ['rl.red', 'rl.black', 'rl.green', 'rl.house', 'rl.landed',
+                       'rl.spin', 'rl.pass', 'rl.clear', 'rl.passed',
+                       'rl.dozen1', 'rl.dozen2', 'rl.dozen3']) {
+        check(CV.t(key) !== key, `roulette: ${key} does not resolve`);
+    }
+    console.log('  \u2713 rules card and layout labels all resolve');
 }
 auditRoulette();
 
