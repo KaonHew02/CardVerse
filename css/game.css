@@ -458,3 +458,58 @@
 .pk-raise { display: flex; flex-direction: column; align-items: center; gap: 6px; width: min(420px, 100%); }
 .pk-raise input[type="range"] { width: 100%; }
 .pk-raise .chips { margin: 0; gap: 6px; }
+
+/* ---- 麻将 --------------------------------------------------------------- */
+
+/* Tiles are drawn, not sprited: an ivory face with a lip, a number and a
+ * suit mark. One CSS rule per skin, and the folder stays copyable. */
+.tile {
+    display: inline-flex; flex-direction: column; align-items: center; justify-content: center;
+    width: 34px; height: 46px; border-radius: 5px; flex: none; user-select: none;
+    background: linear-gradient(#fffdf3, #ece5d2); color: #1b2430;
+    box-shadow: inset 0 -3px 0 rgba(0,0,0,.14), 0 2px 4px rgba(0,0,0,.45);
+    font-weight: 800; line-height: 1; position: relative;
+}
+.tile b { font-size: 1.05rem; }
+.tile i { font-style: normal; font-size: .62rem; opacity: .75; margin-top: 1px; }
+.tile-m { color: #1b2430; }
+.tile-s { color: #1d7a45; }
+.tile-p { color: #1d4f9c; }
+.tile-z b { font-size: 1.15rem; }
+.tile-z.z5 { color: #c62828; }
+.tile-z.z6 { color: #1d7a45; }
+.tile-z.z7 { color: #2b4a72; }
+/* A face-down tile has to read as a tile on green felt, so it carries an
+ * edge of its own — without one, a concealed kong looks like two tiles. */
+.tile-back {
+    background: linear-gradient(150deg, #3f9d74, #24634a);
+    box-shadow: inset 0 -3px 0 rgba(0,0,0,.32), 0 0 0 1px rgba(255,255,255,.22), 0 2px 4px rgba(0,0,0,.45);
+}
+.tile-sm { width: 24px; height: 32px; border-radius: 4px; }
+.tile-sm b { font-size: .8rem; }
+.tile-sm i { font-size: .5rem; }
+/* The tile just thrown, because a claim has to be decided on it. */
+.tile.is-last { box-shadow: 0 0 0 2px var(--accent), 0 3px 8px rgba(0,0,0,.5); }
+
+.mj { display: flex; flex-direction: column; gap: 10px; min-height: 60vh; }
+.mj-seats { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; align-items: flex-start; }
+.mj-seat { flex: 1 1 230px; max-width: 320px; }
+.mj-hand-row { display: flex; gap: 1px; flex-wrap: wrap; margin: 4px 0; }
+.mj-melds { display: flex; gap: 8px; flex-wrap: wrap; min-height: 32px; }
+.mj-meld { display: inline-flex; gap: 1px; }
+.mj-discards { display: flex; gap: 2px; flex-wrap: wrap; margin-top: 6px;
+    padding-top: 6px; border-top: 1px solid rgba(255,255,255,.12); min-height: 38px; }
+.mj-count { margin-left: auto; background: rgba(0,0,0,.35); color: #fff; }
+.mj-wind { background: rgba(255,255,255,.16); color: #fff; font-size: .95rem; }
+.mj-wind.is-dealer { background: var(--accent); color: var(--accent-ink); }
+
+.mj-centre { display: flex; align-items: center; justify-content: center; gap: 14px; }
+.mj-mode { color: rgba(255,255,255,.65); font-size: .85rem; }
+
+.mj-you { display: flex; flex-direction: column; align-items: center; gap: 8px; margin-top: auto; }
+.mj-you .mj-melds { justify-content: center; }
+.mj-mine { display: flex; gap: 2px; flex-wrap: wrap; justify-content: center; }
+.mj-pick { background: none; border: 0; padding: 0; line-height: 0; cursor: pointer; transition: transform 120ms; }
+.mj-pick:not(:disabled):hover { transform: translateY(-6px); }
+.mj-pick:disabled { cursor: default; }
+.mj-pick:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }

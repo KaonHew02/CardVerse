@@ -21,7 +21,6 @@
         // 百家乐 took its place in the lineup. Its engine still loads, because
         // 21 is built on it.
         R.stub('bullbull',   '斗牛',   '🐮', 'Bull Bull. Three to ten, two to score.', [2, 6]);
-        R.stub('mahjong',    'Mahjong', '🀄', 'Hong Kong style. Four sets and a pair.', [4, 4]);
     }
 
     function wireGlobal() {

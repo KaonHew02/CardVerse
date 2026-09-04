@@ -126,3 +126,19 @@
     .bj-actions .pk-raise { gap: 4px; }
     .pk-raise .chips .chip { width: 42px; height: 42px; font-size: .68rem; }
 }
+
+@media (max-width: 720px) {
+    /* Tiles shrink rather than wrapping into an unreadable block. */
+    .mj { min-height: 0; }
+    .mj-seat { flex: 1 1 100%; max-width: none; }
+    /* Three stacked seats leave no room for your own tiles, and a row of
+     * thirteen backs says nothing the count in the header does not. */
+    .mj-seat .mj-hand-row { display: none; }
+    .mj-seat .mj-melds { min-height: 0; }
+    .mj-seat .mj-discards { min-height: 28px; }
+    .tile { width: 28px; height: 38px; }
+    .tile b { font-size: .9rem; }
+    .tile-sm { width: 19px; height: 26px; }
+    .tile-sm b { font-size: .66rem; }
+    .tile-sm i { display: none; }
+}

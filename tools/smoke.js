@@ -49,6 +49,9 @@ function load(rel) {
     'js/games/baccarat/engine.js', 'js/games/baccarat/ai.js', 'js/games/baccarat/index.js',
     'js/games/slots/engine.js', 'js/games/slots/index.js',
     'js/games/dragongate/engine.js', 'js/games/dragongate/index.js',
+    'js/games/mahjong/tiles.js', 'js/games/mahjong/win.js', 'js/games/mahjong/fan.js',
+    'js/games/mahjong/pay.js', 'js/games/mahjong/engine.js',
+    'js/games/mahjong/ai.js', 'js/games/mahjong/index.js',
     'js/games/poker/hands.js', 'js/games/poker/engine.js',
     'js/games/poker/ai.js', 'js/games/poker/index.js',
     'js/games/bigtwo/combos.js', 'js/games/bigtwo/engine.js',
@@ -212,7 +215,7 @@ console.log(`CardVerse smoke — ${HANDS} hands per game\n`);
  * playing each other for points rather than a table paying out. Each has its
  * own audit further down.
  */
-const OWN_AUDIT = new Set(['slots', 'dragongate', 'doudizhu', 'bigtwo', 'poker']);
+const OWN_AUDIT = new Set(['slots', 'dragongate', 'doudizhu', 'bigtwo', 'poker', 'mahjong']);
 
 for (const game of CV.Registry.playable()) {
     if (!game.AI || OWN_AUDIT.has(game.code)) continue;
@@ -1630,6 +1633,323 @@ function auditPoker() {
     console.log('  ✓ rules card and every hand name resolve');
 }
 auditPoker();
+
+/* ---- 麻将 ---------------------------------------------------------------- */
+
+let mjUid = 0;
+/** Standard notation: "123m456m789s555p99p", "1234567z". */
+function mjTiles(str) {
+    const out = [];
+    let buf = '';
+    for (const ch of str.replace(/\s+/g, '')) {
+        if ('mspz'.includes(ch)) {
+            for (const d of buf) out.push({ suit: ch, n: Number(d), id: 't' + (mjUid++) });
+            buf = '';
+        } else buf += ch;
+    }
+    return out;
+}
+
+/** Read a hand, then price it. Both halves, end to end. */
+function mjFanOf(str, opts = {}) {
+    const MJ = CV.MJ;
+    const tiles = mjTiles(str);
+    const shape = CV.MJWin.isWin(MJ.counts(tiles), 0);
+    if (!shape) return null;
+    return CV.MJFan.calculateFan({
+        shape: shape.shape,
+        melds: shape.melds || [],
+        pair: shape.pair,
+        keys: tiles.map(MJ.key),
+        selfDraw: !!opts.selfDraw,
+        menzen: !!opts.menzen,
+        quad: !!shape.quad,
+    });
+}
+
+function auditMahjong() {
+    console.log('\n🀄 麻将');
+    const game = CV.Registry.get('mahjong');
+    const MJ = CV.MJ;
+    const W = CV.MJWin;
+
+    /* --- the two tile sets ------------------------------------------------- */
+
+    for (const [players, total] of [[4, 136], [3, 108]]) {
+        const set = MJ.build(players);
+        check(set.length === total, `mj: ${players}-player set has ${set.length} tiles, wanted ${total}`);
+        check(new Set(set.map((x) => x.id)).size === total, 'mj: the set holds a duplicate id');
+        const cnt = MJ.counts(set);
+        for (const [, n] of cnt) check(n === 4, 'mj: a tile does not appear exactly four times');
+        // No flowers, no seasons — honours stop at seven.
+        check([...cnt.keys()].every((k) => k[0] !== 'z' || Number(k.slice(1)) <= 7),
+            'mj: something beyond the seven honours got into the set');
+        const winds = ['z1', 'z2', 'z3', 'z4'].reduce((n, k) => n + (cnt.get(k) || 0), 0);
+        const dragons = ['z5', 'z6', 'z7'].reduce((n, k) => n + (cnt.get(k) || 0), 0);
+        check(winds === 16 && dragons === 12, `mj: ${winds} winds and ${dragons} dragons`);
+        const chars = [...cnt.keys()].filter((k) => k[0] === 'm');
+        check(chars.length === (players === 3 ? 2 : 9),
+            `mj: ${players}-player set has ${chars.length} kinds of character`);
+        if (players === 3) {
+            check(chars.sort().join() === 'm1,m9', 'mj: the three-player set must keep only 1 and 9 characters');
+        }
+    }
+    console.log('  136 tiles for four seats, 108 for three, four of each and no flowers');
+
+    /* --- what wins --------------------------------------------------------- */
+
+    const wins = (str) => !!W.isWin(MJ.counts(mjTiles(str)), 0);
+    const SHAPES = [
+        ['123m456m789s555p99p', true,  'four melds and a pair'],
+        ['123456789m123s99p',   true,  'chows across suits'],
+        ['1122m3344s5566p11z',  true,  '七对子'],
+        ['1111m2233s4455p66z',  true,  '七对子 with a four of a kind'],
+        ['119m19s19p1234567z',  true,  '十三幺'],
+        ['123m456m789s555p9p',  false, 'thirteen tiles is not a win'],
+        ['123m456m789s555p999p', false, 'fifteen tiles is not a win'],
+        ['123z456m789m111s22p', false, 'honours cannot make a chow'],
+        ['789m123s456p111z22z', true,  'a wind pung is fine'],
+        ['891m123s456p111z22z', false, 'a run cannot wrap past nine'],
+        ['123m456m789s557p88p', false, 'two pairs and a floater is not a win'],
+        ['1122m3344s5566p1z2z', false, 'six pairs and two singles is not 七对子'],
+        ['19m19s19p1234567z1m', true,  '十三幺 with the duplicate written last'],
+        ['119m19s19p123456z7z', true,  '十三幺 again'],
+        ['1199m19s19p123456z',  false, 'two duplicates is not 十三幺'],
+    ];
+    for (const [str, want, why] of SHAPES) {
+        check(wins(str) === want, `mj: "${str}" (${why}) read as ${wins(str)}, wanted ${want}`);
+    }
+    console.log(`  ${SHAPES.length} hands read, the losing shapes included`);
+
+    // A chow needs one suit and consecutive numbers, and honours never chow.
+    check(!wins('147m147s147p11z222z'), 'mj: tiles three apart are not a chow');
+    check(wins('111z222z333z444z55z'), 'mj: four wind pungs and a pair is a win');
+
+    // The wall running dry ends the hand with nobody home.
+    {
+        const e = new game.Engine({
+            rng: new CV.RNG(3), config: { room: 'beginner' },
+            seats: [0, 1, 2, 3].map((i) => new CV.Seat(i, { kind: 'ai', name: 'S' + i, coins: 1000 })),
+        });
+        e.start();
+        e.wall.length = 0;
+        e.apply({ type: 'discard', seat: e.turn, tile: e.seats[e.turn].hand[0].id });
+        check(e.isOver() && e.drawn, 'mj: an empty wall did not end the hand');
+        check(e.winner < 0, 'mj: 流局 produced a winner');
+        check(e.seats.every((x) => x.net === 0), 'mj: 流局 moved coins');
+        check(e.shoeState.dealer === e.dealer, 'mj: the dealer should keep the seat through a 流局');
+    }
+
+    /* --- 番, and nothing counted twice ------------------------------------- */
+
+    const names = (r) => r.patterns.map((p) => p.name).sort().join(',');
+    const FAN = [
+        ['123m456m789s555p99p', '平胡',            1],
+        ['111m555s777p999m22z', '碰碰胡',          2],
+        ['123m456m777m999m11z', '混一色',          3],
+        ['123m456m789m555m88m', '清一色',          6],
+        ['111m333m555m777m99m', '清碰',            8],
+        ['1122m3344s5566p11z',  '七对子',          4],
+        ['1111m2233s4455p66z',  '豪华七对子',      8],
+        ['11223344556677m',     '清七对',          8],
+        ['555z666z111z222z33z', '字一色',          8],
+        ['123m456s555z666z77z', '小三元',          4],
+        ['119m19s19p1234567z',  '十三幺',         16],
+    ];
+    for (const [str, want, fan] of FAN) {
+        const r = mjFanOf(str);
+        check(!!r, `mj: "${str}" is not a winning hand`);
+        if (!r) continue;
+        const has = r.patterns.find((p) => p.name === want);
+        check(!!has, `mj: "${str}" should contain ${want}, got ${names(r)}`);
+        if (has) check(has.fan === fan, `mj: ${want} paid ${has.fan}番, wanted ${fan}`);
+    }
+
+    // The overlap rules, one by one, exactly as the rules set them out.
+    const OVERLAP = [
+        ['111m333m555m777m99m', ['清碰'],       ['清一色', '碰碰胡', '平胡']],
+        ['11223344556677m',     ['清七对'],     ['清一色', '七对子', '豪华七对子', '平胡']],
+        ['1111m2233s4455p66z',  ['豪华七对子'], ['七对子', '平胡']],
+        ['123m555z666z777z11m', ['大三元'],     ['小三元']],
+        ['123m111z222z333z44z', ['小四喜'],     ['大四喜']],
+        ['111z222z333z444z55m', ['大四喜'],     ['小四喜']],
+        ['555z666z111z222z33z', ['字一色'],     ['混一色', '碰碰胡', '平胡']],
+    ];
+    for (const [str, must, mustNot] of OVERLAP) {
+        const r = mjFanOf(str);
+        check(!!r, `mj: "${str}" is not a winning hand`);
+        if (!r) continue;
+        for (const name of must) {
+            check(r.patterns.some((p) => p.name === name),
+                `mj: "${str}" should be ${name}, got ${names(r)}`);
+        }
+        for (const name of mustNot) {
+            check(!r.patterns.some((p) => p.name === name),
+                `mj: "${str}" counted ${name} as well — got ${names(r)}`);
+        }
+    }
+    console.log(`  ${FAN.length} patterns priced and ${OVERLAP.length} overlaps resolved — nothing counted twice`);
+
+    // The bonuses stack on whatever the hand was.
+    {
+        const plain = mjFanOf('123m456m789s555p99p');
+        const both  = mjFanOf('123m456m789s555p99p', { selfDraw: true, menzen: true });
+        check(plain.totalFan === 1, `mj: a plain hand is ${plain.totalFan}番, wanted 1`);
+        check(both.totalFan === 3, `mj: 平胡 with 自摸 and 门清 is ${both.totalFan}番, wanted 3`);
+    }
+    // 四杠子 needs four kongs, which no fourteen concealed tiles can show.
+    {
+        const r = CV.MJFan.calculateFan({
+            shape: 'standard',
+            melds: ['m1', 'm5', 's7', 'p9'].map((key) => ({ type: 'kong', key })),
+            pair: 'z1',
+            keys: ['m1', 'm5', 's7', 'p9', 'z1'],
+            selfDraw: false, menzen: false, quad: false,
+        });
+        check(r.patterns.some((p) => p.name === '四杠子' && p.fan === 16), 'mj: four kongs should be 四杠子 16番');
+        check(!r.patterns.some((p) => p.name === '碰碰胡'), 'mj: 四杠子 counted 碰碰胡 as well');
+    }
+
+    /* --- who pays ----------------------------------------------------------- */
+
+    {
+        const P = CV.MJPay;
+        // 自摸 with the dealer at seat 1: the dealer pays double.
+        const a = P.settle({ players: 4, winner: 0, from: -1, dealer: 1, fan: 2, stake: 10 });
+        check(a.deltas.join() === '80,-40,-20,-20', `mj: 自摸 paid ${a.deltas.join()}`);
+        // 放铳 with nobody at the dealer's seat involved: one payer, three shares.
+        const b = P.settle({ players: 4, winner: 0, from: 2, dealer: 3, fan: 2, stake: 10 });
+        check(b.deltas.join() === '60,0,-60,0', `mj: 放铳 paid ${b.deltas.join()}`);
+        // The same, with the winner on the button: doubled.
+        const c = P.settle({ players: 4, winner: 0, from: 2, dealer: 0, fan: 2, stake: 10 });
+        check(c.deltas.join() === '120,0,-120,0', `mj: the dealer's win paid ${c.deltas.join()}`);
+        // Three seats, three-player mode.
+        const d = P.settle({ players: 3, winner: 2, from: -1, dealer: 2, fan: 1, stake: 10 });
+        check(d.deltas.join() === '-20,-20,40', `mj: three-player 自摸 paid ${d.deltas.join()}`);
+        // Nobody pays what they do not have.
+        const e = P.clamp([90, -30, -30, -30], [0, 5, 1000, 1000], 0);
+        check(e.join() === '65,-5,-30,-30', `mj: clamping paid ${e.join()}`);
+        check(e.reduce((n, x) => n + x, 0) === 0, 'mj: clamping is not zero-sum');
+        console.log('  ✓ 自摸 is paid by everyone, 放铳 by the thrower, and the dealer doubles either way');
+    }
+
+    /* --- whole hands, both modes -------------------------------------------- */
+
+    const master = new CV.RNG(31415);
+    for (const players of [4, 3]) {
+        const ROUNDS = Math.max(20, Math.round(HANDS / 60));
+        const t0 = Date.now();
+        let wins = 0, draws = 0, selfDraws = 0, kongs = 0, claims = 0, fanTotal = 0;
+
+        for (let g = 0; g < ROUNDS; g++) {
+            const room = CV.Registry.ROOMS[master.int(4)].id;
+            const e = new game.Engine({
+                rng: new CV.RNG(master.int(1e9)),
+                config: { room, shoe: { dealer: master.int(players) } },
+                seats: Array.from({ length: players }, (_, i) => new CV.Seat(i, {
+                    kind: 'ai', name: 'S' + i, coins: 100000, isYou: i === 0,
+                })),
+            });
+            const ai = new game.AI(e);
+            e.start();
+
+            const full = MJ.build(players).length;
+            check(e.seats[e.dealer].hand.length === 14, 'mj: East was not dealt fourteen tiles');
+            for (let i = 0; i < players; i++) {
+                if (i === e.dealer) continue;
+                check(e.seats[i].hand.length === 13, 'mj: a seat was not dealt thirteen tiles');
+            }
+            check(e.turn === e.dealer, 'mj: East does not throw first');
+
+            let steps = 0;
+            while (!e.isOver()) {
+                const action = ai.decide(e.turn);
+                check(!!action, `mj: the AI had nothing to do in ${e.phase}`);
+                if (!action) break;
+                if (action.type === 'kong') kongs++;
+                if (['pung', 'chow'].includes(action.type)) claims++;
+                check(e.apply(action), `mj: engine refused ${JSON.stringify(action)} in ${e.phase}`);
+                if (++steps > 900) { check(false, 'mj: a hand ran past 900 actions'); break; }
+            }
+
+            // Every tile is somewhere, and only in one place.
+            const seen = [];
+            for (const s of e.seats) {
+                seen.push(...s.hand, ...s.discards, ...s.melds.flatMap((m) => m.tiles));
+            }
+            seen.push(...e.wall);
+            if (e.winner >= 0 && e.winFrom >= 0) seen.push(e.lastDiscard.tile);
+            check(seen.length === full, `mj: ${seen.length} tiles accounted for, the set holds ${full}`);
+            check(new Set(seen.map((x) => x.id)).size === full, 'mj: a tile is in two places at once');
+
+            // 吃 only ever comes from the seat before.
+            for (let i = 0; i < players; i++) {
+                for (const meld of e.seats[i].melds) {
+                    if (meld.type !== 'chow') continue;
+                    check((meld.from + 1) % players === i,
+                        'mj: a chow was taken from someone other than the previous seat');
+                    check(meld.tiles.every((x) => x.suit !== 'z'), 'mj: a chow of honours');
+                }
+                for (const meld of e.seats[i].melds) {
+                    const size = meld.type === 'kong' ? 4 : 3;
+                    check(meld.tiles.length === size, `mj: a ${meld.type} holds ${meld.tiles.length} tiles`);
+                }
+            }
+
+            // The score adds up and nobody is taken below zero.
+            check(e.seats.reduce((n, s) => n + s.net, 0) === 0, 'mj: the table is not zero-sum');
+            for (const s of e.seats) {
+                check(s.coins >= 0, 'mj: a seat was taken below zero');
+                check(s.coins === s.startCoins + s.net, 'mj: coins do not reconcile');
+            }
+
+            if (e.drawn) { draws++; check(e.winner < 0, 'mj: a 流局 with a winner'); }
+            else {
+                wins++;
+                fanTotal += e.fan.totalFan;
+                check(e.fan.totalFan >= 1, 'mj: a winning hand worth no 番 at all');
+                check(!!W.isWin(MJ.counts(e.winTiles), e.seats[e.winner].melds.length),
+                    'mj: the declared winner does not hold a winning hand');
+                if (e.winFrom < 0) selfDraws++;
+                // East keeps the seat by winning, and gives it up otherwise.
+                const want = e.winner === e.dealer ? e.dealer : (e.dealer + 1) % players;
+                check(e.shoeState.dealer === want, 'mj: the dealer moved the wrong way');
+            }
+        }
+        console.log(`  ${players}-player: ${ROUNDS} hands, ${Date.now() - t0} ms — `
+            + `${wins} won (${selfDraws} 自摸), ${draws} 流局, avg ${(fanTotal / Math.max(1, wins)).toFixed(1)}番`);
+        console.log(`    ${claims} tiles claimed, ${kongs} kongs`);
+        check(wins > 0, `mj: nobody ever won a ${players}-player hand`);
+    }
+
+    /* --- what a host may broadcast ------------------------------------------- */
+
+    {
+        const e = new game.Engine({
+            rng: new CV.RNG(9), config: { room: 'beginner' },
+            seats: [0, 1, 2, 3].map((i) => new CV.Seat(i, { kind: 'ai', name: 'S' + i, coins: 5000, isYou: i === 0 })),
+        });
+        e.start();
+        for (let viewer = 0; viewer < 4; viewer++) {
+            const view = e.snapshotFor(viewer);
+            const wire = JSON.stringify(view);
+            check(!view.rng, 'mj: the snapshot carries the RNG');
+            check(typeof view.wall === 'number', 'mj: the wall itself went out on the wire');
+            view.seats.forEach((seat, i) => {
+                if (i === viewer) check(seat.hand.every(Boolean), 'mj: your own tiles were redacted from you');
+                else check(seat.hand.every((x) => x === null), 'mj: another seat\'s tiles went out');
+            });
+            for (const tile of e.wall.slice(-8)) {
+                check(!wire.includes('"' + tile.id + '"'), `mj: a tile still in the wall (${tile.id}) is on the wire`);
+            }
+        }
+    }
+    console.log('  ✓ no concealed tile but your own, and nothing left in the wall');
+
+    for (const key of game.rules) check(CV.t(key) !== key, `mj: rule key ${key} has no text`);
+    console.log('  ✓ rules card resolves');
+}
+auditMahjong();
 
 /* ---- what a host is allowed to broadcast ------------------------------- */
 
