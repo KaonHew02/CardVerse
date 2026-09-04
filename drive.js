@@ -478,6 +478,21 @@
      * What must never happen is silence *and* a broken backup. That one case
      * is the whole reason this exists.
      */
+    /**
+     * A date as "4 Sep 2026".
+     *
+     * Written out rather than run through toLocaleDateString because the
+     * stamp is read next to the words "today" and "3 days ago", and a locale
+     * that renders 04/09/2026 leaves the reader guessing which half is the
+     * month. The month name cannot be misread.
+     */
+    function dmyStamp(date) {
+        const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                        'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        if (!(date instanceof Date) || isNaN(date.getTime())) return 'an unknown date';
+        return date.getDate() + ' ' + MONTHS[date.getMonth()] + ' ' + date.getFullYear();
+    }
+
     function showStamp() {
         const el = $('driveStamp');
 

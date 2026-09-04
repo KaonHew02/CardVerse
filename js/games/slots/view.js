@@ -20,6 +20,9 @@
     const { esc, fmt, signed } = CV.UI;
 
     const AUTO_STEPS = [10, 25, 50, 100];
+
+    /** A symbol at random, for the parts of the reel that decide nothing. */
+    const anyIcon = () => CV.SlotsSymbols[Math.floor(Math.random() * CV.SlotsSymbols.length)].icon;
     const CYCLE_MS   = 70;      // how fast a spinning reel changes symbol
     const STOP_GAP   = 420;     // between one reel stopping and the next
 
@@ -45,9 +48,14 @@
                 <div class="slots">
                     <div class="slot-cabinet">
                         <div class="slot-window">
-                            ${[0, 1, 2].map((i) => `<div class="slot-reel" id="slotReel${i}">🍒</div>`).join('')}
+                            ${[0, 1, 2].map((i) => `
+                                <div class="slot-reel" id="slotReel${i}">
+                                    <span class="slot-cell"></span>
+                                    <span class="slot-cell is-pay"></span>
+                                    <span class="slot-cell"></span>
+                                </div>`).join('')}
+                            <div class="slot-payline"></div>
                         </div>
-                        <div class="slot-payline"></div>
                         <div class="slot-shout" id="slotShout"></div>
                     </div>
 
@@ -73,7 +81,26 @@
             this.$ = (id) => this.root.querySelector('#' + id);
             CV.UI.on(this.root, '[data-act]', (el) => this.act(el));
             this.table.onChange((events) => this.onChange(events));
+            this.dress();
             this.paint();
+        }
+
+        /**
+         * Fill the window before the first pull, so the machine looks like a
+         * machine at rest rather than one with most of its glass missing.
+         *
+         * The payline gets a row too, and it uses the same no-three-of-a-kind
+         * draw as the scenery: a machine sitting there showing three cherries
+         * it never paid for is worse than an empty one.
+         */
+        dress() {
+            const rows = this.decor().concat(this.decor().slice(0, 1));
+            for (let i = 0; i < 3; i++) {
+                const cells = this.$('slotReel' + i).querySelectorAll('.slot-cell');
+                cells[0].textContent = rows[0][i];
+                cells[1].textContent = rows[2][i];
+                cells[2].textContent = rows[1][i];
+            }
         }
 
         unmount() {
@@ -108,15 +135,15 @@
             this.$('slotShout').textContent = '';
             this.$('slotShout').className = 'slot-shout';
 
-            const syms = CV.SlotsSymbols;
             const speed = this.table.speed || 1;
+            const decor = this.decor();
             const cycles = [];
 
             for (let i = 0; i < 3; i++) {
                 const el = this.$('slotReel' + i);
                 el.classList.add('is-spinning');
                 cycles[i] = setInterval(() => {
-                    el.textContent = syms[Math.floor(Math.random() * syms.length)].icon;
+                    el.querySelectorAll('.slot-cell').forEach((c) => { c.textContent = anyIcon(); });
                 }, CYCLE_MS);
             }
 
@@ -126,7 +153,7 @@
                     const el = this.$('slotReel' + i);
                     el.classList.remove('is-spinning');
                     el.classList.add('is-landing');
-                    el.textContent = spin.icons[i];
+                    this.land(i, spin.icons[i], decor);
                     this.shown[i] = spin.reels[i];
                     setTimeout(() => el.classList.remove('is-landing'), 260);
 
@@ -136,6 +163,33 @@
                     }
                 }, (STOP_GAP * (i + 1)) * speed);
             }
+        }
+
+        /**
+         * The two rows either side of the payline.
+         *
+         * They are scenery — the engine pays the middle row and nothing else.
+         * But they must never come up three of a kind: a dimmed winning line
+         * that pays nothing is the sort of near miss a machine manufactures
+         * on purpose, and this one does not. So the rows are drawn once per
+         * spin and any accidental triple is thrown away and redrawn.
+         */
+        decor() {
+            const line = () => {
+                let row;
+                do { row = [anyIcon(), anyIcon(), anyIcon()]; }
+                while (row[0] === row[1] && row[1] === row[2]);
+                return row;
+            };
+            return [line(), line()];
+        }
+
+        /** Stop one reel: the result in the window, the strip either side. */
+        land(i, icon, decor) {
+            const cells = this.$('slotReel' + i).querySelectorAll('.slot-cell');
+            cells[0].textContent = decor[0][i];
+            cells[1].textContent = icon;
+            cells[2].textContent = decor[1][i];
         }
 
         settleSpin(spin) {
@@ -223,7 +277,7 @@
                              <span class="muted small">${esc(t('slots.auto'))}</span>
                              ${AUTO_STEPS.map((n) => `<button class="btn tiny" data-act="auto" data-n="${n}" ${busy ? 'disabled' : ''}>${n}</button>`).join('')}
                            </div>`}
-                    <button class="btn ghost" data-act="cashout" ${busy ? 'disabled' : ''}>${esc(t('slots.cashout'))}</button>
+                    <button class="btn ghost" data-act="leave" ${busy ? 'disabled' : ''}>${esc(t('slots.leave'))}</button>
                 </div>`;
         }
 
@@ -299,10 +353,10 @@
                     this.s.autoOn = false;
                     this.s.auto = 0;
                     return this.paintControls();
-                case 'cashout':
+                case 'leave':
                     this.s.autoOn = false;
                     this.s.auto = 0;
-                    return void this.table.dispatch({ type: 'cashout', seat: 0 });
+                    return void this.table.dispatch({ type: 'leave', seat: 0 });
                 default: return undefined;
             }
         }

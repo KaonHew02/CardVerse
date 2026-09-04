@@ -26,12 +26,18 @@
      * **Not settled.** The rules stop at reading the dice and leave the odds
      * for later, so these are the ordinary table numbers and nothing more:
      * 大 and 小 pay evens and both lose to a triple, which is the whole house
-     * edge; 围骰 pays 30 to 1 for any of the six.
+     * edge; any 围骰 pays 30 to 1, and naming which one pays 180 to 1.
+     *
+     * The two triple prices are worth reading together. Any triple is six
+     * throws in 216 and pays 30, which is a 13.9% edge to the table. Naming
+     * one is a single throw in 216 and pays 180, which is 16.2% — dearer for
+     * a much longer shot, the way it usually is.
      */
-    const PAYS = { big: 1, small: 1, triple: 30 };
+    const PAYS = { big: 1, small: 1, triple: 30, exact: 180 };
 
-    /** The three sides a player may back. Anything else is out of scope. */
-    const SIDES = ['big', 'small', 'triple'];
+    /** What a player may back. `exact` also carries a face, 1 to 6. */
+    const SIDES = ['big', 'small', 'triple', 'exact'];
+    const FACES = [1, 2, 3, 4, 5, 6];
 
     /**
      * @param {number[]} dice three values, 1 to 6
@@ -55,10 +61,14 @@
      * Does a bet on `side` win against this reading?
      *
      * 大 and 小 lose to a triple even when the total is inside their range —
-     * a fifteen made of three fives is not a 大.
+     * a fifteen made of three fives is not a 大. A named triple wants that
+     * exact face and nothing else: three fives does not pay a bet on threes.
      */
-    const wins = (side, result) => side === result.type;
+    function wins(side, result, face) {
+        if (side === 'exact') return result.type === 'triple' && result.face === face;
+        return side === result.type;
+    }
 
     window.CV = window.CV || {};
-    window.CV.Dice = { SMALL, BIG, PAYS, SIDES, read, roll, wins };
+    window.CV.Dice = { SMALL, BIG, PAYS, SIDES, FACES, read, roll, wins };
 })();

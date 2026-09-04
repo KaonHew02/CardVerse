@@ -146,7 +146,9 @@
                 }
                 s.coins += s.payout;
                 s.net += s.payout;
-                this.emit('settled', { seat: s.index, outcome: s.outcome, payout: s.payout });
+                // Not `settled` — the Table wrapper owns that name and the
+                // screen reads a result off it.
+                this.emit('paid', { seat: s.index, outcome: s.outcome, payout: s.payout });
             }
             this.phase = 'over';
             this.finish();

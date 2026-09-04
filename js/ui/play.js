@@ -76,7 +76,10 @@
         view.mount();
 
         table.onChange((events) => {
-            const settled = events.find((e) => e.type === 'settled');
+            // Only the Table's own settle carries a result. An engine event
+            // that happens to share the name is not one, and taking it would
+            // hand `finish` nothing to show.
+            const settled = events.find((e) => e.type === 'settled' && e.result);
             if (settled) whenBoardSettles(() => finish(settled.result));
         });
 

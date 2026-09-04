@@ -12,6 +12,11 @@
  * that the pack depletes between rounds. If a flat multiplier is wanted
  * instead, this is the one number to change.
  *
+ * **On a table.** Seats shoot in turn and each opens its own gate off the
+ * same pack, so the odds a later seat is quoted already account for the cards
+ * the earlier ones took. Nobody bets on anybody else's gate: 射龙门 is a shot
+ * at the pot, and a shared gate would be a different game with different odds.
+ *
  * Virtual coins only — no purchase, top-up or cash-out, in either direction.
  */
 
@@ -26,11 +31,11 @@
         icon: '🐉',
         blurb: 'Two cards open a gate. Bet whether the third lands inside it.',
         category: 'cards',
-        players: [1, 1],
+        players: [1, 4],
         wagers: true,
         Engine: CV.DragonGateEngine,
+        AI:     CV.DragonGateAI,
         View:   CV.DragonGateView,
-        // No AI: the gate is one player's shot, and the 大过/小过 call is theirs.
 
         rules: ['dg.rule1', 'dg.rule2', 'dg.rule3', 'dg.rule4', 'dg.rule5', 'dg.rule6'],
 

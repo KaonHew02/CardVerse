@@ -40,8 +40,10 @@
             return `<span class="tile tile-z z${tile.n}${extra}" data-id="${tile.id}"
                 aria-label="${esc(MJ.nameEn(tile))}"><b>${MJ.HONOURS[tile.n - 1]}</b></span>`;
         }
+        // The face is drawn, not written — see faces.js. A tile that says
+        // "1筒" is readable, but it is not a mahjong tile.
         return `<span class="tile tile-${tile.suit}${extra}" data-id="${tile.id}"
-            aria-label="${esc(MJ.nameEn(tile))}"><b>${tile.n}</b><i>${MJ.SUIT_MARK[tile.suit]}</i></span>`;
+            aria-label="${esc(MJ.nameEn(tile))}">${CV.MJFaces.suitFace(tile.suit, tile.n)}</span>`;
     }
 
     const row = (tiles, opts) => tiles.map((x) => tileHtml(x, opts)).join('');

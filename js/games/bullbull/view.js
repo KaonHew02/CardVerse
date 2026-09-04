@@ -6,9 +6,14 @@
  * afterwards: showing what everybody got and why it beat or lost to the
  * dealer.
  *
- * The hands are turned one seat at a time. The engine resolves the deal in a
- * single step, so without pacing the round would begin and end in the same
- * frame; `revealing` holds the result screen back until the last hand is up.
+ * Every hand turns in two beats: the three that make the ten, and then the
+ * two that give the bull. That is the order the game is played in and the
+ * order it reads in — the three explain where the number came from, and the
+ * two are the number.
+ *
+ * The engine resolves the whole deal in a single step, so without pacing the
+ * round would begin and end in the same frame; `revealing` holds the result
+ * screen back until the last two cards are over.
  */
 
 (() => {
@@ -19,7 +24,8 @@
     const CV = window.CV;
     const { esc, fmt, signed } = CV.UI;
 
-    const SEAT_MS = 620;
+    /** One beat per half-hand: three cards, then two. */
+    const BEAT_MS = 430;
 
     class BullBullView {
         constructor(root, table, session) {
@@ -35,12 +41,15 @@
 
         get you() { return this.engine.youSeat; }
 
-        /** How many hands there are to turn: the dealer's, then each seat's. */
+        /** Two beats a hand — the dealer's first, then each seat's. */
         get toShow() {
             const e = this.engine;
-            return e.phase === 'betting' ? 0 : 1 + e.seats.filter((s) => !s.out).length;
+            return e.phase === 'betting' ? 0 : (1 + e.seats.filter((s) => !s.out).length) * 2;
         }
         get revealing() { return this.shown < this.toShow; }
+
+        /** 0 face down, 1 the three that make the ten, 2 the whole hand. */
+        stageOf(hand) { return Math.max(0, Math.min(2, this.shown - hand * 2)); }
 
         mount() {
             this.root.innerHTML = `
@@ -67,7 +76,7 @@
                 this.shown++;
                 this.paint();
                 this.tick();
-            }, SEAT_MS * (this.table.speed || 1));
+            }, BEAT_MS * (this.table.speed || 1));
         }
 
         /* ---- painting -------------------------------------------------------- */
@@ -83,33 +92,42 @@
         }
 
         /**
-         * A hand, with the three that made the multiple of ten marked. That
-         * mark is the whole explanation of the bull, and without it the
-         * number looks arbitrary.
+         * A hand at a given stage. The three that make the multiple of ten
+         * come up first and stay marked — that mark is the whole explanation
+         * of the bull, and without it the number looks arbitrary.
+         *
+         * A 无牛 hand has no such three, so it turns the first three and then
+         * the rest, which is the same shape with nothing to show for it.
          */
-        handHtml(cards, hand, up) {
-            if (!up) return CV.CardView.hand(cards.map(() => null), {});
-            const inCombo = new Set((hand && hand.three ? hand.three : []).map((c) => c.id));
-            return `<div class="hand">${cards.map((c) => CV.CardView.html(c, {
-                fresh: !this.known.has(c.id),
-                cls: inCombo.has(c.id) ? 'is-combo' : '',
-            })).join('')}</div>`;
+        handHtml(cards, hand, stage) {
+            if (stage <= 0) return CV.CardView.hand(cards.map(() => null), {});
+            const three = (hand && hand.three) ? hand.three : cards.slice(0, 3);
+            const inCombo = new Set(three.map((c) => c.id));
+            const marks = !!(hand && hand.three);
+            return `<div class="hand">${cards.map((c) => {
+                if (stage < 2 && !inCombo.has(c.id)) return CV.CardView.html(null, { faceDown: true });
+                return CV.CardView.html(c, {
+                    fresh: !this.known.has(c.id),
+                    cls: (marks && inCombo.has(c.id)) ? 'is-combo' : '',
+                });
+            }).join('')}</div>`;
         }
 
         paintDealer() {
             const e = this.engine;
-            const up = this.shown >= 1 && e.dealer.cards.length > 0;
+            const stage = e.dealer.cards.length ? this.stageOf(0) : 0;
             this.$('bbDealer').innerHTML = `
                 <div class="bj-rule">${esc(t('table.dealer'))}</div>
                 ${e.dealer.cards.length
-                    ? this.handHtml(e.dealer.cards, e.dealer.hand, up)
+                    ? this.handHtml(e.dealer.cards, e.dealer.hand, stage)
                     : `<div class="hand hand-empty"></div>`}
-                <div class="bb-name">${up ? esc(e.handName(e.dealer.hand)) : ''}</div>`;
+                <div class="bb-name">${stage >= 2 ? esc(e.handName(e.dealer.hand)) : ''}</div>`;
         }
 
         seatBox(s, order) {
             const e = this.engine;
-            const up = this.shown >= 2 + order;
+            const stage = s.cards.length ? this.stageOf(1 + order) : 0;
+            const up = stage >= 2;
             const mine = s.index === this.you;
             const turn = e.turn === s.index && !e.over;
             const badge = (up && s.outcome)
@@ -124,7 +142,7 @@
                         ${badge}
                     </div>
                     ${s.cards.length
-                        ? this.handHtml(s.cards, s.hand, up)
+                        ? this.handHtml(s.cards, s.hand, stage)
                         : `<div class="hand hand-empty"></div>`}
                     <div class="hand-meta">
                         <span class="bb-name">${up ? esc(e.handName(s.hand)) : ''}</span>

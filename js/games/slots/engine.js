@@ -14,7 +14,8 @@
  * program with a much worse reputation.
  *
  * Virtual coins only. There is no purchase, top-up or cash-out path in either
- * direction, here or anywhere else in the hub.
+ * direction, here or anywhere else in the hub — which is why the button that
+ * ends a session says "leave the machine" and not "cash out".
  */
 
 (() => {
@@ -101,12 +102,15 @@
             if (max >= this.minBet) {
                 out.push({ type: 'spin', min: this.minBet, max, label: t('slots.spin') });
             }
-            out.push({ type: 'cashout', label: t('slots.cashout') });
+            // Not a cash-out — there is nothing to cash out to, here or
+            // anywhere in the hub. It ends the session at the machine so the
+            // recap can be written.
+            out.push({ type: 'leave', label: t('slots.leave') });
             return out;
         }
 
         handle(action) {
-            if (action.type === 'cashout') { this.finishSession(); return true; }
+            if (action.type === 'leave') { this.finishSession(); return true; }
             if (action.type !== 'spin') return false;
             return this.spin(Math.round(action.amount));
         }

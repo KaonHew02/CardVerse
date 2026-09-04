@@ -399,7 +399,9 @@
         'rr.rule7': 'When two are left it is the final: both back to 2 ❤️ and half the slots dangerous. Winning is +100, and every heart you finish with is +10.',
 
         /* 骰子 */
-        'dice.big': '大 Big', 'dice.small': '小 Small', 'dice.triple': '围骰 Triple',
+        'dice.big': '大 Big', 'dice.small': '小 Small', 'dice.triple': '围骰 Any',
+        'dice.exact': '围骰 Named', 'dice.exactOf': '围骰 {n}·{n}·{n}',
+        'dice.pickFace': 'Which triple?',
         'dice.house': 'The table',
         'dice.tripleOf': '围骰 — three {n}s',
         'dice.pays': 'pays {n}:1',
@@ -414,7 +416,7 @@
         'dice.rule2': '4 to 10 is 小. 11 to 17 is 大. Back one of them before the throw.',
         'dice.rule3': 'Three of a kind is 围骰, and it is checked before anything else — 5+5+5 is fifteen, and it is still 围骰 rather than a 大.',
         'dice.rule4': 'That is also why 3 and 18 never come up as 小 or 大: the only way to reach either is three ones or three sixes, and both are already 围骰.',
-        'dice.rule5': '大 and 小 pay evens and both lose to a 围骰, which is the whole edge. 围骰 pays 30 to 1 on any of the six. Those odds are placeholders — the rules have not fixed them yet.',
+        'dice.rule5': '大 and 小 pay evens and both lose to a 围骰, which is the whole edge. Any 围骰 pays 30 to 1; naming which one pays 180 to 1 for a single throw in 216. Those odds are placeholders — the rules have not fixed them yet.',
 
         /* Lami */
         'lami.play': 'Lay', 'lami.add': 'Add to it', 'lami.draw': 'Take one',
@@ -523,6 +525,8 @@
         'game.slots': '老虎机', 'game.slots.blurb': 'Three reels, one payline. Match three and the coins fall.',
         'game.dragongate': '射龙门', 'game.dragongate.blurb': 'Two cards open a gate. Bet whether the third lands inside it.',
         /* 射龙门 */
+        'dg.slip': 'Gate {lo}–{hi}', 'dg.slipEqual': '{rank} · {dir}',
+        'dg.calling': '{name} is calling the gate…',
         'dg.house': 'The gate', 'dg.open': 'Open the gate', 'dg.shooting': 'Shooting…',
         'dg.higher': '大过 Higher', 'dg.lower': '小过 Lower',
         'dg.chooseAsk': 'Both posts are {rank}. Call it — higher or lower?',
@@ -544,7 +548,7 @@
 
         /* 老虎机 */
         'slots.spin': 'SPIN', 'slots.spinning': 'Spinning…',
-        'slots.cashout': 'Cash out', 'slots.finished': 'Session finished.',
+        'slots.leave': 'Leave machine', 'slots.finished': 'Session finished.',
         'slots.bet': 'Bet per spin', 'slots.max': 'Max',
         'slots.range': 'Machine takes {lo}–{hi} a spin',
         'slots.auto': 'Auto', 'slots.stopAuto': 'Stop auto ({n} left)',
@@ -958,7 +962,9 @@
         'rr.rule6': '安全 +10 分，奖励 +30 分，陷阱扣一颗心，危险扣一颗心加 20 分。回合之间还可能拿到护盾、双倍伤害、幸运一转，或者顺序反转。',
         'rr.rule7': '只剩两个人时进入决胜：两边都回到 2 ❤️，一半格子都是危险。赢了 +100 分，剩下的每颗心再 +10 分。',
 
-        'dice.big': '大', 'dice.small': '小', 'dice.triple': '围骰',
+        'dice.big': '大', 'dice.small': '小', 'dice.triple': '任意围骰',
+        'dice.exact': '指定围骰', 'dice.exactOf': '围骰 {n}',
+        'dice.pickFace': '指定哪一个？',
         'dice.house': '桌面',
         'dice.tripleOf': '围骰 — 三个 {n}',
         'dice.pays': '赔 {n} 倍',
@@ -973,7 +979,7 @@
         'dice.rule2': '4 到 10 是小，11 到 17 是大。摇之前先押一边。',
         'dice.rule3': '三颗一样就是围骰，而且先看围骰——5+5+5 是 15 点，仍然算围骰，不算大。',
         'dice.rule4': '所以 3 点和 18 点永远不会是小或大：要凑到这两个数，只能三个 1 或三个 6，那本来就是围骰。',
-        'dice.rule5': '大和小都是一赔一，碰到围骰两边都输，这就是桌面的优势。围骰任意一种赔 30 倍。这些赔率只是暂定，规则还没定下来。',
+        'dice.rule5': '大和小都是一赔一，碰到围骰两边都输，这就是桌面的优势。任意围骰赔 30 倍；指定哪一个赔 180 倍，因为 216 分之一才中一次。这些赔率只是暂定，规则还没定下来。',
 
         'lami.play': '打出', 'lami.add': '加上去', 'lami.draw': '摸一张',
         'lami.pass': '过', 'lami.done': '结束回合',
@@ -1069,6 +1075,8 @@
         'game.baccarat': '百家乐', 'game.baccarat.blurb': '压闲、压庄或压和。不用决策，只看胆色。',
         'game.slots': '老虎机', 'game.slots.blurb': '三轮一线。三个一样就开奖。',
         'game.dragongate': '射龙门', 'game.dragongate.blurb': '两张牌开门，赌第三张能不能穿过去。',
+        'dg.slip': '龙门 {lo}–{hi}', 'dg.slipEqual': '{rank} · {dir}',
+        'dg.calling': '{name} 正在选大过小过…',
         'dg.house': '龙门', 'dg.open': '开门', 'dg.shooting': '射门中…',
         'dg.higher': '大过', 'dg.lower': '小过',
         'dg.chooseAsk': '两边都是 {rank}。要大过还是小过？',
@@ -1089,7 +1097,7 @@
         'dg.rule6': '赔率跟着门走：门越窄赔越多。开牌前会显示还有几张能赢、赔多少。牌打完之前不会重新洗。',
 
         'slots.spin': '开始', 'slots.spinning': '转动中…',
-        'slots.cashout': '下机', 'slots.finished': '本轮结束。',
+        'slots.leave': '下机', 'slots.finished': '本轮结束。',
         'slots.bet': '每次下注', 'slots.max': '最大',
         'slots.range': '每次 {lo}–{hi}',
         'slots.auto': '自动', 'slots.stopAuto': '停止自动（还剩 {n}）',

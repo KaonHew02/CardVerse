@@ -9,6 +9,10 @@
  * The odds are shown before the third card lands — how many cards in the pack
  * can win, and what the gate pays. A player should be able to see that a
  * narrow gate is worth more and an adjacent one cannot be won at all.
+ *
+ * The arch holds one gate: the one being shot right now. Seats that have had
+ * their turn keep their posts and their verdict on their own card, so the
+ * table can be read back without the middle having to show four gates at once.
  */
 
 (() => {
@@ -45,6 +49,7 @@
                         <div class="dg-post" id="dgPostB"></div>
                     </div>
                     <div class="dg-odds" id="dgOdds"></div>
+                    <div class="bj-seats" id="dgSeats"></div>
                     <div class="bj-status" id="dgStatus"></div>
                     <div class="bj-actions" id="dgActions"></div>
                 </div>`;
@@ -62,6 +67,13 @@
         get revealing() { return this.engine.third && !this.showThird; }
 
         onChange(events) {
+            // A new seat stepping up clears the last one's shot out of the
+            // arch, or its third card would still be sitting there under the
+            // next player's posts.
+            if (events.some((e) => e.type === 'betting')) {
+                clearTimeout(this.timer);
+                this.showThird = false;
+            }
             // Hold the third card back for a beat once the engine has drawn it.
             if (events.some((e) => e.type === 'third') && !this.showThird) {
                 clearTimeout(this.timer);
@@ -92,6 +104,7 @@
                 + (e.third && this.showThird && e.outcome ? ' is-' + e.outcome : '');
 
             this.paintOdds();
+            this.paintSeats();
             this.paintStatus();
             this.paintActions();
 
@@ -99,6 +112,53 @@
             if (bar) bar.textContent = t('table.cards', { n: e.deck.remaining });
             const coins = document.getElementById('tableCoins');
             if (coins) coins.textContent = fmt(e.seat.coins);
+        }
+
+        /**
+         * The chairs. A seat that has shot keeps its gate and its verdict —
+         * that is the only record of it once the arch moves on — and the seat
+         * about to shoot is marked so the turn order is never a guess.
+         */
+        paintSeats() {
+            const e = this.engine;
+            const host = this.$('dgSeats');
+            if (e.seats.length < 2) { host.innerHTML = ''; return; }
+
+            host.innerHTML = e.seats.map((s, i) => {
+                const turn = e.turn === i && !e.over;
+                const cls = ['seat', s.isYou ? 'is-you' : '', turn ? 'is-turn' : '',
+                    s.out ? 'is-out' : ''].filter(Boolean).join(' ');
+                const gate = s.gate
+                    ? `<span class="dg-slip">${esc(s.gate.equal
+                        ? t('dg.slipEqual', {
+                            rank: e.rankName(s.gate.low),
+                            dir: t(s.pick === 'higher' ? 'dg.higher' : 'dg.lower'),
+                          })
+                        : t('dg.slip', {
+                            lo: e.rankName(s.gate.low), hi: e.rankName(s.gate.high),
+                          }))}</span>`
+                    : '';
+                const verdict = s.done
+                    ? `<span class="badge ${s.outcome === 'gate' ? 'win' : 'loss'}">${esc(t('dg.' + s.outcome))}</span>`
+                    : '';
+                return `
+                    <div class="${cls}" data-seat="${i}">
+                        <div class="seat-head">
+                            <span class="avatar">${s.avatar}</span>
+                            <div class="who">
+                                <span class="name">${esc(s.name)}${s.isYou ? ` <em>(${esc(t('you'))})</em>` : ''}</span>
+                                <span class="coins">🪙 ${fmt(s.coins)}</span>
+                            </div>
+                        </div>
+                        <div class="hand-meta">
+                            ${s.out ? `<span class="muted small">${esc(t('table.sittingOut'))}</span>` : ''}
+                            ${gate}
+                            ${s.bet ? `<span class="bet">🪙 ${fmt(s.bet)}</span>` : ''}
+                            ${verdict}
+                            ${s.done ? `<span class="${s.net > 0 ? 'good' : s.net < 0 ? 'bad' : ''}">${signed(s.net)}</span>` : ''}
+                        </div>
+                    </div>`;
+            }).join('');
         }
 
         paintOdds() {
@@ -121,24 +181,35 @@
             const e = this.engine;
             const host = this.$('dgStatus');
 
+            const mine = e.turn === e.youSeat;
+            const who = e.seats[e.turn];
+
             if (this.revealing) { host.innerHTML = `<span>${esc(t('dg.shooting'))}</span>`; return; }
             if (e.over && e.outcome) {
                 const cls = e.outcome === 'gate' ? 'you' : 'muted';
                 host.innerHTML = `<span class="${cls} dg-verdict">${esc(t('dg.' + e.outcome))}</span>`;
                 return;
             }
+            if (!who) { host.innerHTML = ''; return; }
             if (e.phase === 'choose') {
-                host.innerHTML = `<span class="you">${esc(t('dg.chooseAsk', { rank: e.rankName(e.gate.low) }))}</span>`;
+                host.innerHTML = mine
+                    ? `<span class="you">${esc(t('dg.chooseAsk', { rank: e.rankName(e.gate.low) }))}</span>`
+                    : `<span class="muted">${who.avatar} ${esc(t('dg.calling', { name: who.name }))}</span>`;
                 return;
             }
-            if (e.phase === 'betting') { host.innerHTML = `<span class="you">${esc(t('table.yourBet'))}</span>`; return; }
+            if (e.phase === 'betting') {
+                host.innerHTML = mine
+                    ? `<span class="you">${esc(t('table.yourBet'))}</span>`
+                    : `<span class="muted">${who.avatar} ${esc(t('table.betting', { name: who.name }))}</span>`;
+                return;
+            }
             host.innerHTML = '';
         }
 
         paintActions() {
             const e = this.engine;
             const host = this.$('dgActions');
-            const options = e.legalActions(0);
+            const options = e.legalActions(e.youSeat);
             if (!options.length) { host.innerHTML = ''; return; }
 
             if (e.phase === 'choose') {
@@ -154,7 +225,7 @@
             }
 
             const opt = options[0];
-            const seat = e.seat;
+            const seat = e.seats[e.youSeat];
             if (this.bet === null || this.bet < opt.min || this.bet > opt.max) {
                 this.bet = Math.min(opt.max, Math.max(opt.min, this.session.lastBet || opt.min));
             }
@@ -195,12 +266,14 @@
             }
             if (type === 'bet') {
                 this.session.lastBet = this.bet;
-                this.table.dispatch({ type: 'bet', seat: 0, amount: this.bet });
+                this.table.dispatch({ type: 'bet', seat: this.engine.youSeat, amount: this.bet });
                 this.bet = null;
                 return;
             }
             if (type === 'pick') {
-                this.table.dispatch({ type: 'pick', seat: 0, dir: el.dataset.dir });
+                this.table.dispatch({
+                    type: 'pick', seat: this.engine.youSeat, dir: el.dataset.dir,
+                });
             }
         }
     }

@@ -37,14 +37,14 @@
 .table-coins { margin-left: auto; color: var(--accent); font-weight: 700; }
 
 .table-root {
-    position: relative; min-height: 70vh; border-radius: 22px;
+    position: relative; min-height: 44vh; border-radius: 22px;
     background: var(--felt-pattern), radial-gradient(ellipse at 50% 30%, color-mix(in srgb, var(--felt) 85%, #fff 8%), var(--felt) 60%, var(--felt-edge));
     box-shadow: inset 0 0 0 10px var(--felt-edge), inset 0 0 60px rgba(0,0,0,0.45), var(--shadow);
     padding: 22px 18px 18px; color: #fff; overflow: hidden;
 }
 [data-table="luxury"] .table-root { background-size: 12px 12px, auto; }
 
-.bj { display: flex; flex-direction: column; gap: 14px; min-height: 60vh; }
+.bj { display: flex; flex-direction: column; gap: 14px; }
 .bj-dealer { display: flex; flex-direction: column; align-items: center; gap: 6px; }
 .bj-rule { color: rgba(255,255,255,0.65); }
 .bj-seats { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; align-items: flex-start; flex: 1 1 auto; align-content: center; }
@@ -189,7 +189,7 @@
 @media (min-width: 1280px) {
     body[data-screen="table"] main { max-width: 1440px; }
     body[data-screen="table"] { --card-w: 72px; --card-h: 101px; }
-    .table-root { min-height: 68vh; }
+    .table-root { min-height: 46vh; }
     .seat { max-width: 300px; flex-basis: 200px; }
 }
 
@@ -263,24 +263,42 @@
 
 /* ---- 老虎机 ------------------------------------------------------------ */
 
-.slots { display: grid; grid-template-columns: 1fr 300px; grid-template-areas: "cab side" "ctl side"; gap: 16px; align-items: start; }
+/* The side column (paytable, session, history) is taller than the machine,
+ * and it spans both rows. Without an explicit `1fr` on the second row that
+ * extra height is shared out and the controls drift away from the cabinet,
+ * leaving a band of nothing between the reels and the spin button. */
+.slots { display: grid; grid-template-columns: 1fr 300px;
+    grid-template-areas: "cab side" "ctl side"; grid-template-rows: auto 1fr;
+    gap: 16px; align-items: start; }
 .slot-cabinet { grid-area: cab; position: relative; padding: 18px; border-radius: 18px;
     background: linear-gradient(160deg, #2a1a3d, #14101f); border: 3px solid var(--accent);
     box-shadow: inset 0 0 40px rgba(0,0,0,.55), 0 8px 30px rgba(0,0,0,.4); }
-.slot-window { display: flex; gap: 10px; justify-content: center; }
+/* A machine shows the strip, not one symbol: three rows through the glass
+ * with the payline across the middle. The outer rows are the rest of the
+ * reel and pay nothing, so they are dimmed and the payline is lit. */
+.slot-window { position: relative; display: flex; gap: 10px; justify-content: center;
+    padding: 6px; border-radius: 14px; background: rgba(0,0,0,.45);
+    box-shadow: inset 0 0 24px rgba(0,0,0,.6); }
 .slot-reel {
-    width: 96px; height: 116px; border-radius: 12px; display: grid; place-items: center;
-    font-size: 3.2rem; line-height: 1; background: linear-gradient(#fffdf5, #e6e0cf);
-    box-shadow: inset 0 6px 14px rgba(0,0,0,.25), inset 0 -6px 14px rgba(0,0,0,.18);
-    user-select: none;
+    width: 96px; border-radius: 10px; display: flex; flex-direction: column;
+    background: linear-gradient(#fffdf5, #e6e0cf); user-select: none; overflow: hidden;
+    box-shadow: inset 0 8px 16px rgba(0,0,0,.28), inset 0 -8px 16px rgba(0,0,0,.22);
 }
+.slot-cell { height: 74px; display: grid; place-items: center; font-size: 2.5rem; line-height: 1; }
+/* Only the middle row is the result. The two either side are scenery and
+ * are dimmed so they can never be mistaken for a line that should have paid. */
+.slot-cell:not(.is-pay) { opacity: .3; transform: scale(.82); }
+.slot-cell.is-pay { font-size: 3rem; }
 /* The blur is the only cue that a reel is still running — it must never be
  * on a reel that has already landed, or the machine looks like it is lying. */
-.slot-reel.is-spinning { filter: blur(1.5px); }
+.slot-reel.is-spinning { filter: blur(1.6px); }
+.slot-reel.is-spinning .slot-cell { opacity: .72; transform: none; }
 .slot-reel.is-landing { animation: reelLand 260ms cubic-bezier(.2,.9,.25,1); }
-@keyframes reelLand { 0% { transform: translateY(-14%); } 60% { transform: translateY(4%); } 100% { transform: none; } }
-.slot-payline { height: 3px; margin: 12px 8px 6px; border-radius: 2px;
-    background: linear-gradient(90deg, transparent, var(--accent), transparent); }
+@keyframes reelLand { 0% { transform: translateY(-9%); } 60% { transform: translateY(3%); } 100% { transform: none; } }
+.slot-payline { position: absolute; left: 10px; right: 10px; top: 50%; height: 3px;
+    margin-top: -1.5px; border-radius: 2px; pointer-events: none;
+    background: linear-gradient(90deg, transparent, var(--accent), transparent);
+    box-shadow: 0 0 10px rgba(0,0,0,.5); }
 .slot-shout { min-height: 2em; text-align: center; font-weight: 800; font-size: 1.2rem; }
 .slot-shout.is-win { color: var(--good); }
 .slot-shout.is-loss { color: var(--muted); font-weight: 600; font-size: 1rem; }
@@ -472,6 +490,13 @@
 }
 .tile b { font-size: 1.05rem; }
 .tile i { font-style: normal; font-size: .62rem; opacity: .75; margin-top: 1px; }
+/* The drawn suits. The art is square and sits in the middle of the face,
+ * leaving the tile's lip and shadow to do the rest. */
+.tile-art { display: block; width: 76%; height: 76%; overflow: visible; }
+.tile-wan { display: flex; flex-direction: column; align-items: center; line-height: 1; }
+.tile-wan b { font-size: 1.02rem; color: #1b2430; }
+.tile-wan i { font-style: normal; font-size: .82rem; font-weight: 800;
+    color: #c62828; opacity: 1; margin-top: 2px; }
 .tile-m { color: #1b2430; }
 .tile-s { color: #1d7a45; }
 .tile-p { color: #1d4f9c; }
@@ -488,6 +513,8 @@
 .tile-sm { width: 24px; height: 32px; border-radius: 4px; }
 .tile-sm b { font-size: .8rem; }
 .tile-sm i { font-size: .5rem; }
+.tile-sm .tile-wan b { font-size: .74rem; }
+.tile-sm .tile-wan i { font-size: .6rem; }
 /* The tile just thrown, because a claim has to be decided on it. */
 .tile.is-last { box-shadow: 0 0 0 2px var(--accent), 0 3px 8px rgba(0,0,0,.5); }
 
@@ -677,3 +704,10 @@
     80% { transform: translateX(3px); }
 }
 .rr-btn.is-respin { opacity: .9; }
+.dice-faces { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.dice-faces .btn-row { gap: 6px; margin: 0; }
+.dice-face { background: none; border: 2px solid transparent; border-radius: 10px; padding: 2px; cursor: pointer; line-height: 0; }
+.dice-face.is-on { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(245,185,66,.22); }
+.die.is-small { width: 34px; height: 34px; padding: 4px; border-radius: 7px; }
+.dice-pick.is-exact { color: #ffb3f0; }
+.dice-side.is-exact small { color: var(--accent); opacity: 1; }

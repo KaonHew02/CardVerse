@@ -48,7 +48,7 @@ function load(rel) {
     'js/core/rewards.js', 'js/core/table.js',
     'js/games/baccarat/engine.js', 'js/games/baccarat/ai.js', 'js/games/baccarat/index.js',
     'js/games/slots/engine.js', 'js/games/slots/index.js',
-    'js/games/dragongate/engine.js', 'js/games/dragongate/index.js',
+    'js/games/dragongate/engine.js', 'js/games/dragongate/ai.js', 'js/games/dragongate/index.js',
     'js/games/bullbull/hands.js', 'js/games/bullbull/engine.js',
     'js/games/bullbull/ai.js', 'js/games/bullbull/index.js',
     'js/games/roulette/chamber.js', 'js/games/roulette/engine.js',
@@ -219,7 +219,7 @@ console.log(`CardVerse smoke — ${HANDS} hands per game\n`);
 
 /**
  * Games this loop does not fit — a wager against the house across a carried
- * shoe. 老虎机 and 射龙门 have no opponents at all; 斗地主 is three seats
+ * shoe. 老虎机 has no opponents at all; 斗地主 is three seats
  * playing each other for points rather than a table paying out. Each has its
  * own audit further down.
  */
@@ -665,6 +665,122 @@ function auditDragonGate() {
     for (const key of game.rules) check(CV.t(key) !== key, `dragongate: rule key ${key} has no text`);
     for (const key of ['dg.gate', 'dg.post', 'dg.outside', 'dg.higher', 'dg.lower', 'dg.shut'])
         check(CV.t(key) !== key, `dragongate: ${key} has no text`);
+    /* --- a table takes turns, off one pack ------------------------------ */
+
+    /**
+     * Four seats, and the three things a table can get wrong that one chair
+     * cannot: a seat shooting out of turn, two seats being dealt the same
+     * card, and a round ending before everybody has had their gate.
+     *
+     * The pack is the interesting one. Every gate is priced from what is
+     * actually left, so if the seats were not drawing from the same pack the
+     * later quotes would be wrong without anything else looking wrong.
+     */
+    {
+        let rounds = 0, shots = 0, shut = 0;
+        for (let g = 0; g < 60; g++) {
+            const rng = new CV.RNG(9000 + g);
+            const e = new game.Engine({
+                rng,
+                seats: [
+                    new CV.Seat(0, { kind: 'human', isYou: true, coins: 5000 }),
+                    new CV.Seat(1, { kind: 'ai', name: 'A', coins: 5000 }),
+                    new CV.Seat(2, { kind: 'ai', name: 'B', coins: 5000 }),
+                    new CV.Seat(3, { kind: 'ai', name: 'C', coins: 5000 }),
+                ],
+                config: { shoe: null },
+            });
+            const ai = new CV.DragonGateAI(e);
+            e.start();
+
+            const seen = new Set();
+            let packAt = e.deck.remaining;
+            let guard = 0;
+
+            while (!e.isOver() && guard++ < 40) {
+                const turn = e.turn;
+
+                // Nobody but the seat whose shot it is may act.
+                for (let i = 0; i < 4; i++) {
+                    if (i === turn) continue;
+                    check(e.legalActions(i).length === 0,
+                        `dragongate: seat ${i} had actions on seat ${turn}'s gate`);
+                }
+                check(e.handle({ type: 'bet', seat: (turn + 1) % 4, amount: 10 }) === false,
+                    'dragongate: a seat acted out of turn and the engine took it');
+
+                const move = ai.decide(turn);
+                check(!!move, `dragongate: seat ${turn} had nothing to play`);
+                e.handle(move);
+
+                // A reshuffle is the one time a card may legitimately repeat.
+                if (e.deck.remaining > packAt) seen.clear();
+                packAt = e.deck.remaining;
+
+                const s = e.seats[turn];
+                if (s.done) {
+                    shots++;
+                    if (s.odds.winners === 0) shut++;
+                    for (const c of s.gate.cards.concat([s.third])) {
+                        check(!seen.has(c.id),
+                            `dragongate: ${c.id} was dealt to two seats in one round`);
+                        seen.add(c.id);
+                    }
+                }
+            }
+
+            check(e.isOver(), 'dragongate: a four-seat round never finished');
+            check(e.seats.every((x) => x.done || x.out),
+                'dragongate: the round ended with a seat that never shot');
+
+            // Every seat is in the recap, and the gates carry the other side.
+            const rows = e.result().ranks;
+            const house = rows.find((r) => r.house);
+            const players = rows.filter((r) => !r.house);
+            check(players.length === 4, `dragongate: ${players.length} seats in a four-seat recap`);
+            check(house && house.coins === -players.reduce((n, r) => n + r.coins, 0),
+                'dragongate: the gates do not hold the other side of the table');
+            rounds++;
+        }
+        console.log(`  ${rounds} four-seat rounds — ${shots} gates shot off a shared pack, ${shut} of them shut`);
+        console.log('  ✓ seats shoot in turn, and no card reached two of them');
+        console.log('  ✓ nobody is left without a gate, and the recap balances');
+    }
+
+    /* --- the call is the caller's, at every seat ------------------------ */
+
+    // An equal gate is never resolved for a player, whichever chair they are
+    // in. This is the one rule a turn loop could quietly drop.
+    {
+        let asked = 0;
+        for (let g = 0; g < 200 && asked < 12; g++) {
+            const e = new game.Engine({
+                rng: new CV.RNG(400 + g),
+                seats: [0, 1, 2].map((i) => new CV.Seat(i, {
+                    kind: i ? 'ai' : 'human', isYou: i === 0, name: 'S' + i, coins: 5000,
+                })),
+                config: { shoe: null },
+            });
+            const ai = new CV.DragonGateAI(e);
+            e.start();
+            let guard = 0;
+            while (!e.isOver() && guard++ < 30) {
+                const turn = e.turn;
+                e.handle({ type: 'bet', seat: turn, amount: 10 });
+                if (e.phase === 'choose') {
+                    asked++;
+                    check(e.seats[turn].third === null,
+                        `dragongate: seat ${turn} got its third card before it called`);
+                    check(e.legalActions(turn).every((o) => o.type === 'pick'),
+                        'dragongate: an equal gate offered something other than the call');
+                    e.handle(ai.decide(turn));
+                }
+            }
+        }
+        check(asked >= 12, `dragongate: only ${asked} equal gates came up in 200 tables`);
+        console.log(`  ✓ ${asked} equal gates, every one put to the seat holding it`);
+    }
+
     console.log('  ✓ rules card and verdict labels all resolve');
 }
 auditDragonGate();
@@ -3295,6 +3411,31 @@ for (const game of CV.Registry.playable()) {
     }
     console.log(`  ${game.icon} ${game.name}: ${checkedHidden} concealed-state broadcasts audited`);
     if (failures === before) console.log('    ✓ no seed, no hole card, no undealt card on the wire');
+}
+
+/**
+ * Names the Table wrapper owns.
+ *
+ * `settled` is how a finished round reaches the screen, and the screen reads a
+ * result off it. An engine that emits its own event by the same name gets found
+ * first and hands the screen nothing — a broken table rather than a broken
+ * animation, which is why this is a test and not a comment.
+ */
+console.log('\n🔒 Reserved event names');
+{
+    const RESERVED = ['settled', 'gameOver'];
+    let checked = 0;
+    for (const game of CV.Registry.playable()) {
+        const file = path.join(ROOT, 'js/games/' + game.code + '/engine.js');
+        if (!fs.existsSync(file)) continue;
+        const src = fs.readFileSync(file, 'utf8');
+        for (const name of RESERVED) {
+            check(!src.includes("emit('" + name + "'"),
+                game.code + ": emits '" + name + "', which the Table wrapper owns");
+            checked++;
+        }
+    }
+    console.log(`  ${checked} checks — no engine emits a name the wrapper needs`);
 }
 
 /* ---- the Table wrapper, with real timers ------------------------------- */

@@ -42,6 +42,7 @@
                 s.net = 0;
                 s.bet = 0;
                 s.side = null;
+                s.face = 0;        // which triple, when the bet names one
                 s.payout = 0;
                 s.outcome = null;
                 s.out = s.coins < this.minBet;
@@ -72,19 +73,31 @@
             if (!s || s.out) return [];
             const max = Math.min(this.maxBet, s.coins);
             if (max < this.minBet) return [];
-            return D.SIDES.map((side) => ({
-                type: 'wager', side, min: this.minBet, max, label: t('dice.' + side),
-            }));
+            // A named triple is six different bets, so it is six options.
+            // Legality stays a list rather than a rule written twice.
+            const out = [];
+            for (const side of D.SIDES) {
+                if (side === 'exact') continue;
+                out.push({ type: 'wager', side, face: 0, min: this.minBet, max, label: t('dice.' + side) });
+            }
+            for (const face of D.FACES) {
+                out.push({
+                    type: 'wager', side: 'exact', face, min: this.minBet, max,
+                    label: t('dice.exactOf', { n: face }),
+                });
+            }
+            return out;
         }
 
         handle(action) {
             if (action.type !== 'wager') return false;
             const s = this.seats[action.seat];
             s.side = action.side;
+            s.face = action.face || 0;
             s.bet = Math.round(action.amount);
             s.coins -= s.bet;
             s.net -= s.bet;
-            this.emit('wager', { seat: action.seat, side: s.side, amount: s.bet });
+            this.emit('wager', { seat: action.seat, side: s.side, face: s.face, amount: s.bet });
 
             const next = this.nextSeat(action.seat);
             if (next >= 0) { this.turn = next; this.emit('betting', { seat: next }); return true; }
@@ -106,7 +119,7 @@
         settle() {
             for (const s of this.seats) {
                 if (s.out) continue;
-                if (D.wins(s.side, this.outcome)) {
+                if (D.wins(s.side, this.outcome, s.face)) {
                     s.outcome = 'win';
                     s.payout = s.bet + s.bet * D.PAYS[s.side];
                 } else {
@@ -115,13 +128,20 @@
                 }
                 s.coins += s.payout;
                 s.net += s.payout;
-                this.emit('settled', { seat: s.index, outcome: s.outcome, payout: s.payout });
+                // Not `settled` — the Table wrapper owns that name and the
+                // screen reads a result off it.
+                this.emit('paid', { seat: s.index, outcome: s.outcome, payout: s.payout });
             }
             this.phase = 'over';
             this.finish();
         }
 
         /* ---- the result ------------------------------------------------------ */
+
+        /** "围骰 三" or "大" — what a seat backed. */
+        sideName(s) {
+            return s.side === 'exact' ? t('dice.exactOf', { n: s.face }) : t('dice.' + s.side);
+        }
 
         /** "围骰 六" or "大 · 14" — what the throw came to. */
         name(result) {
@@ -144,15 +164,16 @@
                     score: won ? Math.min(500, 60 + D.PAYS[s.side] * 40) : 0,
                     ratio: s.bet ? Math.round((s.net / s.bet) * 1000) / 1000 : 0,
                     outcome: s.outcome,
-                    note: t('dice.backed', { side: t('dice.' + s.side) }),
+                    note: t('dice.backed', { side: this.sideName(s) }),
                     hands: [],
                     extra: {
                         diceRounds: 1,
                         diceWins: won ? 1 : 0,
                         diceBig: s.side === 'big' ? 1 : 0,
                         diceSmall: s.side === 'small' ? 1 : 0,
-                        diceTripleBets: s.side === 'triple' ? 1 : 0,
-                        diceTripleHits: (won && s.side === 'triple') ? 1 : 0,
+                        diceTripleBets: (s.side === 'triple' || s.side === 'exact') ? 1 : 0,
+                        diceTripleHits: (won && (s.side === 'triple' || s.side === 'exact')) ? 1 : 0,
+                        diceExactHits: (won && s.side === 'exact') ? 1 : 0,
                         diceSeen: this.outcome.type === 'triple' ? 1 : 0,
                         forfeits: 0,
                     },
@@ -193,7 +214,7 @@
         /** A seat's pick is its own until the dice are thrown. */
         redactSeat(seat, index, viewer) {
             if (index === viewer || this.phase !== 'betting') return seat;
-            return Object.assign({}, seat, { side: seat.side ? 'hidden' : null });
+            return Object.assign({}, seat, { side: seat.side ? 'hidden' : null, face: 0 });
         }
     }
 

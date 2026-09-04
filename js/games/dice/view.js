@@ -41,6 +41,7 @@
             this.session = session;
             this.bet     = null;
             this.side    = 'small';
+            this.face    = 1;        // which triple, when the bet names one
             this.landed  = false;
             this.timer   = null;
         }
@@ -113,7 +114,7 @@
                             ${show ? `<span class="badge ${s.outcome}">${esc(t('out.' + s.outcome))}</span>` : ''}
                         </div>
                         <div class="hand-meta">
-                            ${s.side ? `<span class="dice-pick is-${s.side}">${esc(t('dice.' + s.side))}</span>` : ''}
+                            ${s.side ? `<span class="dice-pick is-${s.side}">${esc(e.sideName(s))}</span>` : ''}
                             ${s.bet ? `<span class="bet">🪙 ${fmt(s.bet)}</span>` : ''}
                             ${show ? `<span class="${s.net > 0 ? 'good' : s.net < 0 ? 'bad' : ''}">${signed(s.net)}</span>` : ''}
                         </div>
@@ -149,14 +150,28 @@
             const chips = [opt.min, opt.min * 2, opt.min * 5, opt.max]
                 .filter((v, i, a) => v <= opt.max && a.indexOf(v) === i);
 
+            // Three plain sides, and a fourth that wants a number with it.
+            const sides = D.SIDES.map((side) => `
+                <button class="btn dice-side is-${side}${this.side === side ? ' is-on' : ''}"
+                    data-act="side" data-side="${side}">
+                    ${esc(t('dice.' + side))}<small>${esc(t('dice.pays', { n: D.PAYS[side] }))}</small>
+                </button>`).join('');
+
+            const faces = this.side !== 'exact' ? '' : `
+                <div class="dice-faces">
+                    <span class="muted small">${esc(t('dice.pickFace'))}</span>
+                    <div class="btn-row">
+                        ${D.FACES.map((n) => `
+                            <button class="dice-face${this.face === n ? ' is-on' : ''}"
+                                data-act="face" data-face="${n}" aria-label="${n}">
+                                ${dieHtml(n, { cls: 'is-small' })}
+                            </button>`).join('')}
+                    </div>
+                </div>`;
+
             host.innerHTML = `
-                <div class="btn-row dice-sides">
-                    ${options.map((o) => `
-                        <button class="btn dice-side is-${o.side}${this.side === o.side ? ' is-on' : ''}"
-                            data-act="side" data-side="${o.side}">
-                            ${esc(o.label)}<small>${esc(t('dice.pays', { n: D.PAYS[o.side] }))}</small>
-                        </button>`).join('')}
-                </div>
+                <div class="btn-row dice-sides">${sides}</div>
+                ${faces}
                 <div class="bet-box">
                     <div class="bet-amount">🪙 <b id="diceBetAmt">${fmt(this.bet)}</b>
                         <small class="muted">${esc(t('table.ofCoins', { n: fmt(s.coins) }))}</small></div>
@@ -182,6 +197,7 @@
         act(el) {
             const type = el.dataset.act;
             if (type === 'side') { this.side = el.dataset.side; this.paintActions(); return; }
+            if (type === 'face') { this.face = Number(el.dataset.face); this.paintActions(); return; }
             if (type === 'chip') {
                 const range = this.$('diceRange');
                 this.bet = Math.min(Number(range.max), Math.max(Number(range.min), Number(el.dataset.v)));
@@ -191,7 +207,10 @@
             }
             if (type === 'roll') {
                 this.session.lastBet = this.bet;
-                this.table.dispatch({ type: 'wager', seat: this.you, side: this.side, amount: this.bet });
+                this.table.dispatch({
+                    type: 'wager', seat: this.you, side: this.side,
+                    face: this.side === 'exact' ? this.face : 0, amount: this.bet,
+                });
                 this.bet = null;
             }
         }
