@@ -29,13 +29,24 @@
         AI:     CV.MahjongAI,
         View:   CV.MahjongView,
 
-        rules: ['mj.rule1', 'mj.rule2', 'mj.rule3', 'mj.rule4',
-                'mj.rule5', 'mj.rule6', 'mj.rule7', 'mj.rule8'],
+        // The table's stake is a coin value per 番, in the 0.20 / 0.50 / 1.00
+        // shape the game is normally played at, scaled by the room.
+        setupOptions: [{
+            key: 'unitStep',
+            label: 'mj.fanUnit',
+            note: 'mj.fanUnitNote',
+            def: 2,
+            choices: (room) => [2, 5, 10].map((n) => ({ value: n, label: '🪙 ' + (n * room.bet[0]) })),
+        }],
+
+        rules: ['mj.rule1', 'mj.rule2', 'mj.rule3', 'mj.rule4', 'mj.rule5',
+                'mj.rule6', 'mj.rule7', 'mj.rule8', 'mj.rule9', 'mj.rule10'],
 
         extraLabels: {
             mjRounds: 'Hands played', mjWins: 'Hands won', mjSelfDraw: '自摸',
             mjDealtIn: 'Dealt in', mjDraws: '流局', mjFan: 'Total 番',
-            mjBig: 'Hands of 8番 or more', mjKongs: 'Kongs', forfeits: 'Walked away',
+            mjBig: 'Hands of 8番 or more', mjBao: '爆番', mjKongs: 'Kongs',
+            forfeits: 'Walked away',
         },
 
         achievements: [
@@ -50,6 +61,8 @@
             { id: 'mj-pure', name: '清一色', icon: '🟩', desc: 'Win with every tile in one suit.',
               reward: { coins: 800, xp: 160 },
               check: (c) => c.entry.outcome === 'win' && /清一色|清碰|清七对/.test(c.mine.note || '') },
+            { id: 'mj-bao', name: '爆番', icon: '💥', desc: 'Win a hand of 10番 or more.',
+              reward: { coins: 1600, xp: 320 }, check: (c) => (c.gameStats.extra.mjBao || 0) >= 1 },
             { id: 'mj-wins-25', name: '雀士', icon: '🏮', desc: 'Win 25 hands of mahjong.',
               reward: { coins: 1500, xp: 300 }, check: (c) => (c.gameStats.extra.mjWins || 0) >= 25 },
         ],

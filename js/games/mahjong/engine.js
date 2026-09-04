@@ -41,17 +41,24 @@
     class MahjongEngine extends CV.GameEngine {
 
         static get code() { return 'mahjong'; }
-        static get publicConfig() { return ['room', 'players']; }
+        static get publicConfig() { return ['room', 'unitStep', 'players']; }
 
         static get defaults() {
-            return { room: 'beginner', shoe: null, keepDealerOnDraw: true };
+            // unitStep multiplies the room's base stake: 2, 5 or 10, which is
+            // the 0.20 / 0.50 / 1.00 shape the table is normally played at.
+            return { room: 'beginner', shoe: null, keepDealerOnDraw: true, unitStep: 2 };
         }
 
         constructor(opts) {
             super(opts);
             const room = CV.Registry.room(this.config.room);
-            this.stake = room.bet[0];
             this.players = this.seats.length;
+            this.profile = CV.MJPay.profileFor(this.players);
+            /** Coins one fan is worth at this table. */
+            this.unit = CV.MJPay.unitFor(this.players, room.bet[0], this.config.unitStep);
+            this.stake = this.unit;
+            this.bao = false;
+            this.payFan = 0;
 
             this.wall = [];
             this.lastDiscard = null;     // { tile, from }
@@ -77,6 +84,9 @@
                 s.lastAction = null;
             }
         }
+
+        /** The floor a hand has to clear before it may be declared at all. */
+        get minFan() { return this.profile.minFan; }
 
         /** East keeps the seat if East wins; otherwise it moves on. */
         get shoeState() {
@@ -119,8 +129,9 @@
 
             if (this.phase === 'discard') {
                 const out = [];
-                // 自摸 — the hand is already complete.
-                if (W.isWin(this.counts(seat), s.melds.length)) out.push({ type: 'win', label: t('mj.win') });
+                // 自摸 — the hand is complete AND worth enough to declare.
+                const mine = this.winFor(seat, null);
+                if (mine && mine.ok) out.push({ type: 'win', label: t('mj.win') });
                 for (const key of this.kongKeys(seat)) out.push({ type: 'kong', key, label: t('mj.kong') });
                 // Every tile is a legal throw, so every tile is listed.
                 for (const tile of s.hand) out.push({ type: 'discard', tile: tile.id });
@@ -200,8 +211,8 @@
                 const held = cnt.get(key) || 0;
                 const options = [];
 
-                const test = MJ.counts(s.hand.concat([tile]));
-                if (W.isWin(test, s.melds.length)) options.push({ type: 'win', label: t('mj.win') });
+                const hu = this.winFor(i, tile);
+                if (hu && hu.ok) options.push({ type: 'win', label: t('mj.win') });
                 if (held >= 3) options.push({ type: 'kong', label: t('mj.kong') });
                 if (held >= 2) options.push({ type: 'pung', label: t('mj.pung') });
 
@@ -344,40 +355,59 @@
          * @param {number} seat the winner
          * @param {number|null} from the seat that threw the tile, null for 自摸
          */
-        declareWin(seat, from) {
+        /**
+         * What `seat` would hold if it took `tile` — or what it holds now, for
+         * a self draw. `ok` is false when the shape wins but the hand does not
+         * clear the table's minimum, which is a real state the screen has to
+         * show: a winning hand you are not allowed to declare.
+         */
+        winFor(seat, tile) {
             const s = this.seats[seat];
-            const selfDraw = from === null;
-            const tiles = selfDraw ? s.hand.slice() : s.hand.concat([this.lastDiscard.tile]);
+            const tiles = tile ? s.hand.concat([tile]) : s.hand;
             const shape = W.isWin(MJ.counts(tiles), s.melds.length);
-            if (!shape) return false;
+            if (!shape) return null;
 
-            if (!selfDraw) this.seats[from].discards.pop();
-
-            const meldKeys = s.melds.flatMap((m) => m.tiles.map(MJ.key));
-            this.winner = seat;
-            this.winFrom = selfDraw ? -1 : from;
-            this.winTiles = tiles;
-            this.winHand = {
+            const hand = {
                 shape: shape.shape,
-                melds: s.melds.map((m) => ({ type: m.type, key: m.key }))
-                    .concat(shape.melds || []),
+                melds: s.melds.map((m) => ({ type: m.type, key: m.key })).concat(shape.melds || []),
                 pair: shape.pair,
-                keys: tiles.map(MJ.key).concat(meldKeys),
-                selfDraw,
+                keys: tiles.map(MJ.key).concat(s.melds.flatMap((m) => m.tiles.map(MJ.key))),
+                selfDraw: !tile,
                 menzen: s.melds.every((m) => m.concealed),
                 quad: !!shape.quad,
             };
-            this.fan = CV.MJFan.calculateFan(this.winHand);
+            const fan = CV.MJFan.calculateFan(hand);
+            return { shape, hand, fan, tiles, ok: CV.MJPay.canWin(this.players, fan.totalFan) };
+        }
 
-            const { deltas } = CV.MJPay.settle({
+        declareWin(seat, from) {
+            const selfDraw = from === null;
+            const got = this.winFor(seat, selfDraw ? null : this.lastDiscard.tile);
+            if (!got || !got.ok) return false;
+
+            if (!selfDraw) this.seats[from].discards.pop();
+
+            this.winner = seat;
+            this.winFrom = selfDraw ? -1 : from;
+            this.winTiles = got.tiles;
+            this.winHand = got.hand;
+            this.fan = got.fan;
+
+            // Fan first, then what it is worth. The two never meet.
+            const paid = CV.MJPay.settle({
                 players: this.players, winner: seat, from: this.winFrom,
-                dealer: this.dealer, fan: this.fan.totalFan, stake: this.stake,
+                fan: this.fan.totalFan, unit: this.unit,
             });
-            const paid = CV.MJPay.clamp(deltas, this.seats.map((x) => x.coins), seat);
-            this.seats.forEach((x, i) => { x.net = paid[i]; x.coins = x.startCoins + paid[i]; });
+            this.bao = paid.bao;
+            this.payFan = paid.payFan;
+            const net = CV.MJPay.clamp(paid.deltas, this.seats.map((x) => x.coins), seat);
+            this.seats.forEach((x, i) => { x.net = net[i]; x.coins = x.startCoins + net[i]; });
 
             this.phase = 'over';
-            this.emit('hu', { seat, from: this.winFrom, fan: this.fan, tiles });
+            this.emit('hu', {
+                seat, from: this.winFrom, fan: this.fan,
+                bao: this.bao, payFan: this.payFan, tiles: got.tiles,
+            });
             this.finish();
             return true;
         }
@@ -407,6 +437,7 @@
                     mjDraws: this.drawn ? 1 : 0,
                     mjFan: i === this.winner ? this.fan.totalFan : 0,
                     mjBig: (i === this.winner && this.fan.totalFan >= 8) ? 1 : 0,
+                    mjBao: (i === this.winner && this.bao) ? 1 : 0,
                     mjKongs: s.melds.filter((m) => m.type === 'kong').length,
                     forfeits: 0,
                 },
@@ -425,7 +456,7 @@
                         name: this.seats[this.winner].name,
                         how: t(this.winFrom < 0 ? 'mj.selfDraw' : 'mj.byDiscard'),
                         n: this.fan.totalFan,
-                    }),
+                    }) + (this.bao ? ' · ' + t('mj.bao', { n: this.payFan }) : ''),
             });
             return this.cached;
         }
@@ -441,7 +472,7 @@
                     tile: this.lastDiscard.tile, from: this.lastDiscard.from,
                 },
                 winner: this.winner, winFrom: this.winFrom, drawn: this.drawn,
-                fan: this.fan,
+                fan: this.fan, bao: this.bao, unit: this.unit, minFan: this.minFan,
             });
         }
 

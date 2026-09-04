@@ -513,3 +513,5 @@
 .mj-pick:not(:disabled):hover { transform: translateY(-6px); }
 .mj-pick:disabled { cursor: default; }
 .mj-pick:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.mj-min { color: var(--warn); font-size: .85rem; font-weight: 700; }
+.mj-short { color: var(--warn); font-weight: 700; }

@@ -1814,30 +1814,127 @@ function auditMahjong() {
 
     {
         const P = CV.MJPay;
-        // 自摸 with the dealer at seat 1: the dealer pays double.
-        const a = P.settle({ players: 4, winner: 0, from: -1, dealer: 1, fan: 2, stake: 10 });
-        check(a.deltas.join() === '80,-40,-20,-20', `mj: 自摸 paid ${a.deltas.join()}`);
-        // 放铳 with nobody at the dealer's seat involved: one payer, three shares.
-        const b = P.settle({ players: 4, winner: 0, from: 2, dealer: 3, fan: 2, stake: 10 });
-        check(b.deltas.join() === '60,0,-60,0', `mj: 放铳 paid ${b.deltas.join()}`);
-        // The same, with the winner on the button: doubled.
-        const c = P.settle({ players: 4, winner: 0, from: 2, dealer: 0, fan: 2, stake: 10 });
-        check(c.deltas.join() === '120,0,-120,0', `mj: the dealer's win paid ${c.deltas.join()}`);
-        // Three seats, three-player mode.
-        const d = P.settle({ players: 3, winner: 2, from: -1, dealer: 2, fan: 1, stake: 10 });
-        check(d.deltas.join() === '-20,-20,40', `mj: three-player 自摸 paid ${d.deltas.join()}`);
+
+        // The floor. Three seats need 5番 and four seats need nothing.
+        for (let fan = 1; fan <= 9; fan++) {
+            check(P.canWin(3, fan) === (fan >= 5), `mj: three seats at ${fan}番 should ${fan >= 5 ? '' : 'not '}win`);
+            check(P.canWin(4, fan) === true, `mj: four seats should have no minimum, ${fan}番 refused`);
+        }
+
+        // 爆番: ten or more settles at a flat twenty, whatever it scored.
+        for (const [fan, want, bao] of [[9, 9, false], [10, 20, true], [11, 20, true], [16, 20, true], [20, 20, true]]) {
+            const got = P.payFan(3, fan);
+            check(got.fan === want && got.bao === bao,
+                `mj: ${fan}番 settles at ${got.fan}番, wanted ${want}`);
+        }
+
+        // The table from the rules, cell by cell, at one 番 = 20 coins —
+        // the RM0.20 column with a hundred coins to the ringgit.
+        const TABLE = [
+            [5,  200, 200, 100],
+            [6,  240, 240, 120],
+            [7,  280, 280, 140],
+            [8,  320, 320, 160],
+            [9,  360, 360, 180],
+            [10, 800, 800, 400],
+            [16, 800, 800, 400],
+        ];
+        let cells = 0;
+        for (const [fan, each, thrower, other] of TABLE) {
+            const draw = P.settle({ players: 3, winner: 0, from: -1, fan, unit: 20 });
+            check(draw.deltas[1] === -each && draw.deltas[2] === -each,
+                `mj: ${fan}番 自摸 charged ${-draw.deltas[1]} each, wanted ${each}`);
+            check(draw.deltas[0] === each * 2, `mj: ${fan}番 自摸 paid the winner ${draw.deltas[0]}`);
+
+            const disc = P.settle({ players: 3, winner: 0, from: 1, fan, unit: 20 });
+            check(disc.deltas[1] === -thrower, `mj: ${fan}番 放铳者 paid ${-disc.deltas[1]}, wanted ${thrower}`);
+            check(disc.deltas[2] === -other, `mj: ${fan}番 bystander paid ${-disc.deltas[2]}, wanted ${other}`);
+            check(disc.deltas[0] === thrower + other, `mj: ${fan}番 放铳 paid the winner ${disc.deltas[0]}`);
+            cells += 3;
+        }
+        console.log(`  ${cells} payment cells checked against the table, 5番 to 爆番`);
+
+        // The other two stakes change the money and nothing else.
+        for (const [unit, base] of [[20, 100], [50, 250], [100, 500]]) {
+            const r = P.settle({ players: 3, winner: 0, from: -1, fan: 5, unit });
+            check(r.base === base && r.deltas[1] === -base * 2,
+                `mj: at a stake of ${unit} a 5番 自摸 charged ${-r.deltas[1]}, wanted ${base * 2}`);
+        }
+        // And they are the room's stake times 2, 5 and 10.
+        for (const step of [2, 5, 10]) {
+            check(P.unitFor(3, 10, step) === 10 * step, `mj: step ${step} priced a 番 wrongly`);
+        }
+
+        // Four seats settle their own way, and the two never mix.
+        const four = P.settle({ players: 4, winner: 0, from: -1, fan: 2, unit: 10 });
+        check(four.deltas.join() === '60,-20,-20,-20', `mj: four-seat 自摸 paid ${four.deltas.join()}`);
+        const fourD = P.settle({ players: 4, winner: 0, from: 2, fan: 2, unit: 10 });
+        check(fourD.deltas.join() === '60,0,-60,0', `mj: four-seat 放铳 paid ${fourD.deltas.join()}`);
+
+        // Every figure above is an integer, so nothing rounds.
+        for (const fan of [5, 6, 7, 8, 9, 10, 16]) {
+            for (const unit of [20, 50, 100]) {
+                const r = P.settle({ players: 3, winner: 0, from: -1, fan, unit });
+                check(r.deltas.every(Number.isInteger), 'mj: a payment came out fractional');
+            }
+        }
+
         // Nobody pays what they do not have.
-        const e = P.clamp([90, -30, -30, -30], [0, 5, 1000, 1000], 0);
-        check(e.join() === '65,-5,-30,-30', `mj: clamping paid ${e.join()}`);
-        check(e.reduce((n, x) => n + x, 0) === 0, 'mj: clamping is not zero-sum');
-        console.log('  ✓ 自摸 is paid by everyone, 放铳 by the thrower, and the dealer doubles either way');
+        const c = P.clamp([90, -30, -30, -30], [0, 5, 1000, 1000], 0);
+        check(c.join() === '65,-5,-30,-30', `mj: clamping paid ${c.join()}`);
+        check(c.reduce((n, x) => n + x, 0) === 0, 'mj: clamping is not zero-sum');
+        console.log('  ✓ 自摸 double from both, 放铳者 double and the other once, all in whole coins');
+    }
+
+    /* --- a hand that wins but may not be declared --------------------------- */
+
+    {
+        // 平胡, worth one 番, at a table that demands five.
+        const e = new game.Engine({
+            rng: new CV.RNG(21), config: { room: 'beginner' },
+            seats: [0, 1, 2].map((i) => new CV.Seat(i, { kind: 'ai', name: 'S' + i, coins: 5000 })),
+        });
+        e.start();
+        check(e.minFan === 5, `mj: three seats should demand 5番, demand ${e.minFan}`);
+        const s = e.seats[e.dealer];
+        s.hand = mjTiles('123s456s789s555p99p');
+        const got = e.winFor(e.dealer, null);
+        check(!!got, 'mj: 123s456s789s555p99p should be a winning shape');
+        check(got.fan.totalFan < 5, `mj: that hand is ${got.fan.totalFan}番, the test needs it under five`);
+        check(got.ok === false, 'mj: a hand under the minimum was declarable');
+        check(!e.legalActions(e.dealer).some((o) => o.type === 'win'),
+            'mj: 胡 was offered on a hand under the minimum');
+        check(e.declareWin(e.dealer, null) === false, 'mj: a hand under the minimum was declared anyway');
+
+        // The same shape in one suit clears it, and then it may be taken.
+        s.hand = mjTiles('11223344556677s');
+        const big = e.winFor(e.dealer, null);
+        check(big && big.ok, 'mj: 清七对 should clear a 5番 minimum');
+        check(big.fan.totalFan >= 8, `mj: 清七对 came to ${big && big.fan.totalFan}番`);
+        check(e.legalActions(e.dealer).some((o) => o.type === 'win'), 'mj: 胡 was not offered on 清七对');
+
+        // Four seats have no floor, so the same small hand stands.
+        const four = new game.Engine({
+            rng: new CV.RNG(22), config: { room: 'beginner' },
+            seats: [0, 1, 2, 3].map((i) => new CV.Seat(i, { kind: 'ai', name: 'S' + i, coins: 5000 })),
+        });
+        four.start();
+        check(four.minFan === 0, 'mj: four seats should have no minimum');
+        four.seats[four.dealer].hand = mjTiles('123s456s789s555p99p');
+        const small = four.winFor(four.dealer, null);
+        check(small && small.ok, 'mj: a 平胡 should stand at a four-seat table');
+        console.log('  ✓ 5番 or nothing at three seats, no floor at four');
     }
 
     /* --- whole hands, both modes -------------------------------------------- */
 
     const master = new CV.RNG(31415);
     for (const players of [4, 3]) {
-        const ROUNDS = Math.max(20, Math.round(HANDS / 60));
+        // Mahjong hands are long, and a three-player hand played for value is
+        // longer still, so this is deliberately a smaller sample than the card
+        // games get. It is enough to exercise every path.
+        const ROUNDS = players === 3 ? Math.max(12, Math.round(HANDS / 200))
+                                     : Math.max(15, Math.round(HANDS / 150));
         const t0 = Date.now();
         let wins = 0, draws = 0, selfDraws = 0, kongs = 0, claims = 0, fanTotal = 0;
 
@@ -1908,6 +2005,10 @@ function auditMahjong() {
                 wins++;
                 fanTotal += e.fan.totalFan;
                 check(e.fan.totalFan >= 1, 'mj: a winning hand worth no 番 at all');
+                check(e.fan.totalFan >= e.minFan,
+                    `mj: a ${e.fan.totalFan}番 hand was declared at a ${e.minFan}番 table`);
+                check(e.bao === (e.fan.totalFan >= 10), 'mj: 爆番 disagrees with the 番 count');
+                if (e.bao) check(e.payFan === 20, `mj: 爆番 settled at ${e.payFan}番`);
                 check(!!W.isWin(MJ.counts(e.winTiles), e.seats[e.winner].melds.length),
                     'mj: the declared winner does not hold a winning hand');
                 if (e.winFrom < 0) selfDraws++;
@@ -1917,7 +2018,8 @@ function auditMahjong() {
             }
         }
         console.log(`  ${players}-player: ${ROUNDS} hands, ${Date.now() - t0} ms — `
-            + `${wins} won (${selfDraws} 自摸), ${draws} 流局, avg ${(fanTotal / Math.max(1, wins)).toFixed(1)}番`);
+            + `${wins} won (${selfDraws} 自摸), ${draws} 流局, avg ${(fanTotal / Math.max(1, wins)).toFixed(1)}番`
+            + (players === 3 ? ` · 一番 🪙 ${CV.MJPay.unitFor(3, 10, 2)} minimum 5番` : ''));
         console.log(`    ${claims} tiles claimed, ${kongs} kongs`);
         check(wins > 0, `mj: nobody ever won a ${players}-player hand`);
     }

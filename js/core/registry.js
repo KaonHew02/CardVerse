@@ -44,6 +44,9 @@
          * @param {Function} game.Engine  extends CV.GameEngine
          * @param {Function} [game.AI]    extends CV.AIPlayer
          * @param {Function} game.View    builds the table screen
+         * @param {object[]} [game.setupOptions] table settings the player picks
+         *        before sitting: { key, label, note, def, choices(room) }. Each
+         *        chosen value is passed straight into the engine's config.
          * @param {boolean} [game.wagers] true if the game takes a bet per hand
          * @param {boolean} [game.ready]  false parks it in the lobby as "Coming soon"
          */

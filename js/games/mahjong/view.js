@@ -133,7 +133,9 @@
             const e = this.engine;
             this.$('mjCentre').innerHTML = `
                 <span class="pile-label">${esc(t('mj.wall', { n: e.wallLeft }))}</span>
-                <span class="mj-mode">${esc(t('mj.mode', { n: e.players }))}</span>`;
+                <span class="mj-mode">${esc(t('mj.mode', { n: e.players }))}</span>
+                <span class="mj-mode">${esc(t('mj.unit', { n: e.unit }))}</span>
+                ${e.minFan ? `<span class="mj-min">${esc(t('mj.min', { n: e.minFan }))}</span>` : ''}`;
         }
 
         paintStatus() {
@@ -151,6 +153,14 @@
                 return;
             }
             if (e.turn === this.you) {
+                // A hand that wins but does not clear the floor is the one
+                // state a player will not work out on their own.
+                const mine = e.winFor(this.you, null);
+                if (mine && !mine.ok) {
+                    host.innerHTML = `<span class="mj-short">${esc(t('mj.short', {
+                        have: mine.fan.totalFan, need: e.minFan }))}</span>`;
+                    return;
+                }
                 host.innerHTML = `<span class="you">${esc(t('mj.yourTurn'))}</span>`;
                 return;
             }
@@ -165,6 +175,10 @@
             const mine = e.turn === this.you && e.phase === 'discard' && !e.over;
 
             host.innerHTML = `
+                <div class="hand-head">
+                    <span class="tag mj-wind${this.you === e.dealer ? ' is-dealer' : ''}">${this.windOf(this.you)}</span>
+                    <span class="seat-count">${esc(t('mj.wall', { n: e.wallLeft }))}</span>
+                </div>
                 <div class="mj-melds mine">${s.melds.map((m) => this.meldHtml(m)).join('')}</div>
                 <div class="mj-mine">
                     ${s.hand.map((tile) => `<button class="mj-pick" ${mine ? '' : 'disabled'}

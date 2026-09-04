@@ -36,7 +36,7 @@ keeps it a game hub.
 | 👑 **斗地主** | ✅ bidding, every combination, bombs, 春天 and 反春 |
 | 🂡 **锄大D** | ✅ 3♦ opens, suits decide, five-card categories |
 | ♠️ **Poker** | ✅ Hold'em — blinds, four betting rounds, all-in side pots |
-| 🀄 **Mahjong** | ✅ 136 or 108 tiles, chow/pung/kong, 番 with overlap rules |
+| 🀄 **Mahjong** | ✅ 136 or 108 tiles, 番 with overlap rules, 5番 floor and 爆番 at three seats |
 | 🐮 斗牛 | ⏳ next |
 | How-to-play card before a first hand | ✅ per game, in both languages |
 | Online multiplayer | ⏳ Phase 5 — see `js/core/transport.js` |

@@ -24,7 +24,7 @@
     let table   = null;
     let view    = null;
 
-    function begin({ gameCode, room: roomId, aiCount }) {
+    function begin({ gameCode, room: roomId, aiCount, opts }) {
         const game = CV.Registry.get(gameCode);
         const room = CV.Registry.room(roomId);
         const p    = CV.Profile.get();
@@ -40,7 +40,8 @@
             .map((b) => ({ kind: 'ai', name: b.name, avatar: b.avatar, coins: room.bet[1] * 30 }));
         seats.push({ kind: 'human', isYou: true, name: p.name, avatar: p.avatar, coins: p.coins });
 
-        session = { game, gameCode, room, seats, shoe: null, lastBet: null, hands: 0, aiStack: room.bet[1] * 30 };
+        session = { game, gameCode, room, seats, opts: opts || {},
+                    shoe: null, lastBet: null, hands: 0, aiStack: room.bet[1] * 30 };
         CV.UI.go('table');
         return true;
     }
@@ -66,7 +67,7 @@
         table = new CV.Table({
             gameCode: session.gameCode,
             seats: session.seats.map((s, i) => new CV.Seat(i, s)),
-            config: { room: session.room.id, shoe: session.shoe },
+            config: Object.assign({ room: session.room.id, shoe: session.shoe }, session.opts),
         });
         table.speed = CV.Settings.get().fastAnim ? 0.4 : 1;
 

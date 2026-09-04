@@ -84,7 +84,9 @@
             game,
             room: CV.Registry.roomsFor(code)[0].id,
             ai:   Math.min(maxOthers, Math.max(minOthers, S.aiCount)),
+            opts: {},
         };
+        for (const opt of (game.setupOptions || [])) setup.opts[opt.key] = opt.def;
         paintSetup();
     }
 
@@ -141,6 +143,19 @@
                 <p class="muted small">${esc(t('setup.aiNote'))}</p>
             </div>`}
 
+            ${(game.setupOptions || []).map((opt) => `
+            <div class="card-panel">
+                <h3>${esc(t(opt.label))}</h3>
+                <div class="row-opt">
+                    <div class="seg" data-opt="${opt.key}">
+                        ${opt.choices(CV.Registry.room(setup.room), setup).map((c) => `
+                            <button class="${setup.opts[opt.key] === c.value ? 'is-on' : ''}"
+                                data-val="${c.value}">${esc(c.label)}</button>`).join('')}
+                    </div>
+                </div>
+                ${opt.note ? `<p class="muted small">${esc(t(opt.note))}</p>` : ''}
+            </div>`).join('')}
+
             <div class="btn-row">
                 <button class="btn ghost" id="setupRules">📖 ${esc(t('rules.again'))}</button>
             </div>
@@ -153,6 +168,10 @@
         const body = $('setupBody');
         body.querySelectorAll('[data-room]').forEach((b) => b.addEventListener('click', () => { setup.room = b.dataset.room; paintSetup(); }));
         body.querySelectorAll('[data-ai]').forEach((b) => b.addEventListener('click', () => { setup.ai = Number(b.dataset.ai); paintSetup(); }));
+        body.querySelectorAll('[data-opt] [data-val]').forEach((b) => b.addEventListener('click', () => {
+            setup.opts[b.parentElement.dataset.opt] = Number(b.dataset.val);
+            paintSetup();
+        }));
         // A solo machine has no seats to fill.
         if (maxOthers === 0) setup.ai = 0;
         $('setupStart').addEventListener('click', start);
@@ -161,7 +180,8 @@
 
     function start() {
         CV.Settings.set('aiCount', setup.ai);
-        const go = () => CV.Play.begin({ gameCode: setup.game.code, room: setup.room, aiCount: setup.ai });
+        const go = () => CV.Play.begin({ gameCode: setup.game.code, room: setup.room,
+                                        aiCount: setup.ai, opts: Object.assign({}, setup.opts) });
 
         // A first-timer reads the rules before the money is on the table,
         // not after a payout they did not expect.
