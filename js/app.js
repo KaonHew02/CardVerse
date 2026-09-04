@@ -20,7 +20,6 @@
         // Blackjack is deliberately absent: 21 covers the same table, and
         // 百家乐 took its place in the lineup. Its engine still loads, because
         // 21 is built on it.
-        R.stub('poker',      'Poker',  '♠️', "Texas Hold'em. Best five of seven.", [2, 9]);
         R.stub('bullbull',   '斗牛',   '🐮', 'Bull Bull. Three to ten, two to score.', [2, 6]);
         R.stub('mahjong',    'Mahjong', '🀄', 'Hong Kong style. Four sets and a pair.', [4, 4]);
     }

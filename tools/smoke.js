@@ -49,6 +49,8 @@ function load(rel) {
     'js/games/baccarat/engine.js', 'js/games/baccarat/ai.js', 'js/games/baccarat/index.js',
     'js/games/slots/engine.js', 'js/games/slots/index.js',
     'js/games/dragongate/engine.js', 'js/games/dragongate/index.js',
+    'js/games/poker/hands.js', 'js/games/poker/engine.js',
+    'js/games/poker/ai.js', 'js/games/poker/index.js',
     'js/games/bigtwo/combos.js', 'js/games/bigtwo/engine.js',
     'js/games/bigtwo/ai.js', 'js/games/bigtwo/index.js',
     'js/games/doudizhu/combos.js', 'js/games/doudizhu/engine.js',
@@ -210,7 +212,7 @@ console.log(`CardVerse smoke — ${HANDS} hands per game\n`);
  * playing each other for points rather than a table paying out. Each has its
  * own audit further down.
  */
-const OWN_AUDIT = new Set(['slots', 'dragongate', 'doudizhu', 'bigtwo']);
+const OWN_AUDIT = new Set(['slots', 'dragongate', 'doudizhu', 'bigtwo', 'poker']);
 
 for (const game of CV.Registry.playable()) {
     if (!game.AI || OWN_AUDIT.has(game.code)) continue;
@@ -1342,6 +1344,292 @@ function auditB2Tricks(e) {
     }
 }
 auditBigTwo();
+
+/* ---- Texas Hold'em ------------------------------------------------------ */
+
+const PK_RANKS = { '2': 2, '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, '8': 8, '9': 9,
+                   '10': 10, 'J': 11, 'Q': 12, 'K': 13, 'A': 14 };
+let pkUid = 0;
+function pkCards(str) {
+    return str.split(/\s+/).filter(Boolean).map((tok) => {
+        const s = tok.slice(-1), r = PK_RANKS[tok.slice(0, -1)];
+        if (r === undefined || !'SHDC'.includes(s)) throw new Error('bad card ' + tok);
+        return { r, s, id: 'p' + (pkUid++) };
+    });
+}
+
+/**
+ * The evaluator, checked against the deck itself.
+ *
+ * Every one of the 2,598,960 five-card hands is dealt and named, and the
+ * counts are compared to the combinatorial table. There is no sampling and no
+ * judgement in it: if a single hand of any kind is misread the totals move,
+ * and a wheel that is not recognised or a Q-K-A-2-3 that is would both show
+ * up here as a straight count that is not 10,200.
+ */
+function auditPokerHands() {
+    const H = CV.PokerHands;
+    const deck = [];
+    for (const s of ['S', 'H', 'D', 'C']) for (let r = 2; r <= 14; r++) deck.push({ r, s, id: s + r });
+
+    const WANT = {
+        ROYAL_FLUSH: 4, STRAIGHT_FLUSH: 36, FOUR_OF_A_KIND: 624, FULL_HOUSE: 3744,
+        FLUSH: 5108, STRAIGHT: 10200, THREE_OF_A_KIND: 54912, TWO_PAIR: 123552,
+        ONE_PAIR: 1098240, HIGH_CARD: 1302540,
+    };
+    const tally = {};
+    const five = new Array(5);
+    const t0 = Date.now();
+    for (let a = 0; a < 48; a++) for (let b = a + 1; b < 49; b++)
+    for (let c = b + 1; c < 50; c++) for (let d = c + 1; d < 51; d++)
+    for (let e = d + 1; e < 52; e++) {
+        five[0] = deck[a]; five[1] = deck[b]; five[2] = deck[c]; five[3] = deck[d]; five[4] = deck[e];
+        const name = H.score5(five).name;
+        tally[name] = (tally[name] || 0) + 1;
+    }
+    let total = 0;
+    for (const [name, want] of Object.entries(WANT)) {
+        check(tally[name] === want, `poker: ${tally[name]} ${name}, the deck holds ${want}`);
+        total += tally[name] || 0;
+    }
+    check(total === 2598960, `poker: ${total} hands named, the deck holds 2,598,960`);
+    console.log(`  all 2,598,960 five-card hands named in ${Date.now() - t0} ms, `
+        + 'every count matching the deck');
+}
+
+function auditPoker() {
+    console.log('\n♠️ Texas Hold\'em');
+    const game = CV.Registry.get('poker');
+    const H = CV.PokerHands;
+
+    auditPokerHands();
+
+    /* --- the named cases from the rules ----------------------------------- */
+
+    const named = (str) => H.score5(pkCards(str)).name;
+    const TABLE = [
+        ['10S JS QS KS AS',  'ROYAL_FLUSH'],
+        ['5S 6S 7S 8S 9S',   'STRAIGHT_FLUSH'],
+        ['AS 2S 3S 4S 5S',   'STRAIGHT_FLUSH'],   // the wheel, suited
+        ['KS KH KD KC 7D',   'FOUR_OF_A_KIND'],
+        ['QS QH QD 8C 8D',   'FULL_HOUSE'],
+        ['AS 9S 7S 5S 2S',   'FLUSH'],
+        ['5S 6D 7C 8H 9S',   'STRAIGHT'],
+        ['AS 2D 3C 4H 5S',   'STRAIGHT'],          // the ace plays as a one
+        ['8S 8H 8D KC 3D',   'THREE_OF_A_KIND'],
+        ['KS KH 7D 7C AS',   'TWO_PAIR'],
+        ['10S 10H AD 8C 3S', 'ONE_PAIR'],
+        ['AS 10H 8D 5C 2S',  'HIGH_CARD'],
+        // The ace does not wrap.
+        ['QS KH AD 2C 3S',   'HIGH_CARD'],
+        ['KS AH 2D 3C 4S',   'HIGH_CARD'],
+    ];
+    for (const [cards, want] of TABLE) {
+        check(named(cards) === want, `poker: "${cards}" read as ${named(cards)}, wanted ${want}`);
+    }
+    // The wheel is a five-high, the lowest straight there is.
+    check(H.score5(pkCards('AS 2D 3C 4H 5S')).tie[0] === 5, 'poker: the wheel must be a five-high straight');
+    check(H.compare(H.score5(pkCards('2S 3D 4C 5H 6S')), H.score5(pkCards('AS 2D 3C 4H 5S'))) > 0,
+        'poker: a six-high straight must beat the wheel');
+    console.log(`  ${TABLE.length} named hands, the wheel and the two that do not wrap`);
+
+    /* --- kickers and ties -------------------------------------------------- */
+
+    const cmp = (a, b) => H.compare(H.score5(pkCards(a)), H.score5(pkCards(b)));
+    const COMPARE = [
+        ['AS AH KD QC JS',  'AD AC KH QS 10D',  1],   // the last kicker decides
+        ['KS KH 7D 7C AS',  'QS QH JD JC AS',   1],   // the higher pair first
+        ['10S 10H 10D 4C 4S', 'JS JH JD 2C 2S', -1],  // the triple decides a full house
+        ['9S 9H 9D 9C 3S',  '7S 7H 7D 7C AS',   1],
+        ['AS KS QS JS 9S',  'AH KH QH JH 8H',   1],   // the flush cascade
+        ['AS KD QC JH 10S', 'AH KS QD JC 10H',  0],   // suits do not break a tie
+        ['KS KH 2D 3C 4S',  'QS QH AD KC JS',   1],   // the higher pair, kickers ignored
+        ['2S 2H 3D 4C 5S',  'AS KD QC JH 9S',   1],   // the smallest pair beats any high card
+        ['AS AH AD KC KS',  'AS AH AD 2C 2S',   1],   // the pair breaks a full-house tie
+    ];
+    for (const [a, b, want] of COMPARE) {
+        const got = Math.sign(cmp(a, b));
+        check(got === want, `poker: "${a}" v "${b}" gave ${got}, wanted ${want}`);
+    }
+
+    /* --- seven cards, and the two rules people get wrong -------------------- */
+
+    // A board that is already the best hand belongs to everyone in it.
+    const royalBoard = pkCards('AS KS QS JS 10S');
+    const junk = pkCards('2D 3C');
+    check(H.evaluate(junk.concat(royalBoard)).name === 'ROYAL_FLUSH',
+        'poker: the board alone must be playable — a royal on the table is a royal');
+
+    // The best five of seven, not all seven.
+    const best = H.evaluate(pkCards('AS AD').concat(pkCards('AH KC KD 7S 2C')));
+    check(best.name === 'FULL_HOUSE' && best.tie[0] === 14 && best.tie[1] === 13,
+        `poker: A A A K K should be aces full of kings, got ${best.name}`);
+
+    // One hole card is enough.
+    const oneCard = H.evaluate(pkCards('AS 2C').concat(pkCards('KS QS JS 9S 3D')));
+    check(oneCard.name === 'FLUSH' && oneCard.tie[0] === 14,
+        'poker: one hole card must be usable on its own');
+    console.log('  ✓ best five of seven, with both hole cards, one, or neither');
+
+    /* --- side pots, exactly as the rules set them out ----------------------- */
+
+    {
+        // Player A all-in for 50, B and C all-in for 100.
+        const e = new game.Engine({
+            rng: new CV.RNG(11), config: { room: 'beginner' },
+            seats: [50, 100, 100].map((c, i) => new CV.Seat(i, { kind: 'ai', name: 'S' + i, coins: c })),
+        });
+        e.start();
+        check(e.seats[e.sbSeat].committed === e.sb, 'poker: the small blind was not posted');
+        check(e.seats[e.bbSeat].committed === e.bb, 'poker: the big blind was not posted');
+
+        e.apply({ type: 'raise', seat: e.turn, amount: 50 });
+        e.apply({ type: 'raise', seat: e.turn, amount: 100 });
+        e.apply({ type: 'call',  seat: e.turn, amount: e.currentBet - e.seats[e.turn].bet });
+
+        check(e.isOver(), 'poker: an all-in table should have run to the end');
+        check(e.pots.length === 2, `poker: ${e.pots.length} pots, wanted a main and a side`);
+        check(e.pots[0].amount === 150, `poker: main pot ${e.pots[0].amount}, wanted 150`);
+        check(e.pots[0].eligible.length === 3, 'poker: everyone should contest the main pot');
+        check(e.pots[1].amount === 100, `poker: side pot ${e.pots[1].amount}, wanted 100`);
+        check(e.pots[1].eligible.join() === '1,2', 'poker: the short stack must not contest the side pot');
+        check(e.seats[0].stack <= 150, 'poker: the short stack won chips it never covered');
+        console.log('  ✓ side pots: 50 / 100 / 100 makes a main of 150 and a side of 100');
+    }
+
+    /* --- an uncalled bet comes back ---------------------------------------- */
+
+    {
+        const e = new game.Engine({
+            rng: new CV.RNG(12), config: { room: 'beginner' },
+            seats: [200, 200].map((c, i) => new CV.Seat(i, { kind: 'ai', name: 'S' + i, coins: c })),
+        });
+        e.start();
+        const raiser = e.turn;
+        e.apply({ type: 'raise', seat: raiser, amount: 100 });
+        e.apply({ type: 'fold',  seat: e.turn });
+        check(e.isOver(), 'poker: everyone folded but the hand did not end');
+        check(e.seats[raiser].net === e.bb, `poker: the raiser netted ${e.seats[raiser].net}, wanted ${e.bb}`);
+        check(e.seats[raiser].net + e.seats[1 - raiser].net === 0, 'poker: chips appeared from nowhere');
+        console.log('  ✓ an uncalled bet is returned before the pot is paid');
+    }
+
+    /* --- whole hands -------------------------------------------------------- */
+
+    const HANDS_PK = Math.max(200, Math.round(HANDS / 4));
+    const master = new CV.RNG(60606);
+    const t0 = Date.now();
+    let showdowns = 0, allIns = 0, splits = 0, folds = 0, biggest = 0;
+
+    for (let g = 0; g < HANDS_PK; g++) {
+        // Two to nine, the whole range the rules allow — heads-up and a
+        // full table behave differently and both have to hold.
+        const n = master.range(2, 9);
+        const room = CV.Registry.ROOMS[master.int(4)].id;
+        const chips = Array.from({ length: n }, () => master.range(40, 4000));
+        const e = new game.Engine({
+            rng: new CV.RNG(master.int(1e9)), config: { room, shoe: { dealer: master.int(n) } },
+            seats: chips.map((c, i) => new CV.Seat(i, { kind: 'ai', name: 'S' + i, coins: c, isYou: i === 0 })),
+        });
+        const ai = new game.AI(e);
+        e.start();
+        if (e.isOver() && !e.board.length && !e.seats.some((s) => s.hole.length)) continue;   // nobody could sit
+
+        const chipsBefore = e.seats.reduce((t, s) => t + s.startStack, 0);
+        let steps = 0;
+        while (!e.isOver()) {
+            const seat = e.turn;
+            const options = e.legalActions(seat);
+            check(options.length > 0, `poker: seat ${seat} is to act with nothing it may do`);
+            const action = ai.decide(seat);
+            check(!!action, 'poker: the AI had nothing to do');
+            if (!action) break;
+            check(e.apply(action), `poker: engine refused ${JSON.stringify(action)} in ${e.phase}`);
+            if (++steps > 300) { check(false, 'poker: a hand ran past 300 actions'); break; }
+        }
+
+        // Chips are conserved and no stack goes negative.
+        const chipsAfter = e.seats.reduce((t, s) => t + s.stack, 0);
+        check(chipsAfter === chipsBefore, `poker: ${chipsBefore} chips became ${chipsAfter}`);
+        check(e.seats.every((s) => s.stack >= 0), 'poker: a stack went negative');
+        check(e.seats.reduce((t, s) => t + s.net, 0) === 0, 'poker: the table is not zero-sum');
+        for (const s of e.seats) check(s.coins === s.startCoins + s.net, 'poker: coins do not reconcile');
+
+        // The pot is exactly what was put into it, and it is all paid out.
+        const inPot = e.seats.reduce((t, s) => t + s.committed, 0);
+        const paid = e.seats.reduce((t, s) => t + s.won, 0);
+        check(paid === inPot, `poker: ${inPot} chips in the pot, ${paid} paid out`);
+        check(e.pots.reduce((t, p) => t + p.amount, 0) === inPot, 'poker: the side pots do not add up');
+
+        // Board length matches the street it stopped on.
+        check([0, 3, 4, 5].includes(e.board.length), `poker: ${e.board.length} community cards`);
+        check(new Set(e.board.concat(e.seats.flatMap((s) => s.hole)).map((c) => c.id)).size
+            === e.board.length + e.seats.reduce((t, s) => t + s.hole.length, 0),
+            'poker: a card was dealt twice');
+
+        // Whoever took a pot had the best hand of those entitled to it. A
+        // hand that ended before the river has no hands to compare — the last
+        // player standing takes it without showing.
+        for (const pot of e.pots) {
+            if (e.showing) {
+                for (const w of pot.winners) {
+                    for (const i of pot.eligible) {
+                        check(H.compare(e.seats[w].hand, e.seats[i].hand) >= 0,
+                            'poker: a pot went to a hand that was beaten');
+                    }
+                }
+            } else {
+                check(pot.winners.every((w) => !e.seats[w].folded),
+                    'poker: a pot went to a seat that had folded');
+            }
+            if (pot.winners.length > 1) splits++;
+        }
+
+        // The button moves on.
+        check(e.shoeState.dealer === (e.dealer + 1) % n, 'poker: the button did not move');
+
+        if (e.showing) showdowns++; else folds++;
+        if (e.seats.some((s) => s.allIn)) allIns++;
+        biggest = Math.max(biggest, ...e.seats.map((s) => s.won));
+    }
+
+    console.log(`  ${HANDS_PK} hands, ${Date.now() - t0} ms — ${showdowns} showdowns, `
+        + `${folds} won by folding, ${allIns} with someone all-in, ${splits} split pots`);
+    console.log(`  biggest pot taken: ${biggest.toLocaleString('en-US')}`);
+    check(showdowns > 0 && folds > 0, 'poker: hands only ever end one way');
+    check(allIns > 0, 'poker: nobody ever went all-in, so side pots were never exercised');
+
+    /* --- what a host may broadcast ------------------------------------------ */
+
+    {
+        const e = new game.Engine({
+            rng: new CV.RNG(7), config: { room: 'beginner' },
+            seats: [0, 1, 2].map((i) => new CV.Seat(i, { kind: 'ai', name: 'S' + i, coins: 1000, isYou: i === 0 })),
+        });
+        e.start();
+        for (let viewer = 0; viewer < 3; viewer++) {
+            const view = e.snapshotFor(viewer);
+            const wire = JSON.stringify(view);
+            check(!view.rng, 'poker: the snapshot carries the RNG');
+            view.seats.forEach((seat, i) => {
+                if (i === viewer) check(seat.hole.every(Boolean), 'poker: your own cards were redacted from you');
+                else check(seat.hole.every((c) => c === null), 'poker: another seat\'s hole cards went out');
+            });
+            for (const card of e.deck.cards.slice(-8)) {
+                check(!wire.includes('"' + card.id + '"'),
+                    `poker: an undealt card (${card.id}) is in the broadcast`);
+            }
+        }
+    }
+    console.log('  ✓ no hole card but your own, and nothing still in the deck');
+
+    for (const key of game.rules) check(CV.t(key) !== key, `poker: rule key ${key} has no text`);
+    for (const name of Object.keys(H.CAT)) {
+        check(CV.t('pk.hand.' + name) !== 'pk.hand.' + name, `poker: ${name} has no name`);
+    }
+    console.log('  ✓ rules card and every hand name resolve');
+}
+auditPoker();
 
 /* ---- what a host is allowed to broadcast ------------------------------- */
 

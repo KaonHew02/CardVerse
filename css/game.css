@@ -431,3 +431,30 @@
 
 /* The 3♦ has to be in the opening play, so it says so. */
 .fan-card.is-must .card { box-shadow: 0 0 0 2px var(--good), 0 4px 10px rgba(0,0,0,.45); }
+
+/* ---- Texas Hold'em ----------------------------------------------------- */
+
+.pk { display: flex; flex-direction: column; gap: 12px; min-height: 60vh; }
+.pk-seats { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; align-items: flex-start; }
+.pk-seat { flex: 0 1 210px; max-width: 230px; }
+.pk-seat .hand { justify-content: flex-start; margin: 4px 0; }
+.pk-line { display: flex; align-items: center; gap: 8px; min-height: 1.5em; font-size: .85rem; }
+.pk-bet { margin-left: auto; color: var(--accent); font-weight: 700; }
+/* The button and the blinds, so position is readable at a glance. */
+.pk-btn   { margin-left: auto; background: #fff; color: #111; font-weight: 900; }
+.pk-blind { margin-left: auto; background: rgba(255,255,255,.18); color: #fff; }
+
+.pk-middle { display: flex; flex-direction: column; align-items: center; gap: 8px; margin: 6px 0; }
+.pk-pot { display: flex; align-items: center; gap: 10px; }
+.pk-potv { font-size: 1.35rem; color: var(--accent); }
+.pk-board { display: flex; gap: 6px; justify-content: center; }
+
+.pk-you { display: flex; flex-direction: column; align-items: center; gap: 6px; margin-top: auto; }
+.pk-hole .hand .card { margin-left: 4px; }
+.pk-hole .hand .card:first-child { margin-left: 0; }
+.pk-mine { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: center; }
+.pk-mine .pk-btn, .pk-mine .pk-blind { margin-left: 0; }
+
+.pk-raise { display: flex; flex-direction: column; align-items: center; gap: 6px; width: min(420px, 100%); }
+.pk-raise input[type="range"] { width: 100%; }
+.pk-raise .chips { margin: 0; gap: 6px; }

@@ -40,8 +40,11 @@
     .bj-actions .bet-box { padding: 8px 10px; gap: 6px; background: none; }
     .bj-actions .bet-amount { font-size: 1.1rem; }
 
-    /* Room for it, so the last seat is never trapped underneath. */
-    body[data-screen="table"] main { padding-bottom: 190px; }
+    /* Room for it, so the last seat is never trapped underneath. Hold'em's
+     * bar carries a slider and a row of chips as well as the buttons, so it
+     * is the tallest and sets the figure. */
+    body[data-screen="table"] main { padding-bottom: 200px; }
+    body[data-screen="table"] main:has(.pk) { padding-bottom: 250px; }
     .bj, .ddz { min-height: 0; }
     /* Narrow screens give the hands column almost nothing once the name and
      * two figures have taken their share. */
@@ -111,4 +114,15 @@
     .b2-row .b2-opp:last-child  { grid-area: r; }
     .b2-centre { grid-area: mid; }
     .b2 { min-height: 0; }
+}
+
+@media (max-width: 720px) {
+    /* Two seats a row, and the board stays one row of five — a wrapped board
+     * is not a board. */
+    .pk { min-height: 0; }
+    .pk-seat { flex: 1 1 46%; max-width: none; }
+    .pk-board { gap: 3px; }
+    .pk-potv { font-size: 1.15rem; }
+    .bj-actions .pk-raise { gap: 4px; }
+    .pk-raise .chips .chip { width: 42px; height: 42px; font-size: .68rem; }
 }

@@ -35,7 +35,8 @@ keeps it a game hub.
 | 🐉 **射龙门** | ✅ ace low, 压线 loses, equal posts ask 大过/小过, price from the pack |
 | 👑 **斗地主** | ✅ bidding, every combination, bombs, 春天 and 反春 |
 | 🂡 **锄大D** | ✅ 3♦ opens, suits decide, five-card categories |
-| ♠️ Poker · 🐮 斗牛 · 🀄 Mahjong | ⏳ next |
+| ♠️ **Poker** | ✅ Hold'em — blinds, four betting rounds, all-in side pots |
+| 🐮 斗牛 · 🀄 Mahjong | ⏳ next |
 | How-to-play card before a first hand | ✅ per game, in both languages |
 | Online multiplayer | ⏳ Phase 5 — see `js/core/transport.js` |
 
@@ -70,6 +71,7 @@ js/games/<game>/      engine.js · ai.js · view.js · index.js (registers itsel
   dragongate/         射龙门 — the gate is priced from the cards left
   doudizhu/           斗地主 — combos.js is the rules, engine.js the round
   bigtwo/             锄大D — suits matter here, and there are no bombs
+  poker/              Hold'em — hands.js evaluates, engine.js runs the betting
 js/ui/                shell · lobby · play · result · profile · achievements ·
                       statistics · leaderboard · missions · settings · cardview
 js/save.js            Export / Import envelope
