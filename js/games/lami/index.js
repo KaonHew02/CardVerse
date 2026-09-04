@@ -18,10 +18,31 @@
 
     const CV = window.CV;
 
+    /**
+     * A joker card, drawn rather than borrowed. 🃏 is already 21's icon and
+     * the Unicode playing cards render as thin hollow outlines at tile size,
+     * so this is a solid card with a jester's cap on it.
+     */
+    const ICON =
+        '<svg class="icon-card" viewBox="0 0 26 36" aria-label="Joker">' +
+        '<rect x="1" y="1" width="24" height="34" rx="4" fill="#fff"/>' +
+        // The cap, and three points that droop outwards — a crown's points
+        // stand straight up, and 斗地主 already has the crown.
+        '<path d="M7.5 24 Q7.5 15 13 14 Q18.5 15 18.5 24 Z" fill="#c62828"/>' +
+        '<path d="M8.5 19 Q4.5 17.5 4.8 13" stroke="#c62828" stroke-width="2.6" ' +
+        'fill="none" stroke-linecap="round"/>' +
+        '<path d="M17.5 19 Q21.5 17.5 21.2 13" stroke="#c62828" stroke-width="2.6" ' +
+        'fill="none" stroke-linecap="round"/>' +
+        '<path d="M13 14 L13 10" stroke="#c62828" stroke-width="2.6" stroke-linecap="round"/>' +
+        '<circle cx="4.8" cy="10.8" r="2.1" fill="#f5b942"/>' +
+        '<circle cx="21.2" cy="10.8" r="2.1" fill="#f5b942"/>' +
+        '<circle cx="13" cy="8" r="2.1" fill="#f5b942"/>' +
+        '<rect x="6" y="23.4" width="14" height="3.2" rx="1.6" fill="#8e1c1c"/></svg>';
+
     CV.Registry.add({
         code: 'lami',
         name: 'Lami',
-        icon: '🧩',
+        icon: ICON,
         blurb: 'Rummy on mahjong tiles. Runs, sets, jokers — empty your rack.',
         category: 'tiles',
         players: [2, 4],
