@@ -49,6 +49,8 @@ function load(rel) {
     'js/games/baccarat/engine.js', 'js/games/baccarat/ai.js', 'js/games/baccarat/index.js',
     'js/games/slots/engine.js', 'js/games/slots/index.js',
     'js/games/dragongate/engine.js', 'js/games/dragongate/index.js',
+    'js/games/bigtwo/combos.js', 'js/games/bigtwo/engine.js',
+    'js/games/bigtwo/ai.js', 'js/games/bigtwo/index.js',
     'js/games/doudizhu/combos.js', 'js/games/doudizhu/engine.js',
     'js/games/doudizhu/ai.js', 'js/games/doudizhu/index.js',
     // Views need CV.UI and a DOM; the engines under test do not.
@@ -208,7 +210,7 @@ console.log(`CardVerse smoke — ${HANDS} hands per game\n`);
  * playing each other for points rather than a table paying out. Each has its
  * own audit further down.
  */
-const OWN_AUDIT = new Set(['slots', 'dragongate', 'doudizhu']);
+const OWN_AUDIT = new Set(['slots', 'dragongate', 'doudizhu', 'bigtwo']);
 
 for (const game of CV.Registry.playable()) {
     if (!game.AI || OWN_AUDIT.has(game.code)) continue;
@@ -1014,6 +1016,332 @@ function auditTricks(e) {
     }
 }
 auditDouDiZhu();
+
+/* ---- 锄大D -------------------------------------------------------------- */
+
+/**
+ * Three passes over the rules.
+ *
+ * First the card order, where suits matter and the 2 sits on top. Then
+ * `detect` — named cases from the rules, then 100,000 random five-card hands
+ * classified a second time, independently, and compared. A sample that size
+ * covers every shape including the ones a played-out game would take hours to
+ * produce. Then whole rounds: 52 cards in and out, the 3♦ opening, a pass
+ * that locks a seat out of the trick, and coins that balance.
+ */
+
+const B2_SUITS = { D: 'D', C: 'C', H: 'H', S: 'S' };
+const B2_RANKS = { '2': 2, '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, '8': 8, '9': 9,
+                   '10': 10, 'J': 11, 'Q': 12, 'K': 13, 'A': 14 };
+
+let b2Uid = 0;
+function b2Hand(str) {
+    return str.split(/\s+/).filter(Boolean).map((tok) => {
+        const suit = tok.slice(-1), rank = tok.slice(0, -1);
+        if (!B2_SUITS[suit] || B2_RANKS[rank] === undefined) throw new Error('bad card ' + tok);
+        return { r: B2_RANKS[rank], s: suit, id: 'b' + (b2Uid++) };
+    });
+}
+
+/** The rules again, written out separately from the engine's reading of them. */
+function b2Classify(cards) {
+    const rv = (c) => (c.r === 2 ? 15 : c.r);
+    const vals = cards.map(rv).sort((a, b) => a - b);
+    const flush = new Set(cards.map((c) => c.s)).size === 1;
+    const cnt = {};
+    for (const v of vals) cnt[v] = (cnt[v] || 0) + 1;
+    const shape = Object.values(cnt).sort().join('');
+
+    let run = vals[vals.length - 1] <= 14;
+    for (let i = 1; i < vals.length; i++) if (vals[i] !== vals[i - 1] + 1) run = false;
+
+    if (cards.length === 1) return 'SINGLE';
+    if (cards.length === 2) return shape === '2' ? 'PAIR' : null;
+    if (cards.length === 3) return shape === '3' ? 'TRIPLE' : null;
+    if (cards.length !== 5) return null;
+    if (run && flush) return 'STRAIGHT_FLUSH';
+    if (shape === '14') return 'FOUR_OF_A_KIND';
+    if (shape === '23') return 'FULL_HOUSE';
+    if (flush) return 'FLUSH';
+    if (run) return 'STRAIGHT';
+    return null;
+}
+
+function auditBigTwo() {
+    console.log('\n🂡 锄大D');
+    const game = CV.Registry.get('bigtwo');
+    const B = CV.B2;
+
+    /* --- the order of the cards ------------------------------------------ */
+
+    const v = (tok) => B.cardValue(b2Hand(tok)[0]);
+    check(v('3S') > v('3H') && v('3H') > v('3C') && v('3C') > v('3D'),
+        'b2: the suit order must be ♦ < ♣ < ♥ < ♠');
+    check(v('4D') > v('3S'), 'b2: rank is compared before suit — 4♦ must beat 3♠');
+    check(v('2D') > v('AS'), 'b2: the 2 must be the highest rank');
+    check(v('2S') === Math.max(...['2S', 'AS', 'KS', '3D'].map(v)), 'b2: 2♠ is the top card of the deck');
+
+    /* --- what the cards are ---------------------------------------------- */
+
+    const named = (str) => { const c = B.detect(b2Hand(str)); return c ? c.type : null; };
+    const TABLE = [
+        ['7S',                    'SINGLE'],
+        ['8C 8H',                 'PAIR'],
+        ['9D 9C 9S',              'TRIPLE'],
+        ['3D 4C 5H 6S 7D',        'STRAIGHT'],
+        ['7C 8D 9H 10S JC',       'STRAIGHT'],
+        ['10D JC QH KS AD',       'STRAIGHT'],
+        ['3S 6S 8S JS KS',        'FLUSH'],
+        ['8D 8C 8H KD KC',        'FULL_HOUSE'],
+        ['9D 9C 9H 9S KD',        'FOUR_OF_A_KIND'],
+        ['5S 6S 7S 8S 9S',        'STRAIGHT_FLUSH'],
+        // The ones the rules say are not straights, and the illegal counts.
+        ['JD QC KH AS 2D',        null],
+        ['AD 2C 3H 4S 5D',        null],
+        ['QD KC AH 2S 3D',        null],
+        ['KD AC 2H 3S 4D',        null],
+        ['8D 9C',                 null],
+        ['9D 9C 8S',              null],
+        ['9D 9C 9H 9S',           null],
+        ['3D 4C 5H 6S',           null],
+        ['3D 4C 5H 6S 7D 8C',     null],
+        ['3D 5C 7H 9S JD',        null],
+        ['2S 2H 2D 2C 3D',        'FOUR_OF_A_KIND'],
+    ];
+    for (const [cards, want] of TABLE) {
+        const got = named(cards);
+        check(got === want, `b2: "${cards}" read as ${got}, wanted ${want}`);
+    }
+
+    // Every straight window the rules list, and every one they exclude.
+    const RANK_NAME = ['', '', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A'];
+    let windows = 0;
+    for (let lo = 3; lo <= 10; lo++) {
+        const cards = [0, 1, 2, 3, 4].map((i) => RANK_NAME[lo + i] + 'DCHSD'[i]).join(' ');
+        check(named(cards) === 'STRAIGHT', `b2: ${cards} should be a straight`);
+        windows++;
+    }
+    console.log(`  ${TABLE.length} named combinations and all ${windows} legal straight windows`);
+
+    /* --- 100,000 hands, classified twice ---------------------------------- */
+
+    {
+        const rng = new CV.RNG(31337);
+        const deck = new CV.Cards.Deck(rng, { decks: 1 });
+        const seen = {};
+        let n = 0;
+        for (let i = 0; i < 100000; i++) {
+            deck.reset();
+            const five = deck.drawMany(5);
+            const got = B.detect(five);
+            const want = b2Classify(five);
+            check((got ? got.type : null) === want,
+                `b2: ${five.map((c) => c.r + c.s).join(' ')} read as ${got && got.type}, wanted ${want}`);
+            seen[want || 'none'] = (seen[want || 'none'] || 0) + 1;
+            n++;
+        }
+        const kinds = Object.keys(seen).filter((k) => k !== 'none').sort();
+        console.log(`  ${n.toLocaleString('en-US')} random hands agreed, covering ${kinds.length} kinds`);
+        check(kinds.length === 5, `b2: only ${kinds.join(', ')} came up in 100,000 hands`);
+    }
+
+    /* --- which beats which ------------------------------------------------ */
+
+    const cmp = (a, b) => B.beats(B.detect(b2Hand(a)), B.detect(b2Hand(b)));
+    const BEATS = [
+        ['8D',                 '7S',                 true],    // rank first
+        ['3S',                 '3H',                 true],    // then suit
+        ['3D',                 '3C',                 false],
+        ['10D 10S',            '8C 8H',              true],
+        ['8C 8H',              '10D 10S',            false],
+        ['JD JC JH',           '9D 9C 9S',           true],
+        ['6D 7C 8H 9S 10D',    '5D 6C 7H 8S 9D',     true],
+        ['5D 6C 7H 8S 9D',     '6D 7C 8H 9S 10D',    false],
+        ['3S 6S 8S JS KS',     '10D JC QH KS AD',    true],    // flush over straight
+        ['8D 8C 8H KD KC',     '3S 6S 8S JS KS',     true],    // house over flush
+        ['9D 9C 9H 9S KD',     '8D 8C 8H KD KC',     true],    // four over house
+        ['5S 6S 7S 8S 9S',     '9D 9C 9H 9S KD',     true],    // straight flush over four
+        ['9D 9C 9H 9S KD',     '5S 6S 7S 8S 9S',     false],
+        ['10D 10C 10H 3D 3C',  '8D 8C 8H KD KC',     true],    // the triple decides
+        ['JD JC JH JS 3D',     '9D 9C 9H 9S KD',     true],    // the quad decides
+        ['3H 6H 8H JH AH',     '3S 6S 8S JS KS',     true],    // flush cascade
+        ['3S 6S 8S JS KS',     '3H 6H 8H JH AH',     false],
+        // Counts never cross: no bombs in this game.
+        ['9D 9C 9H 9S KD',     '8C 8H',              false],
+        ['8C 8H',              '7S',                 false],
+        ['7S',                 '8C 8H',              false],
+        ['JD JC JH',           '8C 8H',              false],
+    ];
+    for (const [a, b, want] of BEATS) {
+        check(cmp(a, b) === want, `b2: "${a}" v "${b}" gave ${cmp(a, b)}, wanted ${want}`);
+    }
+
+    const SAMPLES = TABLE.filter(([, w]) => w).map(([c]) => c);
+    let ordered = 0;
+    for (const a of SAMPLES) {
+        check(!cmp(a, a), `b2: "${a}" beats itself`);
+        for (const b of SAMPLES) {
+            if (cmp(a, b) && cmp(b, a)) check(false, `b2: "${a}" and "${b}" each beat the other`);
+            ordered++;
+        }
+    }
+    console.log(`  ${BEATS.length} comparisons and ${ordered} ordering checks`);
+
+    /* --- find() only ever offers a legal play ----------------------------- */
+
+    {
+        const rng = new CV.RNG(808);
+        let offered = 0;
+        for (let i = 0; i < 400; i++) {
+            const deck = new CV.Cards.Deck(rng, { decks: 1 });
+            deck.shuffle();
+            const hand = deck.drawMany(13);
+            const req = B.detect(deck.drawMany([1, 2, 3, 5][rng.int(4)]));
+            const ids = new Set(hand.map((c) => c.id));
+            for (const play of B.find(hand, req)) {
+                check(play.every((c) => ids.has(c.id)), 'b2: find() offered a card not in the hand');
+                check(new Set(play.map((c) => c.id)).size === play.length, 'b2: find() used a card twice');
+                check(!!B.canBeat(play, req), 'b2: find() offered a play that does not answer');
+                offered++;
+            }
+        }
+        console.log(`  ${offered.toLocaleString('en-US')} suggested plays, every one legal and held`);
+    }
+
+    /* --- whole rounds ------------------------------------------------------ */
+
+    const ROUNDS = Math.max(100, Math.round(HANDS / 8));
+    const master = new CV.RNG(24680);
+    const t0 = Date.now();
+    const wins = [0, 0, 0, 0];
+    let sweeps = 0, fives = 0;
+
+    for (let g = 0; g < ROUNDS; g++) {
+        const room = CV.Registry.ROOMS[master.int(4)].id;
+        const e = new game.Engine({
+            rng: new CV.RNG(master.int(1e9)), config: { room },
+            seats: [0, 1, 2, 3].map((i) => new CV.Seat(i, {
+                kind: 'ai', name: 'S' + i, coins: 20000, isYou: i === master.int(4),
+            })),
+        });
+        const ai = new game.AI(e);
+        e.start();
+
+        check(e.seats.every((s) => s.cards.length === 13), 'b2: not thirteen cards each');
+        check(new Set(e.seats.flatMap((s) => s.cards).map((c) => c.id)).size === 52,
+            'b2: the pack is not 52 distinct cards');
+        check(e.seats.flatMap((s) => s.cards).every((c) => c.s !== 'J'), 'b2: a joker got into the deck');
+        // Phase 4: the 3♦ decides who opens.
+        check(e.seats[e.turn].cards.some(CV.BigTwoOpener), 'b2: the opener does not hold the 3♦');
+
+        let steps = 0, first = true;
+        const played = [];
+        while (!e.isOver()) {
+            const seat = e.turn;
+            const before = e.trick ? e.trick.combo : null;
+            const action = ai.decide(seat);
+            check(!!action, 'b2: the AI had nothing to do');
+            if (!action) break;
+
+            if (action.type === 'play') {
+                const cards = action.cards.map((id) => e.seats[seat].cards.find((c) => c.id === id));
+                check(cards.every(Boolean), 'b2: the AI played a card it does not hold');
+                check(!!B.canBeat(cards.filter(Boolean), before), 'b2: the AI played something illegal');
+                if (first) {
+                    check(cards.some(CV.BigTwoOpener), 'b2: the opening play did not contain the 3♦');
+                    first = false;
+                }
+                if (cards.length === 5) fives++;
+                played.push(...action.cards);
+            } else {
+                check(!!e.trick, 'b2: a seat passed with an open table');
+            }
+            check(e.apply(action), `b2: engine refused ${action.type}`);
+            if (++steps > 400) { check(false, 'b2: a round ran past 400 actions'); break; }
+        }
+
+        const left = e.seats.reduce((n, s) => n + s.cards.length, 0);
+        check(left + played.length === 52, `b2: ${left} held + ${played.length} played is not 52`);
+        check(e.winner >= 0 && e.seats[e.winner].cards.length === 0, 'b2: the winner still holds cards');
+        auditB2Tricks(e);
+
+        const r = e.result();
+        const total = e.seats.reduce((n, s) => n + s.net, 0);
+        check(total === 0, `b2: the table gained ${total} coins out of nowhere`);
+        for (const s of e.seats) {
+            check(s.coins >= 0, 'b2: a seat was taken below zero');
+            check(s.coins === s.startCoins + s.net, 'b2: coins do not reconcile');
+        }
+        check(r.forSeat(e.winner).rank === 1, 'b2: the winner did not come first');
+        check(r.ranks.filter((row) => row.outcome === 'win').length === 1, 'b2: more than one winner');
+        // Losers pay for what they hold, at the room's stake.
+        for (let i = 0; i < 4; i++) {
+            if (i === e.winner) continue;
+            check(-e.seats[i].net === Math.min(e.seats[i].cards.length * e.stake, e.seats[i].startCoins),
+                'b2: a loser paid something other than the cards in their hand');
+        }
+        wins[e.winner]++;
+        if (e.cardsLeftElsewhere() === 39) sweeps++;
+    }
+
+    console.log(`  ${ROUNDS} rounds, ${Date.now() - t0} ms — seats won `
+        + `${wins.map((n) => (n / ROUNDS * 100).toFixed(0) + '%').join(' / ')}`);
+    console.log(`  ${fives} five-card hands played · ${sweeps} clean sweeps`);
+    // The 3♦ opens, which is a real edge, but not a decisive one.
+    check(Math.max(...wins) / ROUNDS < 0.45, 'b2: one seat wins far too often');
+    check(Math.min(...wins) > 0, 'b2: a seat never wins at all');
+
+    /* --- what a host may broadcast ----------------------------------------- */
+
+    {
+        const e = new game.Engine({
+            rng: new CV.RNG(3), config: {},
+            seats: [0, 1, 2, 3].map((i) => new CV.Seat(i, { kind: 'ai', name: 'S' + i, coins: 500, isYou: i === 0 })),
+        });
+        e.start();
+        for (let viewer = 0; viewer < 4; viewer++) {
+            const view = e.snapshotFor(viewer);
+            check(!view.rng, 'b2: the snapshot carries the RNG');
+            view.seats.forEach((seat, i) => {
+                if (i === viewer) check(seat.cards.every(Boolean), 'b2: your own hand was redacted from you');
+                else check(seat.cards.every((c) => c === null) && seat.cards.length === 13,
+                    'b2: another seat\'s hand went out on the wire');
+            });
+        }
+    }
+    console.log('  ✓ no hand but your own on the wire');
+
+    for (const key of game.rules) check(CV.t(key) !== key, `b2: rule key ${key} has no text`);
+    for (const type of ['SINGLE', 'PAIR', 'TRIPLE', 'STRAIGHT', 'FLUSH',
+                        'FULL_HOUSE', 'FOUR_OF_A_KIND', 'STRAIGHT_FLUSH']) {
+        check(CV.t('b2.type.' + type) !== 'b2.type.' + type, `b2: ${type} has no name`);
+    }
+    console.log('  ✓ rules card and every combination name resolve');
+}
+
+/**
+ * Replay the log. A seat that passes is out of the trick, the trick clears
+ * only when the other three have all passed, and the lead goes back to
+ * whoever last got cards down.
+ */
+function auditB2Tricks(e) {
+    let owner = -1;
+    let passed = new Set();
+    for (const ev of e.events) {
+        if (ev.type === 'play') {
+            check(!passed.has(ev.seat), 'b2: a seat played again after passing in the same trick');
+            owner = ev.seat;
+        } else if (ev.type === 'pass') {
+            check(!passed.has(ev.seat), 'b2: a seat passed twice in the same trick');
+            passed.add(ev.seat);
+        } else if (ev.type === 'trickEnd') {
+            check(ev.lead === owner, 'b2: the lead did not go back to the last player to play');
+            check(passed.size === 3, `b2: the trick cleared after ${passed.size} passes, not 3`);
+            passed = new Set();
+        }
+    }
+}
+auditBigTwo();
 
 /* ---- what a host is allowed to broadcast ------------------------------- */
 

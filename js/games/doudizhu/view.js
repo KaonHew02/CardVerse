@@ -50,7 +50,7 @@
                         <div class="ddz-opp" id="ddzOppB"></div>
                     </div>
                     <div class="bj-status" id="ddzStatus"></div>
-                    <div class="ddz-hand" id="ddzHand"></div>
+                    <div class="your-hand" id="ddzHand"></div>
                     <div class="bj-actions" id="ddzActions"></div>
                 </div>`;
             this.$ = (id) => this.root.querySelector('#' + id);
@@ -126,17 +126,17 @@
                             <span class="coins">🪙 ${fmt(s.coins)}</span></span>
                         ${this.roleTag(i)}
                     </div>
-                    <div class="ddz-count">${esc(t('ddz.cardsLeft', { n: s.cards.length }))}</div>
-                    <div class="ddz-played">${this.playedBy(i)}${bid}</div>
+                    <div class="seat-count">${esc(t('ddz.cardsLeft', { n: s.cards.length }))}</div>
+                    <div class="seat-play">${this.playedBy(i)}${bid}</div>
                 </div>`;
         }
 
         playedBy(i) {
             const shown = this.last[i];
             if (!shown) return '';
-            if (shown.pass) return `<span class="ddz-pass">${esc(t('ddz.pass'))}</span>`;
+            if (shown.pass) return `<span class="play-pass">${esc(t('ddz.pass'))}</span>`;
             return CV.CardView.hand(shown.cards, { size: 'sm' })
-                + `<span class="ddz-combo">${esc(this.comboName(shown.combo))}</span>`;
+                + `<span class="play-name">${esc(this.comboName(shown.combo))}</span>`;
         }
 
         comboName(combo) {
@@ -151,7 +151,7 @@
             // from the real cards with a class on them, so the three are not
             // sitting in the DOM waiting to be read.
             const cards = e.landlord < 0 ? [null, null, null] : e.bottom;
-            host.innerHTML = `<span class="ddz-label">${esc(t('ddz.bottom'))}</span>`
+            host.innerHTML = `<span class="pile-label">${esc(t('ddz.bottom'))}</span>`
                 + CV.CardView.hand(cards, { size: 'sm' });
         }
 
@@ -194,14 +194,14 @@
             const hand = e.seats[this.you].cards;
 
             host.innerHTML = `
-                <div class="ddz-you">
+                <div class="hand-head">
                     ${this.roleTag(this.you)}
-                    <span class="ddz-count">${esc(t('ddz.cardsLeft', { n: hand.length }))}</span>
+                    <span class="seat-count">${esc(t('ddz.cardsLeft', { n: hand.length }))}</span>
                 </div>
-                <div class="ddz-fan">
+                <div class="hand-fan">
                     ${hand.map((c) => {
                         const on = this.selected.has(c.id);
-                        return `<button class="ddz-card${on ? ' is-on' : ''}" data-card="${c.id}"
+                        return `<button class="fan-card${on ? ' is-on' : ''}" data-card="${c.id}"
                             aria-pressed="${on}">${CV.CardView.html(c, { fresh: !this.known.has(c.id) })}</button>`;
                     }).join('')}
                 </div>`;

@@ -37,7 +37,7 @@
          * @param {object} game
          * @param {string} game.code      unique key, also the stats key
          * @param {string} game.name      shown in the lobby
-         * @param {string} game.icon      emoji
+         * @param {string} game.icon      emoji, or inline SVG for a drawn one
          * @param {string} game.blurb     one line under the title
          * @param {string} game.category  'cards' | 'tiles'
          * @param {number[]} game.players [min, max]
@@ -56,6 +56,11 @@
                 rooms: ROOMS.map((r) => r.id),
                 achievements: [],
             }, game);
+            // Most icons are an emoji, which any context can take. A drawn one
+            // is markup, and a <select> option or a textContent assignment
+            // would print its source — so those places get a blank instead and
+            // show the name alone.
+            entry.iconText = /^\s*</.test(String(entry.icon)) ? '' : entry.icon;
             games.set(entry.code, entry);
             if (!order.includes(entry.code)) order.push(entry.code);
             return entry;

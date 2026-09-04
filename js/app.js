@@ -20,15 +20,6 @@
         // Blackjack is deliberately absent: 21 covers the same table, and
         // 百家乐 took its place in the lineup. Its engine still loads, because
         // 21 is built on it.
-        // A solid 2 of spades, drawn rather than borrowed: the Unicode
-        // playing-card glyphs render as thin hollow outlines at tile size.
-        R.stub('bigtwo',     '锄大D',
-            '<svg class="icon-card" viewBox="0 0 26 36" aria-label="2 of spades">' +
-            '<rect x="1" y="1" width="24" height="34" rx="4" fill="#fff"/>' +
-            '<text x="4" y="12" class="ic-r">2</text>' +
-            '<text x="22" y="32" class="ic-r ic-b">2</text>' +
-            '<text x="13" y="26" class="ic-p">♠</text></svg>',
-            'Malaysian Big Two. First out wins.', [4, 4]);
         R.stub('poker',      'Poker',  '♠️', "Texas Hold'em. Best five of seven.", [2, 9]);
         R.stub('bullbull',   '斗牛',   '🐮', 'Bull Bull. Three to ten, two to score.', [2, 6]);
         R.stub('mahjong',    'Mahjong', '🀄', 'Hong Kong style. Four sets and a pair.', [4, 4]);

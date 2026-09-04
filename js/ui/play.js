@@ -134,7 +134,7 @@
     function paintBar(s) {
         const info = s || session;
         if (!info) return;
-        $('tableGame').textContent = `${info.game.icon} ${info.game.name}`;
+        $('tableGame').textContent = `${info.game.iconText} ${info.game.name}`.trim();
         $('tableRoom').textContent = `${info.room.icon} ${info.room.name}`;
         $('tableCoins').textContent = fmt(CV.Profile.get().coins);
     }

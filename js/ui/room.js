@@ -77,7 +77,7 @@
             <div class="card-panel">
                 <h3>${esc(t('room.settings'))}</h3>
                 <label class="row-opt"><span>${esc(t('room.game'))}</span>
-                    <select id="rmGame">${games.map((g) => `<option value="${g.code}" ${room.gameCode === g.code ? 'selected' : ''}>${g.icon} ${esc(g.name)}</option>`).join('')}</select>
+                    <select id="rmGame">${games.map((g) => `<option value="${g.code}" ${room.gameCode === g.code ? 'selected' : ''}>${g.iconText} ${esc(g.name)}</option>`).join('')}</select>
                 </label>
                 <label class="row-opt"><span>${esc(t('setup.room'))}</span>
                     <select id="rmRoom">${CV.Registry.ROOMS.map((r) => `<option value="${r.id}" ${room.roomId === r.id ? 'selected' : ''}>${r.icon} ${esc(r.name)} — ${esc(t('setup.bets', { lo: fmt(r.bet[0]), hi: fmt(r.bet[1]) }))}</option>`).join('')}</select>

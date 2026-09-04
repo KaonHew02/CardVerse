@@ -99,6 +99,16 @@
     /* The two opponents stay side by side; the bottom cards and the stake
      * drop underneath them rather than squeezing between. */
     .ddz-top { grid-template-columns: 1fr 1fr; grid-template-areas: "a b" "mid mid"; }
-    .ddz-played { min-height: 0; }
-    .ddz-fan { padding-top: 18px; }
+    .seat-play { min-height: 0; }
+    .hand-fan { padding-top: 18px; }
+}
+
+@media (max-width: 720px) {
+    /* The table drops under the two side seats rather than being squeezed
+     * to nothing between them. */
+    .b2-row { grid-template-columns: 1fr 1fr; grid-template-areas: "l r" "mid mid"; }
+    .b2-row .b2-opp:first-child { grid-area: l; }
+    .b2-row .b2-opp:last-child  { grid-area: r; }
+    .b2-centre { grid-area: mid; }
+    .b2 { min-height: 0; }
 }
