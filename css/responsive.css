@@ -42,7 +42,7 @@
 
     /* Room for it, so the last seat is never trapped underneath. */
     body[data-screen="table"] main { padding-bottom: 190px; }
-    .bj { min-height: 0; }
+    .bj, .ddz { min-height: 0; }
     /* Narrow screens give the hands column almost nothing once the name and
      * two figures have taken their share. */
     .rc-who { width: 4.6em; font-size: 0.92em; }
@@ -93,4 +93,12 @@
     .dg-gate { gap: 10px; }
     .dg-arch { height: 18px; }
     .dg-verdict { font-size: 1.05rem; }
+}
+
+@media (max-width: 720px) {
+    /* The two opponents stay side by side; the bottom cards and the stake
+     * drop underneath them rather than squeezing between. */
+    .ddz-top { grid-template-columns: 1fr 1fr; grid-template-areas: "a b" "mid mid"; }
+    .ddz-played { min-height: 0; }
+    .ddz-fan { padding-top: 18px; }
 }

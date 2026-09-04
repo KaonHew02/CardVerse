@@ -20,7 +20,6 @@
         // Blackjack is deliberately absent: 21 covers the same table, and
         // 百家乐 took its place in the lineup. Its engine still loads, because
         // 21 is built on it.
-        R.stub('doudizhu',   '斗地主', '👑', 'Landlord vs Farmers. Bombs and rockets.', [3, 3]);
         // A solid 2 of spades, drawn rather than borrowed: the Unicode
         // playing-card glyphs render as thin hollow outlines at tile size.
         R.stub('bigtwo',     '锄大D',

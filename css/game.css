@@ -357,3 +357,55 @@
 .dg-shut { color: var(--warn); font-weight: 700; }
 .dg-verdict { font-size: 1.2rem; font-weight: 800; }
 .dg-choice .btn { min-width: 130px; }
+
+/* ---- 斗地主 ------------------------------------------------------------ */
+
+.ddz { display: flex; flex-direction: column; gap: 12px; min-height: 60vh; }
+.ddz-top {
+    display: grid; grid-template-columns: 1fr minmax(150px, auto) 1fr;
+    grid-template-areas: "a mid b"; gap: 12px; align-items: start;
+}
+.ddz-opp:first-of-type { grid-area: a; }
+.ddz-opp:last-of-type  { grid-area: b; }
+.ddz-mid { grid-area: mid; display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.ddz-seat { max-width: none; }
+
+.ddz-bottom { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.ddz-label { font-size: .75rem; letter-spacing: .08em; text-transform: uppercase; color: rgba(255,255,255,.6); }
+.ddz-stake { display: flex; align-items: center; gap: 8px; font-size: .9rem; }
+.ddz-mult { color: var(--accent); font-size: 1.2rem; }
+
+.ddz-count { font-size: .85rem; color: rgba(255,255,255,.75); }
+/* Whatever a seat last did stays put until the trick clears — a round that
+ * resolves in four seconds is unreadable otherwise. */
+.ddz-played { min-height: calc(var(--card-h) * 0.62); display: flex; flex-direction: column; gap: 2px; margin-top: 6px; }
+.ddz-combo { font-size: .78rem; color: var(--accent); }
+.ddz-pass  { font-size: 1rem; font-weight: 800; color: rgba(255,255,255,.55); }
+.ddz-bid   { font-size: .9rem; font-weight: 700; color: var(--accent); }
+
+.ddz-role { background: rgba(255,255,255,.14); color: #fff; margin-left: auto; }
+.ddz-role.is-landlord { background: var(--accent); color: var(--accent-ink); }
+
+.ddz-you { display: flex; align-items: center; gap: 10px; justify-content: center; }
+.ddz-you .ddz-role { margin-left: 0; }
+
+/* Your hand. Cards overlap on a wide screen and wrap on a narrow one — an
+ * overlapping row that wraps overlaps the wrong neighbour. */
+.ddz-hand { display: flex; flex-direction: column; gap: 6px; margin-top: auto; }
+.ddz-fan { display: flex; flex-wrap: wrap; justify-content: center; row-gap: 6px; padding-top: 16px; }
+.ddz-card {
+    background: none; border: 0; padding: 0; flex: none; cursor: pointer; line-height: 0;
+    transition: transform 140ms;
+}
+.ddz-card.is-on { transform: translateY(-14px); }
+.ddz-card.is-on .card { box-shadow: 0 0 0 2px var(--accent), 0 8px 16px rgba(0,0,0,.5); }
+.ddz-card:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+@media (min-width: 721px) {
+    /* Twenty cards have to fit the felt, so the overlap is deep. The cards
+     * need their own edge to read as separate at that spacing — the ambient
+     * shadow disappears under the next card. */
+    .ddz-fan { flex-wrap: nowrap; }
+    .ddz-card + .ddz-card { margin-left: calc(var(--card-w) * -0.52); }
+    .ddz-fan .card { box-shadow: -3px 0 5px rgba(0,0,0,.35), 0 0 0 1px rgba(0,0,0,.25); }
+}

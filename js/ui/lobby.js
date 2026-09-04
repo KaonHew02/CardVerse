@@ -78,11 +78,12 @@
         if (!game || !game.ready) return CV.UI.go('home');
         const S = CV.Settings.get();
         const maxOthers = game.players[1] - 1;
+        const minOthers = game.players[0] - 1;
 
         setup = {
             game,
             room: CV.Registry.roomsFor(code)[0].id,
-            ai:   Math.min(maxOthers, S.aiCount),
+            ai:   Math.min(maxOthers, Math.max(minOthers, S.aiCount)),
         };
         paintSetup();
     }
@@ -91,6 +92,10 @@
         const { game } = setup;
         const p = CV.Profile.get();
         const maxOthers = game.players[1] - 1;
+        // A game that seats a fixed number — 斗地主 is three, and three is not
+        // a preference — has nothing to choose, so it offers no choice.
+        const minOthers = game.players[0] - 1;
+        const fixed = minOthers === maxOthers;
         const rooms = CV.Registry.roomsFor(game.code);
         const s = CV.Stats.forGame(game.code);
 
@@ -123,13 +128,13 @@
                 </div>
             </div>
 
-            ${maxOthers === 0 ? '' : `
+            ${fixed ? '' : `
             <div class="card-panel">
                 <h3>${esc(t('setup.opponents'))}</h3>
                 <div class="row-opt">
                     <span>${esc(t('setup.aiPlayers'))}</span>
                     <div class="seg" id="setupAi">
-                        ${Array.from({ length: maxOthers + 1 }, (_, n) =>
+                        ${Array.from({ length: maxOthers - minOthers + 1 }, (_, i) => minOthers + i).map((n) =>
                             `<button class="${setup.ai === n ? 'is-on' : ''}" data-ai="${n}">${n}</button>`).join('')}
                     </div>
                 </div>

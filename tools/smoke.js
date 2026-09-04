@@ -49,6 +49,8 @@ function load(rel) {
     'js/games/baccarat/engine.js', 'js/games/baccarat/ai.js', 'js/games/baccarat/index.js',
     'js/games/slots/engine.js', 'js/games/slots/index.js',
     'js/games/dragongate/engine.js', 'js/games/dragongate/index.js',
+    'js/games/doudizhu/combos.js', 'js/games/doudizhu/engine.js',
+    'js/games/doudizhu/ai.js', 'js/games/doudizhu/index.js',
     // Views need CV.UI and a DOM; the engines under test do not.
     'js/games/twentyone/engine.js', 'js/games/twentyone/ai.js', 'js/games/twentyone/index.js',
 ].forEach(load);
@@ -200,8 +202,16 @@ const anyLive = (e) => e.seats.some((s) => !s.out && !CV.TwentyOneScore(s.hands[
 
 console.log(`CardVerse smoke — ${HANDS} hands per game\n`);
 
+/**
+ * Games this loop does not fit — a wager against the house across a carried
+ * shoe. 老虎机 and 射龙门 have no opponents at all; 斗地主 is three seats
+ * playing each other for points rather than a table paying out. Each has its
+ * own audit further down.
+ */
+const OWN_AUDIT = new Set(['slots', 'dragongate', 'doudizhu']);
+
 for (const game of CV.Registry.playable()) {
-    if (!game.AI) continue;   // slots has no opponents; auditSlots covers it
+    if (!game.AI || OWN_AUDIT.has(game.code)) continue;
     console.log(`${game.icon} ${game.name}`);
     const master = new CV.RNG(12345);
     let bet = 0, net = 0, shoe = null, sameShoeRuns = 0;
@@ -643,6 +653,368 @@ function auditDragonGate() {
 }
 auditDragonGate();
 
+/* ---- 斗地主 ------------------------------------------------------------- */
+
+/**
+ * Two halves. The first is the combination table, checked case by case
+ * against the rules as written — including the ones that must NOT parse, like
+ * `A 2 3 4 5` and `J Q K A 2`, because a straight that quietly accepts an ace
+ * as a one is the classic way this game goes wrong.
+ *
+ * The second plays whole rounds and audits them: 54 cards in and 54 cards
+ * out, every play legal against what was down, two passes clearing the table,
+ * the multiplier equal to two to the power of the bombs, and coins that
+ * balance without taking anyone below zero.
+ */
+
+const DDZ_TOKENS = {
+    '2': 2, '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, '8': 8, '9': 9, '10': 10,
+    'J': 11, 'Q': 12, 'K': 13, 'A': 14, 'sj': 15, 'bj': 16,
+};
+
+let ddzUid = 0;
+function ddzHand(str) {
+    return str.split(/\s+/).filter(Boolean).map((tok) => {
+        const r = DDZ_TOKENS[tok];
+        if (r === undefined) throw new Error('bad token ' + tok);
+        const joker = (r === 15 || r === 16);
+        return { r, s: joker ? 'J' : 'SHDC'[ddzUid % 4], id: 'k' + (ddzUid++) };
+    });
+}
+
+function auditDouDiZhu() {
+    console.log('\n👑 斗地主');
+    const game = CV.Registry.get('doudizhu');
+    const D = CV.DDZ;
+
+    /* --- the order of the cards ------------------------------------------ */
+
+    const s = (tok) => D.strength(ddzHand(tok)[0]);
+    check(s('3') === 3, 'ddz: 3 is the floor');
+    check(s('A') === 14 && s('2') === 15, 'ddz: the 2 must outrank the ace');
+    check(s('sj') === 16 && s('bj') === 17, 'ddz: small joker under big joker, both over the 2');
+    for (const [a, b] of [['3', '4'], ['10', 'J'], ['K', 'A'], ['A', '2'], ['2', 'sj'], ['sj', 'bj']]) {
+        check(s(a) < s(b), `ddz: ${a} should rank under ${b}`);
+    }
+
+    /* --- what the cards are ---------------------------------------------- */
+
+    const named = (str) => { const c = D.parse(ddzHand(str)); return c ? c.type : null; };
+
+    const TABLE = [
+        ['7',                          'single'],
+        ['sj',                         'single'],
+        ['8 8',                        'pair'],
+        ['K K K',                      'triple'],
+        ['7 7 7 K',                    'triple1'],
+        ['7 7 7 K K',                  'triple2'],
+        ['3 4 5 6 7',                  'straight'],
+        ['8 9 10 J Q K',               'straight'],
+        ['10 J Q K A',                 'straight'],
+        ['3 3 4 4 5 5',                'pairs'],
+        ['8 8 9 9 10 10 J J',          'pairs'],
+        ['3 3 3 4 4 4',                'plane'],
+        ['7 7 7 8 8 8 9 9 9',          'plane'],
+        ['3 3 3 4 4 4 7 K',            'plane1'],
+        ['3 3 3 4 4 4 7 7 K K',        'plane2'],
+        ['9 9 9 9 3 K',                'four2'],
+        ['9 9 9 9 3 3',                'four2'],
+        ['9 9 9 9 3 3 K K',            'four2pair'],
+        ['A A A A',                    'bomb'],
+        ['sj bj',                      'rocket'],
+        // The ones that must not read as anything at all.
+        ['A 2 3 4 5',                  null],
+        ['J Q K A 2',                  null],
+        ['3 4 5 6',                    null],
+        ['Q Q K K A A 2 2',            null],
+        ['3 3 4 4',                    null],
+        ['2 2 2 3 3 3',                null],
+        ['A A A 2 2 2',                null],
+        ['K K K K K',                  null],
+        ['3 4 5 7 8',                  null],
+        ['sj bj 2',                    null],
+    ];
+    for (const [cards, want] of TABLE) {
+        const got = named(cards);
+        check(got === want, `ddz: "${cards}" read as ${got}, wanted ${want}`);
+    }
+    console.log(`  ${TABLE.length} combinations named, the invalid ones included`);
+
+    // A straight, a run of pairs and an airplane may never touch a 2 or a joker.
+    let banned = 0;
+    for (const cards of ['J Q K A 2', 'Q Q K K A A 2 2', 'K K K A A A 2 2 2', '2 2 3 3 4 4']) {
+        for (const r of D.readings(ddzHand(cards))) {
+            check(!['straight', 'pairs', 'plane', 'plane1', 'plane2'].includes(r.type),
+                `ddz: "${cards}" read as a ${r.type} — a 2 or joker got into a run`);
+            banned++;
+        }
+    }
+    check(banned >= 0, '');
+    console.log('  ✓ no 2 and no joker in a straight, a run of pairs or an airplane');
+
+    /* --- which beats which ------------------------------------------------ */
+
+    const cmp = (a, b) => D.beats(D.parse(ddzHand(a)), D.parse(ddzHand(b)));
+    const BEATS = [
+        ['9 9',            '7 7',              true],
+        ['9 9 9',          '7 7',              false],   // type must match
+        ['7 7',            '9 9',              false],
+        ['4 5 6 7 8',      '3 4 5 6 7',        true],
+        ['3 4 5 6 7 8',    '3 4 5 6 7',        false],   // and so must the count
+        ['9 9 9 3 3',      '6 6 6 4 4',        true],    // kickers do not count
+        ['6 6 6 K K',      '9 9 9 3 3',        false],
+        ['9 9 9 K',        '6 6 6 3',          true],
+        ['5 5 5 6 6 6',    '3 3 3 4 4 4',      true],
+        ['5 5 6 6 7 7',    '3 3 4 4 5 5',      true],
+        ['2',              'A',                true],
+        ['A',              '2',                false],
+        ['sj',             '2',                true],
+        ['bj',             'sj',               true],
+        ['3 3 3 3',        '9 9',              true],    // a bomb takes anything
+        ['3 3 3 3',        '9 9 9 9 3 3 K K',  true],
+        ['K K K K',        '8 8 8 8',          true],
+        ['8 8 8 8',        'K K K K',          false],
+        ['sj bj',          'K K K K',          true],    // and the rocket takes bombs
+        ['K K K K',        'sj bj',            false],
+        ['sj bj',          '3',                true],
+    ];
+    for (const [a, b, want] of BEATS) {
+        check(cmp(a, b) === want, `ddz: "${a}" v "${b}" gave ${cmp(a, b)}, wanted ${want}`);
+    }
+
+    // Nothing beats itself, and nothing beats what beats it.
+    const SAMPLES = TABLE.filter(([, w]) => w).map(([c]) => c);
+    let pairsChecked = 0;
+    for (const a of SAMPLES) {
+        check(!cmp(a, a), `ddz: "${a}" beats itself`);
+        for (const b of SAMPLES) {
+            if (cmp(a, b) && cmp(b, a)) check(false, `ddz: "${a}" and "${b}" each beat the other`);
+            pairsChecked++;
+        }
+    }
+    console.log(`  ${BEATS.length} comparisons and ${pairsChecked} ordering checks`);
+
+    /* --- find() never offers a play that is not one ----------------------- */
+
+    {
+        const rng = new CV.RNG(4242);
+        let offered = 0;
+        for (let i = 0; i < 600; i++) {
+            const deck = new CV.Cards.Deck(rng, { decks: 1, jokers: true });
+            deck.shuffle();
+            const hand = deck.drawMany(rng.range(5, 20));
+            const other = deck.drawMany(rng.range(1, 5));
+            const req = D.parse(other);
+            const ids = new Set(hand.map((c) => c.id));
+            for (const play of D.find(hand, req)) {
+                check(play.every((c) => ids.has(c.id)), 'ddz: find() offered a card not in the hand');
+                check(new Set(play.map((c) => c.id)).size === play.length, 'ddz: find() used a card twice');
+                const combo = D.canBeat(play, req);
+                check(!!combo, `ddz: find() offered ${play.length} cards that do not answer ${req && req.type}`);
+                offered++;
+            }
+        }
+        console.log(`  ${offered.toLocaleString('en-US')} suggested plays, every one legal and held`);
+    }
+
+    /* --- whole rounds ----------------------------------------------------- */
+
+    const ROUNDS = Math.max(120, Math.round(HANDS / 6));
+    const master = new CV.RNG(97531);
+    let landlordWins = 0, springs = 0, antis = 0, bombs = 0, rockets = 0, redeals = 0;
+    const t0 = Date.now();
+
+    for (let g = 0; g < ROUNDS; g++) {
+        const rng = new CV.RNG(master.int(1e9));
+        const room = CV.Registry.ROOMS[master.int(4)].id;
+        const chairs = [0, 1, 2].map((i) => new CV.Seat(i, {
+            kind: 'ai', name: 'S' + i, coins: 20000, isYou: i === master.int(3),
+        }));
+        const e = new game.Engine({ rng, seats: chairs, config: { room } });
+        const ai = new game.AI(e);
+        e.start();
+
+        const dealt = e.seats.reduce((n, s) => n + s.cards.length, 0);
+        check(dealt === 51, `ddz: dealt ${dealt} cards to hands, wanted 51`);
+        check(e.bottom.length === 3, `ddz: ${e.bottom.length} cards left face down, wanted 3`);
+        check(allDistinct(e.seats.flatMap((s) => s.cards).concat(e.bottom)) === 54,
+            'ddz: the pack is not 54 distinct cards');
+
+        let steps = 0, crowned = false;
+        const played = [];
+        while (!e.isOver()) {
+            const seat = e.turn;
+            const before = e.trick ? e.trick.combo : null;
+            const held = new Set(e.seats[seat].cards.map((c) => c.id));
+            const action = ai.decide(seat);
+            check(!!action, `ddz: the AI had nothing to do in ${e.phase}`);
+            if (!action) break;
+
+            if (action.type === 'play') {
+                // Legal against what was down, and out of that seat's own hand.
+                const cards = action.cards.map((id) => e.seats[seat].cards.find((c) => c.id === id));
+                check(cards.every(Boolean), 'ddz: the AI played a card it does not hold');
+                check(action.cards.every((id) => held.has(id)), 'ddz: the AI played a card it does not hold');
+                check(!!CV.DDZ.canBeat(cards.filter(Boolean), before),
+                    'ddz: the AI played something that does not answer the table');
+                played.push(...action.cards);
+            }
+            check(e.apply(action), `ddz: engine refused ${action.type} in ${e.phase}`);
+
+            if (!crowned && e.landlord >= 0) {
+                crowned = true;
+                check(e.seats[e.landlord].cards.length === 20,
+                    `ddz: the Landlord holds ${e.seats[e.landlord].cards.length} cards, wanted 20`);
+                check(e.base >= 1 && e.base <= 3, `ddz: base score ${e.base} out of range`);
+            }
+            if (++steps > 500) { check(false, 'ddz: a round ran past 500 actions'); break; }
+        }
+        redeals += e.deals - 1;
+
+        /* the round, once it is over */
+        const left = e.seats.reduce((n, s) => n + s.cards.length, 0);
+        check(left + played.length === 54, `ddz: ${left} held + ${played.length} played is not 54`);
+        check(e.seats[e.winner].cards.length === 0, 'ddz: the winner still holds cards');
+        check(e.winner >= 0, 'ddz: nobody went out');
+
+        // Two passes clear the table, and the lead goes back to whoever
+        // last got cards down.
+        auditTricks(e);
+
+        // Every bomb and the rocket doubles, and a spring doubles once more.
+        check(e.multiplier === Math.pow(2, e.bombs + e.rockets),
+            `ddz: multiplier ${e.multiplier} against ${e.bombs} bombs and ${e.rockets} rockets`);
+        const wantScore = e.base * e.multiplier * ((e.spring || e.antiSpring) ? 2 : 1);
+        check(e.score === wantScore, `ddz: score ${e.score}, wanted ${wantScore}`);
+
+        // 春天 only when the Farmers never played; 反春 only when the Farmers
+        // won and exactly one of them played, which is the rule as written.
+        const farmerPlays = e.farmers.map((i) => e.plays[i]);
+        check(e.spring === (e.landlordWon && farmerPlays.every((n) => n === 0)),
+            'ddz: 春天 disagrees with what the Farmers did');
+        check(e.antiSpring === (!e.landlordWon && farmerPlays.filter((n) => n > 0).length === 1),
+            'ddz: 反春 disagrees with what the Farmers did');
+        if (e.spring) check(e.landlordWon, 'ddz: a 春天 that the Landlord did not win');
+
+        // The Landlord's swing is two Farmers' worth, coins balance, and
+        // nobody is taken below zero.
+        const r = e.result();
+        const total = e.seats.reduce((n, x) => n + x.net, 0);
+        check(total === 0, `ddz: the table gained ${total} coins out of nowhere`);
+        for (const x of e.seats) {
+            check(x.coins >= 0, 'ddz: a seat was taken below zero');
+            check(x.coins === x.startCoins + x.net, 'ddz: coins do not reconcile');
+        }
+        const lord = r.forSeat(e.landlord);
+        const farm = r.forSeat(e.farmers[0]);
+        check((lord.coins > 0) === e.landlordWon, 'ddz: the Landlord was paid the wrong way');
+        check((farm.coins > 0) !== e.landlordWon, 'ddz: a Farmer was paid the wrong way');
+        check(r.ranks.filter((row) => row.rank === 1).length === (e.landlordWon ? 1 : 2),
+            'ddz: the winning side is the wrong size');
+
+        if (e.landlordWon) landlordWins++;
+        if (e.spring) springs++;
+        if (e.antiSpring) antis++;
+        bombs += e.bombs; rockets += e.rockets;
+    }
+
+    console.log(`  ${ROUNDS} rounds, ${Date.now() - t0} ms — Landlord won `
+        + `${(landlordWins / ROUNDS * 100).toFixed(1)}%`);
+    console.log(`  ${bombs} bombs · ${rockets} 王炸 · ${springs} 春天 · ${antis} 反春 · ${redeals} redeals`);
+    check(landlordWins > 0 && landlordWins < ROUNDS, 'ddz: one side wins every single round');
+
+    /* --- is the table balanced, or is the Landlord's AI just better? ------ */
+
+    // The Landlord wins most rounds, and that is not a bug: the bidding hands
+    // the job to whoever was dealt the best hand. Take the bidding out — draw
+    // the Landlord at random — and the same AI on both sides should land near
+    // even. That is the number worth watching; if it drifts, one side plays
+    // better than the other rather than holding better cards.
+    {
+        const rng = new CV.RNG(2024);
+        let wins = 0;
+        const N = Math.max(60, Math.round(ROUNDS / 2));
+        for (let g = 0; g < N; g++) {
+            const e = new game.Engine({
+                rng: new CV.RNG(rng.int(1e9)), config: { room: 'beginner' },
+                seats: [0, 1, 2].map((i) => new CV.Seat(i, { kind: 'ai', name: 'S' + i, coins: 20000 })),
+            });
+            const ai = new game.AI(e);
+            const pick = rng.int(3);
+            ai.bidFor = (seat) => (seat === pick ? 2 : 0);
+            e.start();
+            let steps = 0;
+            while (!e.isOver()) {
+                const a = ai.decide(e.turn);
+                if (!a || !e.apply(a)) break;
+                if (++steps > 500) break;
+            }
+            if (e.landlordWon) wins++;
+        }
+        const rate = wins / N * 100;
+        console.log(`  with the Landlord drawn at random instead of bid for: ${rate.toFixed(1)}%`);
+        check(rate > 40 && rate < 68,
+            `ddz: ${rate.toFixed(1)}% for a randomly chosen Landlord — the two sides are not playing equally`);
+    }
+
+    /* --- what a host may broadcast ---------------------------------------- */
+
+    {
+        const e = new game.Engine({
+            rng: new CV.RNG(5), config: {},
+            seats: [0, 1, 2].map((i) => new CV.Seat(i, { kind: 'ai', name: 'S' + i, coins: 500, isYou: i === 0 })),
+        });
+        e.start();
+        for (let viewer = 0; viewer < 3; viewer++) {
+            const view = e.snapshotFor(viewer);
+            check(!view.rng, 'ddz: the snapshot carries the RNG');
+            check(view.bottom.every((c) => c === null), 'ddz: the face-down cards went out on the wire');
+            view.seats.forEach((seat, i) => {
+                if (i === viewer) check(seat.cards.every(Boolean), 'ddz: your own hand was redacted from you');
+                else check(seat.cards.every((c) => c === null) && seat.cards.length === 17,
+                    'ddz: another seat\'s hand went out on the wire');
+            });
+        }
+        // And the moment a Landlord exists, the three are public.
+        while (e.landlord < 0) e.apply({ type: 'bid', seat: e.turn, bid: 3 });
+        check(e.snapshotFor(1).bottom.every(Boolean), 'ddz: the bottom stayed hidden after the Landlord took it');
+    }
+    console.log('  ✓ no hand and no face-down card on the wire');
+
+    // The rules card must have something to teach a first-time player.
+    for (const key of game.rules) check(CV.t(key) !== key, `ddz: rule key ${key} has no text`);
+    for (const type of ['single', 'pair', 'triple', 'triple1', 'triple2', 'straight', 'pairs',
+                        'plane', 'plane1', 'plane2', 'four2', 'four2pair', 'bomb', 'rocket']) {
+        check(CV.t('ddz.type.' + type) !== 'ddz.type.' + type, `ddz: ${type} has no name`);
+    }
+    console.log('  ✓ rules card and every combination name resolve');
+}
+
+const allDistinct = (cards) => new Set(cards.map((c) => c.id)).size;
+
+/** Replay the log: two passes must clear the table and return the lead. */
+function auditTricks(e) {
+    let lastPlayer = -1, passes = 0, cleared = false;
+    for (const ev of e.events) {
+        if (ev.type === 'play') {
+            if (cleared) {
+                check(ev.seat === lastPlayer,
+                    `ddz: the trick cleared but seat ${ev.seat} led instead of ${lastPlayer}`);
+                cleared = false;
+            }
+            lastPlayer = ev.seat; passes = 0;
+        } else if (ev.type === 'pass') {
+            passes++;
+            check(passes <= 2, 'ddz: three passes in a row without the table clearing');
+        } else if (ev.type === 'trickEnd') {
+            check(passes === 2, `ddz: the table cleared after ${passes} passes`);
+            check(ev.lead === lastPlayer, 'ddz: the lead did not go back to the last player');
+            passes = 0; cleared = true;
+        }
+    }
+}
+auditDouDiZhu();
+
 /* ---- what a host is allowed to broadcast ------------------------------- */
 
 /**
@@ -657,7 +1029,11 @@ auditDragonGate();
  */
 console.log('\n📡 Broadcast safety');
 for (const game of CV.Registry.playable()) {
-    if (!game.AI) continue;   // a slot machine deals no hands to broadcast
+    // This audit is written for a table whose cards are face up apart from a
+    // hole card, so it treats a null in the broadcast as a hole. 斗地主 hides
+    // whole hands, and nulls there are the redaction working — its own audit
+    // checks that above. A slot machine deals no hands at all.
+    if (!game.AI || OWN_AUDIT.has(game.code)) continue;
     const before = failures;
     let checkedHidden = 0;
 
