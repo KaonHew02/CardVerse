@@ -19,25 +19,33 @@
     const CV = window.CV;
 
     /**
-     * A joker card, drawn rather than borrowed. 🃏 is already 21's icon and
-     * the Unicode playing cards render as thin hollow outlines at tile size,
-     * so this is a solid card with a jester's cap on it.
+     * A mahjong tile with a jester's face on it — the game is rummy played on
+     * tiles, so the icon is a tile rather than a card, with the green edge a
+     * tile has when you look at it from the side.
+     *
+     * Drawn rather than borrowed: 🃏 is already 21's icon and the Unicode
+     * tile glyphs come out as thin hollow outlines at this size.
      */
     const ICON =
-        '<svg class="icon-card" viewBox="0 0 26 36" aria-label="Joker">' +
-        '<rect x="1" y="1" width="24" height="34" rx="4" fill="#fff"/>' +
-        // The cap, and three points that droop outwards — a crown's points
-        // stand straight up, and 斗地主 already has the crown.
-        '<path d="M7.5 24 Q7.5 15 13 14 Q18.5 15 18.5 24 Z" fill="#c62828"/>' +
-        '<path d="M8.5 19 Q4.5 17.5 4.8 13" stroke="#c62828" stroke-width="2.6" ' +
-        'fill="none" stroke-linecap="round"/>' +
-        '<path d="M17.5 19 Q21.5 17.5 21.2 13" stroke="#c62828" stroke-width="2.6" ' +
-        'fill="none" stroke-linecap="round"/>' +
-        '<path d="M13 14 L13 10" stroke="#c62828" stroke-width="2.6" stroke-linecap="round"/>' +
-        '<circle cx="4.8" cy="10.8" r="2.1" fill="#f5b942"/>' +
-        '<circle cx="21.2" cy="10.8" r="2.1" fill="#f5b942"/>' +
-        '<circle cx="13" cy="8" r="2.1" fill="#f5b942"/>' +
-        '<rect x="6" y="23.4" width="14" height="3.2" rx="1.6" fill="#8e1c1c"/></svg>';
+        '<svg class="icon-tile" viewBox="0 0 30 36" aria-label="Joker tile">' +
+        // The side of the tile, and its face.
+        '<rect x="1" y="3.5" width="25" height="31.5" rx="4.5" fill="#2f9e5a"/>' +
+        '<rect x="4" y="1" width="25" height="31.5" rx="4.5" fill="#fdfdf7"/>' +
+        // The cap: three points, three colours, a bell on each.
+        '<path d="M9.5 16.5 L6 8.5 L14 13 Z" fill="#3aa856" stroke="#2a2a2a" stroke-width=".8" stroke-linejoin="round"/>' +
+        '<path d="M23.5 16.5 L27 8.5 L19 13 Z" fill="#2f7fd8" stroke="#2a2a2a" stroke-width=".8" stroke-linejoin="round"/>' +
+        '<path d="M11 14 L16.5 5 L22 14 Z" fill="#e03b3b" stroke="#2a2a2a" stroke-width=".8" stroke-linejoin="round"/>' +
+        '<circle cx="6" cy="7.5" r="2.1" fill="#f5b942" stroke="#2a2a2a" stroke-width=".7"/>' +
+        '<circle cx="27" cy="7.5" r="2.1" fill="#8e5bd0" stroke="#2a2a2a" stroke-width=".7"/>' +
+        '<circle cx="16.5" cy="4.4" r="2.1" fill="#3aa856" stroke="#2a2a2a" stroke-width=".7"/>' +
+        // And the face under it, grinning.
+        '<circle cx="16.5" cy="21" r="7.4" fill="#f7cf9a" stroke="#2a2a2a" stroke-width=".9"/>' +
+        '<circle cx="13.6" cy="19" r="1.1" fill="#2a2a2a"/>' +
+        '<circle cx="19.4" cy="19" r="1.1" fill="#2a2a2a"/>' +
+        '<circle cx="10.8" cy="22.2" r="1.5" fill="#f08a8a"/>' +
+        '<circle cx="22.2" cy="22.2" r="1.5" fill="#f08a8a"/>' +
+        '<path d="M11.6 22.4 A5.2 5.2 0 0 0 21.4 22.4 Z" fill="#c0392b" stroke="#2a2a2a" ' +
+        'stroke-width=".8" stroke-linejoin="round"/></svg>';
 
     CV.Registry.add({
         code: 'lami',
