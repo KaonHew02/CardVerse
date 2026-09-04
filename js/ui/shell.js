@@ -80,7 +80,14 @@
         set('hdrAvatar', p.avatar);
         set('hdrName', p.name);
         set('hdrLevel', 'Lv ' + p.level + ' · ' + title.name);
-        set('hdrCoins', fmt(p.coins));
+        // While seated, show the seat's live balance rather than the stored
+        // profile: the stake leaves the seat on every bet and only returns to
+        // the profile when the round settles. On a slot machine that gap is
+        // visible on every single spin.
+        const table = CV.Play && CV.Play.table;
+        const seated = table && table.engine && table.engine.youSeat >= 0 && !table.engine.over
+            ? table.engine.seats[table.engine.youSeat] : null;
+        set('hdrCoins', fmt(seated ? seated.coins : p.coins));
         const bar = $('hdrXp');
         if (bar) bar.style.width = prog.pct + '%';
         const xp = $('hdrXpText');

@@ -32,7 +32,8 @@ keeps it a game hub.
 | Export / Import, Google Drive copy | ✅ `save.js`, `drive.js` |
 | 🃏 **21** | ✅ house rules — no natural, DOUBLE, and 五龙 pays 2:1 |
 | 🎴 **百家乐** | ✅ |
-| 🎰 老虎机 · 🐉 射龙门 · 👑 斗地主 · 🂢 锄大D · ♠️ Poker · 🐮 斗牛 · 🀄 Mahjong | ⏳ next |
+| 🎰 **老虎机** | ✅ 3 reels, 1 payline, auto-spin |
+| 🐉 射龙门 · 👑 斗地主 · 🂢 锄大D · ♠️ Poker · 🐮 斗牛 · 🀄 Mahjong | ⏳ next |
 | How-to-play card before a first hand | ✅ per game, in both languages |
 | Online multiplayer | ⏳ Phase 5 — see `js/core/transport.js` |
 
@@ -63,6 +64,7 @@ js/core/              the hub — nothing in here knows a game by name
 js/games/<game>/      engine.js · ai.js · view.js · index.js (registers itself)
   twentyone/          21 — its own rules, not a variant of anything
   baccarat/           百家乐 — punto banco
+  slots/              老虎机 — a session of spins is one round
 js/ui/                shell · lobby · play · result · profile · achievements ·
                       statistics · leaderboard · missions · settings · cardview
 js/save.js            Export / Import envelope

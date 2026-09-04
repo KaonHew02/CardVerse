@@ -74,3 +74,13 @@
     :root { --anim: 1ms; }
     .card-fresh, .screen, .dialog, .result { animation: none; }
 }
+
+@media (max-width: 900px) {
+    /* The cabinet comes first on a narrow screen; the paytable and the tally
+     * are reference, not the thing you are looking at. */
+    .slots { grid-template-columns: 1fr; grid-template-areas: "cab" "ctl" "side"; }
+    .slot-reel { width: 72px; height: 92px; font-size: 2.4rem; }
+    .slot-controls { flex-direction: column; align-items: stretch; }
+    .slot-go { width: 100%; }
+    .slot-spin { width: 100%; }
+}

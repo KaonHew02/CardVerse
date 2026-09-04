@@ -123,6 +123,7 @@
                 </div>
             </div>
 
+            ${maxOthers === 0 ? '' : `
             <div class="card-panel">
                 <h3>${esc(t('setup.opponents'))}</h3>
                 <div class="row-opt">
@@ -133,7 +134,7 @@
                     </div>
                 </div>
                 <p class="muted small">${esc(t('setup.aiNote'))}</p>
-            </div>
+            </div>`}
 
             <div class="btn-row">
                 <button class="btn ghost" id="setupRules">📖 ${esc(t('rules.again'))}</button>
@@ -147,6 +148,8 @@
         const body = $('setupBody');
         body.querySelectorAll('[data-room]').forEach((b) => b.addEventListener('click', () => { setup.room = b.dataset.room; paintSetup(); }));
         body.querySelectorAll('[data-ai]').forEach((b) => b.addEventListener('click', () => { setup.ai = Number(b.dataset.ai); paintSetup(); }));
+        // A solo machine has no seats to fill.
+        if (maxOthers === 0) setup.ai = 0;
         $('setupStart').addEventListener('click', start);
         $('setupRules').addEventListener('click', () => CV.UI.showRules(setup.game));
     }

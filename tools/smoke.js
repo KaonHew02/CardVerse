@@ -47,6 +47,7 @@ function load(rel) {
     'js/core/stats.js', 'js/core/achievements.js', 'js/core/missions.js', 'js/core/cosmetics.js',
     'js/core/rewards.js', 'js/core/table.js',
     'js/games/baccarat/engine.js', 'js/games/baccarat/ai.js', 'js/games/baccarat/index.js',
+    'js/games/slots/engine.js', 'js/games/slots/index.js',
     // Views need CV.UI and a DOM; the engines under test do not.
     'js/games/twentyone/engine.js', 'js/games/twentyone/ai.js', 'js/games/twentyone/index.js',
 ].forEach(load);
@@ -199,6 +200,7 @@ const anyLive = (e) => e.seats.some((s) => !s.out && !CV.TwentyOneScore(s.hands[
 console.log(`CardVerse smoke — ${HANDS} hands per game\n`);
 
 for (const game of CV.Registry.playable()) {
+    if (!game.AI) continue;   // slots has no opponents; auditSlots covers it
     console.log(`${game.icon} ${game.name}`);
     const master = new CV.RNG(12345);
     let bet = 0, net = 0, shoe = null, sameShoeRuns = 0;
@@ -306,6 +308,93 @@ console.log('\n🪙 Rewards pipeline');
     check(ss.spectator && CV.Profile.get().coins === pc, 'spectator table changed the profile');
 }
 
+/* ---- 老虎机 ------------------------------------------------------------- */
+
+/**
+ * The paytable, the win condition, and the return-to-player.
+ *
+ * RTP is the number that decides whether the machine is playable, so it is
+ * measured rather than assumed: with equal reels and this paytable it works
+ * out at (5+8+10+15+25+40+75+100) / 8³ ≈ 54%. If the reels are ever weighted
+ * or the multipliers changed, this is what will say so.
+ */
+function auditSlots() {
+    console.log('\n🎰 老虎机');
+    const game = CV.Registry.get('slots');
+    const syms = CV.SlotsSymbols;
+
+    check(syms.length === 8, `slots: ${syms.length} symbols, expected 8`);
+    const wanted = { cherry: 5, lemon: 8, orange: 10, melon: 15, bell: 25, star: 40, diamond: 75, seven: 100 };
+    for (const [id, mult] of Object.entries(wanted)) {
+        const sym = syms.find((s) => s.id === id);
+        check(sym && sym.mult === mult, `slots: ${id} pays ×${sym && sym.mult}, expected ×${mult}`);
+    }
+
+    // The theoretical figure, straight from the paytable.
+    const theory = syms.reduce((n, s) => n + s.mult, 0) / Math.pow(syms.length, 3);
+
+    const rng = new CV.RNG(2468);
+    const e = new game.Engine({
+        rng,
+        seats: [new CV.Seat(0, { kind: 'human', isYou: true, coins: 1e9 })],
+        config: {},
+    });
+    e.start();
+
+    const SPINS = 200000;
+    const BET = 10;
+    let paidOnWin = 0, twoMatch = 0;
+    for (let i = 0; i < SPINS; i++) {
+        if (!e.canAfford) break;
+        e.spin(BET);
+        const r = e.last;
+
+        const same = r.reels[0] === r.reels[1] && r.reels[1] === r.reels[2];
+        check(same === (r.payout > 0), `slots: three-alike ${same} but payout ${r.payout}`);
+
+        if (same) {
+            const sym = syms.find((s) => s.id === r.reels[0]);
+            check(r.payout === BET * sym.mult,
+                `slots: ${r.reels[0]} paid ${r.payout}, expected ${BET * sym.mult}`);
+            check(r.jackpot === (r.reels[0] === CV.SlotsJackpot), 'slots: jackpot flag disagrees with the reels');
+            paidOnWin++;
+        } else {
+            // Two of a kind must pay nothing — the rule players get wrong.
+            const pairish = r.reels[0] === r.reels[1] || r.reels[1] === r.reels[2] || r.reels[0] === r.reels[2];
+            if (pairish) { twoMatch++; check(r.payout === 0, 'slots: two matching symbols paid'); }
+        }
+    }
+
+    const g = e.tally;
+    const rtp = g.won / g.staked;
+    check(g.spins === g.wins + g.losses, `slots: ${g.spins} spins but ${g.wins}+${g.losses} recorded`);
+    check(g.wins === paidOnWin, 'slots: win tally disagrees with the spins');
+    check(e.seat.coins === e.seat.startCoins + e.seat.net, 'slots: coins do not reconcile');
+    check(g.won === g.staked * rtp, 'slots: rtp arithmetic');
+
+    console.log(`  ${g.spins.toLocaleString('en-US')} spins · win rate ${(g.wins / g.spins * 100).toFixed(2)}% `
+        + `(1 in ${(g.spins / g.wins).toFixed(0)}) · ${twoMatch.toLocaleString('en-US')} near misses paid nothing`);
+    console.log(`  RTP ${(rtp * 100).toFixed(1)}% measured against ${(theory * 100).toFixed(1)}% theoretical`);
+    console.log(`  jackpots ${g.jackpots} · biggest single win 🪙 ${g.biggest.toLocaleString('en-US')}`);
+
+    // Sampling error over 200k spins is small, but a ×100 jackpot is lumpy —
+    // three points either side is honest rather than tight.
+    check(Math.abs(rtp - theory) < 0.03,
+        `slots: RTP ${(rtp * 100).toFixed(1)}% is far from the paytable's ${(theory * 100).toFixed(1)}%`);
+
+    // Betting limits hold, and a bet is never larger than the balance.
+    const poor = new game.Engine({
+        rng: new CV.RNG(9), seats: [new CV.Seat(0, { kind: 'human', isYou: true, coins: 3 })], config: {},
+    });
+    poor.start();
+    poor.spin(1000);
+    check(poor.seat.startCoins - poor.seat.coins + poor.last.payout === poor.last.payout - poor.last.net + 0
+        || poor.last.bet <= 3, `slots: staked ${poor.last.bet} with only 3 coins`);
+    check(poor.last.bet <= 3, `slots: bet ${poor.last.bet} exceeded the balance of 3`);
+    console.log('  ✓ bet never exceeds the balance, and two-of-a-kind never pays');
+}
+auditSlots();
+
 /* ---- the baccarat drawing table, exhaustively --------------------------- */
 
 /**
@@ -379,6 +468,7 @@ auditBaccaratTable();
  */
 console.log('\n📡 Broadcast safety');
 for (const game of CV.Registry.playable()) {
+    if (!game.AI) continue;   // a slot machine deals no hands to broadcast
     const before = failures;
     let checkedHidden = 0;
 

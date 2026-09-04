@@ -260,3 +260,55 @@
 .hand-sm { flex-wrap: wrap; row-gap: 3px; column-gap: 2px; }
 .hand.hand-sm .card,
 .hand.hand-sm .card:first-child { margin-left: 0; }
+
+/* ---- 老虎机 ------------------------------------------------------------ */
+
+.slots { display: grid; grid-template-columns: 1fr 300px; grid-template-areas: "cab side" "ctl side"; gap: 16px; align-items: start; }
+.slot-cabinet { grid-area: cab; position: relative; padding: 18px; border-radius: 18px;
+    background: linear-gradient(160deg, #2a1a3d, #14101f); border: 3px solid var(--accent);
+    box-shadow: inset 0 0 40px rgba(0,0,0,.55), 0 8px 30px rgba(0,0,0,.4); }
+.slot-window { display: flex; gap: 10px; justify-content: center; }
+.slot-reel {
+    width: 96px; height: 116px; border-radius: 12px; display: grid; place-items: center;
+    font-size: 3.2rem; line-height: 1; background: linear-gradient(#fffdf5, #e6e0cf);
+    box-shadow: inset 0 6px 14px rgba(0,0,0,.25), inset 0 -6px 14px rgba(0,0,0,.18);
+    user-select: none;
+}
+/* The blur is the only cue that a reel is still running — it must never be
+ * on a reel that has already landed, or the machine looks like it is lying. */
+.slot-reel.is-spinning { filter: blur(1.5px); }
+.slot-reel.is-landing { animation: reelLand 260ms cubic-bezier(.2,.9,.25,1); }
+@keyframes reelLand { 0% { transform: translateY(-14%); } 60% { transform: translateY(4%); } 100% { transform: none; } }
+.slot-payline { height: 3px; margin: 12px 8px 6px; border-radius: 2px;
+    background: linear-gradient(90deg, transparent, var(--accent), transparent); }
+.slot-shout { min-height: 2em; text-align: center; font-weight: 800; font-size: 1.2rem; }
+.slot-shout.is-win { color: var(--good); }
+.slot-shout.is-loss { color: var(--muted); font-weight: 600; font-size: 1rem; }
+.slot-shout.is-jackpot { color: var(--accent); font-size: 1.5rem; animation: jackpotPulse 700ms ease-in-out 3; }
+@keyframes jackpotPulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.12); } }
+
+.slot-controls { grid-area: ctl; display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-end;
+    background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; }
+.slot-bet { flex: 1 1 260px; }
+.slot-bet-row { display: flex; align-items: center; gap: 12px; margin: 4px 0 8px; }
+.slot-bet-row b { font-size: 1.3rem; color: var(--accent); min-width: 6em; text-align: center; }
+.slot-go { display: flex; flex-direction: column; gap: 8px; flex: 0 0 auto; }
+.slot-spin { font-size: 1.15rem; padding: 14px 40px; letter-spacing: .06em; }
+.auto-row { align-items: center; margin: 0; }
+.chip.small { width: 44px; height: 44px; font-size: .75rem; }
+
+.slot-side { grid-area: side; }
+.slot-pay-table { font-size: .85rem; }
+.slot-pay-table td { padding: 3px 6px; border: 0; }
+.slot-hist { font-size: .85rem; }
+.slot-hist td { padding: 4px 6px; }
+.slot-hist tr.is-win td { color: var(--good); }
+.slot-hist tr.is-jackpot td { color: var(--accent); font-weight: 700; }
+.slot-hist-reels { font-size: 1.05rem; letter-spacing: 2px; }
+
+/* A machine is not dealt on felt — the arcade floor is its own surface. */
+.table-root.no-felt {
+    background: radial-gradient(1000px 500px at 50% 0%, #1b1430, #0d0a16 70%);
+    box-shadow: inset 0 0 0 8px #0a0812, inset 0 0 60px rgba(0, 0, 0, .6), var(--shadow);
+    color: var(--text);
+}
