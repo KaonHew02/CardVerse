@@ -41,7 +41,8 @@
 
         extraLabels: {
             dgRounds: 'Gates opened', dgWins: '射中龙门', dgPosts: '压线',
-            dgEqual: 'Equal gates', dgShut: 'Adjacent gates', forfeits: 'Walked away',
+            dgEqual: 'Equal gates', dgShut: 'Adjacent gates', dgSkips: 'Gates passed',
+            forfeits: 'Walked away',
         },
 
         achievements: [

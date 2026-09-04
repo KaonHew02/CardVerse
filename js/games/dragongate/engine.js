@@ -6,6 +6,16 @@
  * borrows from any other game in the hub: no blackjack totals, no baccarat
  * scoring, no poker hands.
  *
+ * **The gate is dealt before the stake.** A seat's turn opens with its two
+ * posts already face up and priced, and only then is it asked for money. That
+ * ordering is the game: you are looking at the gate, and at what it pays,
+ * when you decide whether to shoot it — or to pass and let it go. Staking
+ * blind and then being shown an adjacent gate that no card can pass is not a
+ * decision, it is a collection.
+ *
+ * Passing costs nothing. The two posts are spent either way, because they
+ * came off the pack.
+ *
  * The two rules that are easy to get wrong, and are therefore written out:
  *
  *  - **Equal gate cards are not an automatic loss.** They put the choice to
@@ -46,6 +56,23 @@
 
     const MIN_CARDS = 3;
 
+    /**
+     * Does a card of rank `r` pass this gate?
+     *
+     * The one rule with the most room to go quietly wrong, so it lives in one
+     * place and every price, every quote and every settlement calls it.
+     * Strictly between, strictly above, strictly below — never equal, because
+     * level with a post is 压线 and loses.
+     */
+    function passes(r, gate, pick) {
+        if (gate.equal) {
+            if (pick === 'higher') return r > gate.low;
+            if (pick === 'lower')  return r < gate.low;
+            return false;
+        }
+        return r > gate.low && r < gate.high;
+    }
+
     class DragonGateEngine extends CV.GameEngine {
 
         static get publicConfig() { return ['room', 'decks', 'edge']; }
@@ -79,10 +106,12 @@
                 s.bet     = 0;
                 s.payout  = 0;
                 s.gate    = null;   // { low, high, equal, cards }
+                s.quote   = null;   // the price before anybody has staked
                 s.pick    = null;   // 'higher' | 'lower', for an equal gate
                 s.third   = null;
                 s.odds    = null;   // { winners, remaining, mult }
-                s.outcome = null;   // 'gate' | 'post' | 'outside'
+                s.outcome = null;   // 'gate' | 'post' | 'outside' | 'passed'
+                s.skipped = false;
                 s.done    = false;
                 s.out     = s.coins < this.minBet;
             }
@@ -98,6 +127,7 @@
         // the recap talking about one gate at a time without either of them
         // having to know which seat it belongs to.
         get gate()    { return this.shooter ? this.shooter.gate : null; }
+        get quote()   { return this.shooter ? this.shooter.quote : null; }
         get pick()    { return this.shooter ? this.shooter.pick : null; }
         get third()   { return this.shooter ? this.shooter.third : null; }
         get odds()    { return this.shooter ? this.shooter.odds : null; }
@@ -109,12 +139,17 @@
 
         start() {
             this.round = 1;
-            this.phase = 'betting';
             const first = this.seats.findIndex((s) => !s.out);
             if (first < 0) { this.over = true; this.phase = 'over'; return; }
             this.turn = first;
+            this.beginTurn();
+        }
+
+        /** A seat's turn opens with its posts already down and priced. */
+        beginTurn() {
             this.topUp();
-            this.emit('betting', { seat: this.turn });
+            this.phase = 'offer';
+            this.openGate();
         }
 
         /**
@@ -133,10 +168,16 @@
             const s = this.seats[seat];
             if (!s || s.out || s.done) return [];
 
-            if (this.phase === 'betting') {
+            if (this.phase === 'offer') {
+                const out = [];
                 const max = Math.min(this.maxBet, s.coins);
-                if (max < this.minBet) return [];
-                return [{ type: 'bet', min: this.minBet, max, label: t('act.bet') }];
+                if (max >= this.minBet) {
+                    out.push({ type: 'bet', min: this.minBet, max, label: t('dg.open') });
+                }
+                // Passing is always on the table. A gate no card can pass, or
+                // one a seat simply does not fancy, is theirs to let go.
+                out.push({ type: 'skip', label: t('dg.skip') });
+                return out;
             }
 
             // An equal gate hands the decision to the player. It is never
@@ -154,6 +195,7 @@
             // Only the seat whose shot it is may act on this gate.
             if (action.seat !== undefined && action.seat !== this.turn) return false;
             if (action.type === 'bet')  return this.doBet(action.amount);
+            if (action.type === 'skip') return this.doSkip();
             if (action.type === 'pick') return this.doPick(action.dir);
             return false;
         }
@@ -161,6 +203,7 @@
         /* ---- the round ----------------------------------------------------- */
 
         doBet(amount) {
+            if (this.phase !== 'offer') return false;
             const s = this.shooter;
             const bet = Math.max(this.minBet,
                 Math.min(Math.round(amount), Math.min(this.maxBet, s.coins)));
@@ -168,7 +211,28 @@
             s.coins -= bet;
             s.net   -= bet;
             this.emit('bet', { seat: this.turn, amount: bet });
-            this.openGate();
+
+            // An equal gate hands the decision to the seat before the price
+            // can be fixed, because the two calls are not worth the same.
+            if (s.gate.equal) {
+                this.phase = 'choose';
+                this.emit('choose', { seat: this.turn, rank: s.gate.low });
+                return true;
+            }
+            this.settleOdds();
+            this.drawThird();
+            return true;
+        }
+
+        /** Let the gate go. It costs nothing and pays nothing. */
+        doSkip() {
+            if (this.phase !== 'offer') return false;
+            const s = this.shooter;
+            s.skipped = true;
+            s.outcome = 'passed';
+            s.done    = true;
+            this.emit('skip', { seat: this.turn });
+            this.nextShooter();
             return true;
         }
 
@@ -185,18 +249,38 @@
                 equal: ra === rb,
                 cards: [a, b],
             };
+            // Priced now, before a stake exists. Nothing else comes off the
+            // pack until the third card, so this quote is the real price and
+            // not an estimate the settlement can quietly disagree with.
+            s.quote = this.quoteFor(s);
             this.emit('gate', {
-                seat: this.turn, cards: [a, b],
+                seat: this.turn, cards: [a, b], quote: s.quote,
                 low: s.gate.low, high: s.gate.high, equal: s.gate.equal,
             });
+        }
 
-            if (s.gate.equal) {
-                this.phase = 'choose';
-                this.emit('choose', { seat: this.turn, rank: s.gate.low });
-                return;
-            }
-            this.settleOdds();
-            this.drawThird();
+        /**
+         * What this gate is worth before anybody has staked anything.
+         *
+         * An ordinary gate has one price. An equal gate has two — one for
+         * 大过 and one for 小过 — and both are quoted, because a seat cannot
+         * judge whether to play without seeing what either call is worth.
+         */
+        quoteFor(s) {
+            if (!s.gate.equal) return { one: this.priceFor(s.gate, null) };
+            return {
+                higher: this.priceFor(s.gate, 'higher'),
+                lower:  this.priceFor(s.gate, 'lower'),
+            };
+        }
+
+        /** The fair inverse of the true chance, less the house's edge. */
+        priceFor(gate, pick) {
+            const remaining = this.deck.remaining;
+            const winners = this.deck.cards.filter((c) => passes(rank(c), gate, pick)).length;
+            const p = remaining ? winners / remaining : 0;
+            const mult = p > 0 ? Math.round((1 / p) * (1 - this.config.edge) * 100) / 100 : 0;
+            return { winners, remaining, mult };
         }
 
         doPick(dir) {
@@ -213,13 +297,7 @@
          */
         wins(r, seat) {
             const s = seat || this.shooter;
-            const g = s.gate;
-            if (g.equal) {
-                if (s.pick === 'higher') return r > g.low;
-                if (s.pick === 'lower')  return r < g.low;
-                return false;
-            }
-            return r > g.low && r < g.high;
+            return passes(r, s.gate, s.pick);
         }
 
         /**
@@ -234,13 +312,16 @@
          * round still plays out — the rules say the third card loses — and the
          * multiplier is zero so nothing pretends otherwise.
          */
+        /**
+         * Fix the price the seat is actually being paid at.
+         *
+         * It re-derives rather than reading the quote back, so that if the
+         * two ever disagreed the settlement would still be the honest number
+         * — and the audit compares them.
+         */
         settleOdds() {
             const s = this.shooter;
-            const remaining = this.deck.remaining;
-            const winners = this.deck.cards.filter((c) => this.wins(rank(c), s)).length;
-            const p = remaining ? winners / remaining : 0;
-            const mult = p > 0 ? Math.round((1 / p) * (1 - this.config.edge) * 100) / 100 : 0;
-            s.odds = { winners, remaining, mult };
+            s.odds = this.priceFor(s.gate, s.gate.equal ? s.pick : null);
             this.emit('odds', Object.assign({ seat: this.turn }, s.odds));
         }
 
@@ -279,10 +360,8 @@
         nextShooter() {
             const next = this.seats.findIndex((s, i) => i > this.turn && !s.out && !s.done);
             if (next < 0) { this.phase = 'over'; this.finish(); return; }
-            this.turn  = next;
-            this.phase = 'betting';
-            this.topUp();
-            this.emit('betting', { seat: this.turn });
+            this.turn = next;
+            this.beginTurn();
         }
 
         /* ---- result --------------------------------------------------------- */
@@ -306,6 +385,9 @@
             const rows = played.map((s) => {
                 const g = s.gate || { low: 0, high: 0, equal: false, cards: [] };
                 const won = s.outcome === 'gate';
+                // A gate that was let go could not have been shut out — the
+                // seat never found out, and the tally must not claim it did.
+                const shut = !s.skipped && s.odds && s.odds.winners === 0;
                 return {
                     seat: s.index,
                     name: s.name,
@@ -324,11 +406,12 @@
                         total: null,
                     }],
                     extra: {
-                        dgRounds: 1,
+                        dgRounds: s.skipped ? 0 : 1,
                         dgWins: won ? 1 : 0,
                         dgPosts: s.outcome === 'post' ? 1 : 0,
-                        dgEqual: g.equal ? 1 : 0,
-                        dgShut: (s.odds && s.odds.winners === 0) ? 1 : 0,
+                        dgEqual: (g.equal && !s.skipped) ? 1 : 0,
+                        dgShut: shut ? 1 : 0,
+                        dgSkips: s.skipped ? 1 : 0,
                         forfeits: 0,
                     },
                 };
@@ -337,7 +420,7 @@
             // The recap headline is your own gate when you played one — it is
             // your round being described — and the last one otherwise.
             const mine = played.find((s) => s.isYou) || played[played.length - 1] || null;
-            const detail = mine ? say(mine) : '';
+            const detail = mine ? (mine.skipped ? t('dg.passed') : say(mine)) : '';
 
             // The gates sit in the table at a return of zero, the same way the
             // dealer does elsewhere. Without that row a solo player who has
@@ -368,7 +451,7 @@
             // put on the wire — see the broadcast audit in tools/smoke.js.
             return Object.assign(super.snapshot(), {
                 gate: this.gate, pick: this.pick, third: this.third,
-                odds: this.odds, outcome: this.outcome,
+                odds: this.odds, quote: this.quote, outcome: this.outcome,
                 shooter: this.turn,
                 shoeRemaining: this.deck.remaining,
             });

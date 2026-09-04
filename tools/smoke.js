@@ -522,9 +522,10 @@ function auditDragonGate() {
             seats: [new CV.Seat(0, { kind: 'human', isYou: true, coins: coins || 100000 })],
             config: {},
         });
-        e.start();
-        // draw() pops, so the first card dealt is the last in the array.
+        // draw() pops, so the first card dealt is the last in the array. This
+        // has to happen before start(), which now opens the gate itself.
         e.deck.cards = e.deck.cards.slice(0, 20).concat([cardOf(third), cardOf(b), cardOf(a)]);
+        e.start();
         return e;
     };
 
@@ -634,8 +635,10 @@ function auditDragonGate() {
             });
             const before = shoe ? shoe.cards.length : 52;
             e.start();
-            if (e.deck.remaining > before) { reshuffles++; seen = new Set(); }
-            e.handle({ type: 'bet', amount: 10 });
+            // start() has already taken the two posts, so add them back before
+            // comparing — otherwise every round looks like it shrank the pack.
+            if (e.deck.remaining + 2 > before) { reshuffles++; seen = new Set(); }
+            e.handle({ type: 'bet', seat: 0, amount: 10 });
             if (e.phase === 'choose') e.handle({ type: 'pick', dir: 'higher' });
             for (const c of e.gate.cards.concat([e.third])) {
                 check(!seen.has(c.id), `dragongate: card ${c.id} came out twice without a reshuffle`);
@@ -677,7 +680,7 @@ function auditDragonGate() {
      * later quotes would be wrong without anything else looking wrong.
      */
     {
-        let rounds = 0, shots = 0, shut = 0;
+        let rounds = 0, shots = 0, shut = 0, passes = 0;
         for (let g = 0; g < 60; g++) {
             const rng = new CV.RNG(9000 + g);
             const e = new game.Engine({
@@ -719,13 +722,17 @@ function auditDragonGate() {
 
                 const s = e.seats[turn];
                 if (s.done) {
-                    shots++;
-                    if (s.odds.winners === 0) shut++;
-                    for (const c of s.gate.cards.concat([s.third])) {
+                    if (s.skipped) passes++; else shots++;
+                    if (s.odds && s.odds.winners === 0) shut++;
+                    // A passed gate still spent its posts; only the third card
+                    // is missing, because it was never drawn.
+                    for (const c of s.gate.cards.concat(s.third ? [s.third] : [])) {
                         check(!seen.has(c.id),
                             `dragongate: ${c.id} was dealt to two seats in one round`);
                         seen.add(c.id);
                     }
+                    check(!s.skipped || (s.third === null && s.bet === 0 && s.net === 0),
+                        `dragongate: seat ${turn} passed but was charged for it`);
                 }
             }
 
@@ -742,9 +749,75 @@ function auditDragonGate() {
                 'dragongate: the gates do not hold the other side of the table');
             rounds++;
         }
-        console.log(`  ${rounds} four-seat rounds — ${shots} gates shot off a shared pack, ${shut} of them shut`);
+        console.log(`  ${rounds} four-seat rounds — ${shots} gates shot off a shared pack, `
+            + `${passes} passed, ${shut} shut`);
         console.log('  ✓ seats shoot in turn, and no card reached two of them');
         console.log('  ✓ nobody is left without a gate, and the recap balances');
+    }
+
+    /* --- the gate comes first, and passing is free ---------------------- */
+
+    /**
+     * The ordering is the game. A seat must be looking at its posts, and at
+     * what they pay, *before* it is asked for money — otherwise "pass" is not
+     * a decision and an adjacent gate is just a levy.
+     *
+     * Three things are checked: nothing is staked before the gate exists, the
+     * quote a seat is shown is the price it is actually settled at, and a
+     * pass costs nothing and draws no third card.
+     */
+    {
+        let quoted = 0, passed = 0, equalQuotes = 0;
+        for (let g = 0; g < 300; g++) {
+            const e = new game.Engine({
+                rng: new CV.RNG(1700 + g),
+                seats: [new CV.Seat(0, { kind: 'human', isYou: true, coins: 5000 })],
+                config: { shoe: null },
+            });
+            e.start();
+
+            check(e.phase === 'offer', 'dragongate: the turn did not open on an offer');
+            check(!!e.gate && e.gate.cards.length === 2, 'dragongate: no posts at the offer');
+            check(e.third === null, 'dragongate: a third card was drawn before any stake');
+            check(e.seat.bet === 0 && e.seat.coins === e.seat.startCoins,
+                'dragongate: the seat was charged before it agreed to play');
+
+            const q = e.quote;
+            check(!!q, 'dragongate: the gate was offered without a price');
+            const opts = e.legalActions(0).map((o) => o.type);
+            check(opts.includes('skip'), 'dragongate: a gate was offered with no way to pass it');
+            quoted++;
+
+            if (e.gate.equal) {
+                // Both calls priced, because the seat has to weigh them.
+                check(q.higher && q.lower, 'dragongate: an equal gate quoted only one price');
+                equalQuotes++;
+                e.handle({ type: 'bet', seat: 0, amount: 10 });
+                const dir = q.higher.mult >= q.lower.mult ? 'higher' : 'lower';
+                const want = q[dir];
+                e.handle({ type: 'pick', seat: 0, dir });
+                check(e.odds.mult === want.mult && e.odds.winners === want.winners,
+                    `dragongate: quoted x${want.mult} on ${dir}, settled at x${e.odds.mult}`);
+            } else if (g % 3 === 0) {
+                // Pass it, and check the pass cost nothing.
+                e.handle({ type: 'skip', seat: 0 });
+                check(e.seat.skipped && e.seat.done, 'dragongate: a pass did not end the turn');
+                check(e.seat.third === null, 'dragongate: a passed gate still drew a third card');
+                check(e.seat.coins === e.seat.startCoins && e.seat.net === 0,
+                    'dragongate: passing cost the seat money');
+                check(e.isOver(), 'dragongate: the solo round did not end on a pass');
+                passed++;
+            } else {
+                const want = q.one;
+                e.handle({ type: 'bet', seat: 0, amount: 10 });
+                check(e.odds.mult === want.mult && e.odds.winners === want.winners,
+                    `dragongate: quoted x${want.mult}, settled at x${e.odds.mult}`);
+            }
+        }
+        check(passed > 20, `dragongate: only ${passed} gates were passed in 300`);
+        check(equalQuotes > 5, `dragongate: only ${equalQuotes} equal gates in 300`);
+        console.log(`  ${quoted} gates offered before a stake \u2014 ${equalQuotes} of them quoted both calls`);
+        console.log('  \u2713 the price quoted is the price settled, and passing is free');
     }
 
     /* --- the call is the caller's, at every seat ------------------------ */
@@ -766,6 +839,8 @@ function auditDragonGate() {
             let guard = 0;
             while (!e.isOver() && guard++ < 30) {
                 const turn = e.turn;
+                check(e.phase === 'offer', `dragongate: seat ${turn} was not offered its gate`);
+                check(!!e.seats[turn].gate, 'dragongate: asked for a stake with no gate on the table');
                 e.handle({ type: 'bet', seat: turn, amount: 10 });
                 if (e.phase === 'choose') {
                     asked++;

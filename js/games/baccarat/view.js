@@ -40,12 +40,12 @@
             this.root.innerHTML = `
                 <div class="bac">
                     <section class="bac-hands">
-                        <div class="bac-hand" id="bacPlayerBox">
+                        <div class="bac-hand side-player" id="bacPlayerBox">
                             <span class="bac-label">${esc(t('bac.player'))}</span>
                             <div id="bacPlayerHand" class="hand-wrap"></div>
                             <span class="bac-total" id="bacPlayerTotal"></span>
                         </div>
-                        <div class="bac-hand" id="bacBankerBox">
+                        <div class="bac-hand side-banker" id="bacBankerBox">
                             <span class="bac-label">${esc(t('bac.banker'))}</span>
                             <div id="bacBankerHand" class="hand-wrap"></div>
                             <span class="bac-total" id="bacBankerTotal"></span>

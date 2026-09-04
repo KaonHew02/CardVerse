@@ -47,6 +47,10 @@
             this.root.innerHTML = `
                 <div class="slots">
                     <div class="slot-cabinet">
+                        <div class="slot-topper">
+                            <b>老虎机</b>
+                            <span>${esc(t('slots.tagline'))}</span>
+                        </div>
                         <div class="slot-window">
                             ${[0, 1, 2].map((i) => `
                                 <div class="slot-reel" id="slotReel${i}">
@@ -55,6 +59,11 @@
                                     <span class="slot-cell"></span>
                                 </div>`).join('')}
                             <div class="slot-payline"></div>
+                        </div>
+                        <div class="slot-readout">
+                            <div class="slot-meter"><span>${esc(t('slots.credit'))}</span><b id="slotCredit">0</b></div>
+                            <div class="slot-meter"><span>${esc(t('slots.meterBet'))}</span><b id="slotMeterBet">0</b></div>
+                            <div class="slot-meter is-win"><span>${esc(t('slots.meterWin'))}</span><b id="slotMeterWin">0</b></div>
                         </div>
                         <div class="slot-shout" id="slotShout"></div>
                     </div>
@@ -228,12 +237,29 @@
 
         paint() {
             this.paintControls();
+            this.paintMeters();
             this.paintStats();
             this.paintHistory();
             const coins = document.getElementById('tableCoins');
             if (coins) coins.textContent = fmt(this.engine.seat.coins);
             const shoe = document.getElementById('tableShoe');
             if (shoe) shoe.textContent = t('slots.spinsShort', { n: this.engine.tally.spins });
+        }
+
+        /**
+         * The three meters along the bottom of the glass, the way a cabinet
+         * carries them. WIN shows the last pull and nothing else — a running
+         * total there would read as money in hand, which it is not.
+         */
+        paintMeters() {
+            const e = this.engine;
+            const last = e.last;
+            const set = (id, v) => { const el = this.$(id); if (el) el.textContent = v; };
+            set('slotCredit', fmt(e.seat.coins));
+            set('slotMeterBet', fmt(last ? last.bet : this.s.bet));
+            set('slotMeterWin', fmt(last ? last.payout : 0));
+            const win = this.$('slotMeterWin');
+            if (win) win.parentElement.classList.toggle('is-hot', !!(last && last.payout > 0));
         }
 
         paintControls() {

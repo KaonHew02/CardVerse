@@ -261,6 +261,76 @@
 .hand.hand-sm .card,
 .hand.hand-sm .card:first-child { margin-left: 0; }
 
+/* ---- 百家乐 ------------------------------------------------------------ */
+
+/* 闲 / 庄 / 和 keep one colour each, everywhere they appear: on the button you
+ * press, on the box that wins, and on the slip that says what a seat backed.
+ * Blue, red and green are the colours a baccarat layout actually uses, and
+ * using them consistently is what makes a table readable at a glance. */
+:root {
+    --bac-player: #2f6fd0;
+    --bac-banker: #c0392b;
+    --bac-tie:    #1d7a45;
+}
+
+.bac { display: flex; flex-direction: column; gap: 14px; }
+
+/* The two hands the whole table shares. Nobody holds cards here, so these sit
+ * in the middle and every seat around them is a betting slip. */
+.bac-hands { display: flex; gap: 24px; justify-content: center; flex-wrap: wrap; }
+.bac-hand {
+    display: flex; flex-direction: column; align-items: center; gap: 6px;
+    padding: 12px 18px; border-radius: 16px; min-width: 190px;
+    background: rgba(0,0,0,.18); border: 2px solid rgba(255,255,255,.10);
+    transition: border-color .2s, background .2s;
+}
+.bac-hand.side-player { border-color: color-mix(in srgb, var(--bac-player) 62%, #fff 38%); }
+.bac-hand.side-banker { border-color: color-mix(in srgb, var(--bac-banker) 62%, #fff 38%); }
+.bac-label { font-weight: 800; letter-spacing: .02em; }
+.bac-total { font-size: 1.6rem; font-weight: 800; min-height: 1.2em; }
+/* The winning side is the entire result, so it is the one thing that lights. */
+.bac-hand.is-won { border-color: var(--accent); background: rgba(245,185,66,.16);
+    box-shadow: 0 0 0 2px rgba(245,185,66,.35), 0 8px 20px rgba(0,0,0,.35); }
+.bac-rule { text-align: center; }
+
+/* The three you can back. */
+.bac-sides { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-bottom: 8px; }
+.bac-side {
+    display: flex; flex-direction: column; align-items: center; gap: 2px;
+    padding: 10px 20px; border-radius: 12px; cursor: pointer; line-height: 1.25;
+    font: inherit; color: #fff; background: rgba(255,255,255,.10);
+    border: 2px solid rgba(255,255,255,.22);
+    transition: background .15s, border-color .15s, box-shadow .15s, transform .1s;
+}
+.bac-side b { font-size: 1rem; font-weight: 800; }
+.bac-side small { font-size: .72rem; opacity: .78; }
+.bac-side:hover { background: rgba(255,255,255,.18); }
+.bac-side.side-player { border-color: color-mix(in srgb, var(--bac-player) 62%, #fff 38%); }
+.bac-side.side-banker { border-color: color-mix(in srgb, var(--bac-banker) 62%, #fff 38%); }
+.bac-side.side-tie    { border-color: color-mix(in srgb, var(--bac-tie) 62%, #fff 38%); }
+
+/* The one you picked is **filled**, not merely outlined. An outline is a
+ * difference you have to go looking for, and which side your money is on
+ * should never be something you have to work out. */
+.bac-side.is-on {
+    transform: translateY(-1px);
+    box-shadow: 0 0 0 3px rgba(255,255,255,.30), 0 6px 16px rgba(0,0,0,.45);
+}
+.bac-side.side-player.is-on { background: var(--bac-player); border-color: #fff; }
+.bac-side.side-banker.is-on { background: var(--bac-banker); border-color: #fff; }
+.bac-side.side-tie.is-on    { background: var(--bac-tie);    border-color: #fff; }
+.bac-side.is-on small { opacity: .95; }
+
+/* What each seat backed, in those same three colours. */
+.bac-slip { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-top: 6px; }
+.bac-pick { padding: 2px 9px; border-radius: 999px; font-size: .78rem; font-weight: 700; color: #fff; }
+.bac-pick.side-player { background: var(--bac-player); }
+.bac-pick.side-banker { background: var(--bac-banker); }
+.bac-pick.side-tie    { background: var(--bac-tie); }
+/* Another seat's pick before the deal — see redactSeat. It must not read as
+ * a fourth thing you could back. */
+.bac-pick.side-hidden { background: rgba(255,255,255,.16); letter-spacing: .12em; }
+
 /* ---- 老虎机 ------------------------------------------------------------ */
 
 /* The side column (paytable, session, history) is taller than the machine,
@@ -270,36 +340,69 @@
 .slots { display: grid; grid-template-columns: 1fr 300px;
     grid-template-areas: "cab side" "ctl side"; grid-template-rows: auto 1fr;
     gap: 16px; align-items: start; }
-.slot-cabinet { grid-area: cab; position: relative; padding: 18px; border-radius: 18px;
+.slot-cabinet { grid-area: cab; position: relative; padding: 0 0 14px; border-radius: 18px;
+    overflow: hidden;
     background: linear-gradient(160deg, #2a1a3d, #14101f); border: 3px solid var(--accent);
     box-shadow: inset 0 0 40px rgba(0,0,0,.55), 0 8px 30px rgba(0,0,0,.4); }
+
+/* The lit banner across the top of a cabinet. It says what the machine is
+ * and nothing about what it pays — the paytable does that, and a topper
+ * making promises is how real ones talk you into a seat. */
+.slot-topper {
+    display: flex; flex-direction: column; align-items: center; gap: 2px;
+    padding: 10px 16px; text-align: center;
+    background: linear-gradient(180deg, #4a2a6b, #2a1a3d);
+    border-bottom: 2px solid color-mix(in srgb, var(--accent) 55%, transparent);
+    text-shadow: 0 0 14px rgba(245,185,66,.45);
+}
+.slot-topper b { font-size: 1.35rem; letter-spacing: .12em; color: var(--accent); }
+.slot-topper span { font-size: .72rem; letter-spacing: .16em; text-transform: uppercase;
+    color: rgba(255,255,255,.6); }
+
+/* The meter strip along the bottom of the glass. */
+.slot-readout {
+    display: flex; gap: 10px; justify-content: center; margin: 12px 16px 0;
+    padding: 8px 10px; border-radius: 10px; background: rgba(0,0,0,.5);
+    box-shadow: inset 0 0 14px rgba(0,0,0,.7);
+}
+.slot-meter { flex: 1 1 0; display: flex; flex-direction: column; align-items: center; gap: 1px;
+    padding: 4px 6px; border-radius: 7px; background: rgba(255,255,255,.04); }
+.slot-meter span { font-size: .62rem; letter-spacing: .16em; color: rgba(255,255,255,.5); }
+.slot-meter b { font-size: 1.1rem; font-weight: 800; font-variant-numeric: tabular-nums;
+    color: #ffd98a; }
+.slot-meter.is-win b { color: rgba(255,255,255,.55); }
+.slot-meter.is-win.is-hot b { color: var(--good); text-shadow: 0 0 12px rgba(70,200,120,.6); }
 /* A machine shows the strip, not one symbol: three rows through the glass
  * with the payline across the middle. The outer rows are the rest of the
  * reel and pay nothing, so they are dimmed and the payline is lit. */
-.slot-window { position: relative; display: flex; gap: 10px; justify-content: center;
-    padding: 6px; border-radius: 14px; background: rgba(0,0,0,.45);
-    box-shadow: inset 0 0 24px rgba(0,0,0,.6); }
+.slot-window { position: relative; display: flex; gap: 5px; justify-content: center;
+    margin: 14px 16px 0; padding: 5px; border-radius: 12px; background: rgba(0,0,0,.55);
+    box-shadow: inset 0 0 26px rgba(0,0,0,.75), 0 0 0 2px rgba(255,255,255,.08); }
 .slot-reel {
-    width: 96px; border-radius: 10px; display: flex; flex-direction: column;
+    flex: 1 1 0; max-width: 150px; border-radius: 8px;
+    display: flex; flex-direction: column;
     background: linear-gradient(#fffdf5, #e6e0cf); user-select: none; overflow: hidden;
-    box-shadow: inset 0 8px 16px rgba(0,0,0,.28), inset 0 -8px 16px rgba(0,0,0,.22);
+    box-shadow: inset 0 10px 18px rgba(0,0,0,.30), inset 0 -10px 18px rgba(0,0,0,.24);
 }
-.slot-cell { height: 74px; display: grid; place-items: center; font-size: 2.5rem; line-height: 1; }
+.slot-cell { height: 82px; display: grid; place-items: center; font-size: 2.8rem; line-height: 1;
+    border-bottom: 1px solid rgba(0,0,0,.10); }
+.slot-cell:last-child { border-bottom: 0; }
 /* Only the middle row is the result. The two either side are scenery and
  * are dimmed so they can never be mistaken for a line that should have paid. */
 .slot-cell:not(.is-pay) { opacity: .3; transform: scale(.82); }
-.slot-cell.is-pay { font-size: 3rem; }
+.slot-cell.is-pay { font-size: 3.3rem; background: rgba(245,185,66,.10); }
 /* The blur is the only cue that a reel is still running — it must never be
  * on a reel that has already landed, or the machine looks like it is lying. */
 .slot-reel.is-spinning { filter: blur(1.6px); }
 .slot-reel.is-spinning .slot-cell { opacity: .72; transform: none; }
 .slot-reel.is-landing { animation: reelLand 260ms cubic-bezier(.2,.9,.25,1); }
 @keyframes reelLand { 0% { transform: translateY(-9%); } 60% { transform: translateY(3%); } 100% { transform: none; } }
-.slot-payline { position: absolute; left: 10px; right: 10px; top: 50%; height: 3px;
+.slot-payline { position: absolute; left: 0; right: 0; top: 50%; height: 3px;
     margin-top: -1.5px; border-radius: 2px; pointer-events: none;
-    background: linear-gradient(90deg, transparent, var(--accent), transparent);
-    box-shadow: 0 0 10px rgba(0,0,0,.5); }
-.slot-shout { min-height: 2em; text-align: center; font-weight: 800; font-size: 1.2rem; }
+    background: linear-gradient(90deg, transparent, var(--accent) 12%, var(--accent) 88%, transparent);
+    box-shadow: 0 0 12px rgba(245,185,66,.55); }
+.slot-shout { min-height: 2em; text-align: center; font-weight: 800; font-size: 1.2rem;
+    margin-top: 8px; }
 .slot-shout.is-win { color: var(--good); }
 .slot-shout.is-loss { color: var(--muted); font-weight: 600; font-size: 1rem; }
 .slot-shout.is-jackpot { color: var(--accent); font-size: 1.5rem; animation: jackpotPulse 700ms ease-in-out 3; }
@@ -334,6 +437,13 @@
 /* ---- 射龙门 ------------------------------------------------------------ */
 
 .dg { display: flex; flex-direction: column; align-items: center; gap: 14px; }
+/* An equal gate is quoted twice, one price per call, so the seat can see what
+ * each is worth before deciding whether to play at all. */
+.dg-quotes { display: flex; gap: 18px; justify-content: center; flex-wrap: wrap; }
+.dg-quote { display: flex; align-items: center; gap: 6px; }
+.dg-quote em { font-style: normal; font-weight: 800; color: var(--accent); }
+.dg-slip { font-size: .78rem; padding: 2px 8px; border-radius: 999px;
+    background: rgba(255,255,255,.12); }
 
 /* Two posts and the space between them. The gap is deliberately wide: the
  * whole game is whether the third card lands *inside*, and a cramped middle

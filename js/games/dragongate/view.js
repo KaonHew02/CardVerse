@@ -70,7 +70,7 @@
             // A new seat stepping up clears the last one's shot out of the
             // arch, or its third card would still be sitting there under the
             // next player's posts.
-            if (events.some((e) => e.type === 'betting')) {
+            if (events.some((e) => e.type === 'gate')) {
                 clearTimeout(this.timer);
                 this.showThird = false;
             }
@@ -139,7 +139,8 @@
                           }))}</span>`
                     : '';
                 const verdict = s.done
-                    ? `<span class="badge ${s.outcome === 'gate' ? 'win' : 'loss'}">${esc(t('dg.' + s.outcome))}</span>`
+                    ? `<span class="badge ${s.outcome === 'gate' ? 'win'
+                        : s.skipped ? 'push' : 'loss'}">${esc(t('dg.' + s.outcome))}</span>`
                     : '';
                 return `
                     <div class="${cls}" data-seat="${i}">
@@ -161,20 +162,38 @@
             }).join('');
         }
 
+        /**
+         * The price of the gate on the table.
+         *
+         * Before a stake is down this is the *quote* — what the seat is being
+         * offered, which is the entire basis for shooting or passing. An
+         * equal gate carries two quotes, because 大过 and 小过 are not worth
+         * the same and the seat has to see both to judge either.
+         */
         paintOdds() {
             const e = this.engine;
             const host = this.$('dgOdds');
-            if (!e.odds || !e.gate) { host.innerHTML = ''; return; }
+            if (!e.gate) { host.innerHTML = ''; return; }
 
-            const { winners, remaining, mult } = e.odds;
-            if (winners === 0) {
-                host.innerHTML = `<span class="dg-shut">${esc(t('dg.shut'))}</span>`;
+            const line = (o) => {
+                const chance = ((o.winners / o.remaining) * 100).toFixed(0);
+                return `<span>${esc(t('dg.odds', { n: o.winners, of: o.remaining, pct: chance }))}</span>`
+                     + `<b class="dg-mult">${esc(t('dg.pays', { mult: o.mult.toFixed(2) }))}</b>`;
+            };
+            const shut = `<span class="dg-shut">${esc(t('dg.shut'))}</span>`;
+
+            if (e.odds) {
+                host.innerHTML = e.odds.winners === 0 ? shut : line(e.odds);
                 return;
             }
-            const chance = ((winners / remaining) * 100).toFixed(0);
+            const q = e.quote;
+            if (!q) { host.innerHTML = ''; return; }
+            if (q.one) { host.innerHTML = q.one.winners === 0 ? shut : line(q.one); return; }
             host.innerHTML = `
-                <span>${esc(t('dg.odds', { n: winners, of: remaining, pct: chance }))}</span>
-                <b class="dg-mult">${esc(t('dg.pays', { mult: mult.toFixed(2) }))}</b>`;
+                <div class="dg-quotes">
+                    <span class="dg-quote"><em>${esc(t('dg.higher'))}</em>${line(q.higher)}</span>
+                    <span class="dg-quote"><em>${esc(t('dg.lower'))}</em>${line(q.lower)}</span>
+                </div>`;
         }
 
         paintStatus() {
@@ -197,9 +216,9 @@
                     : `<span class="muted">${who.avatar} ${esc(t('dg.calling', { name: who.name }))}</span>`;
                 return;
             }
-            if (e.phase === 'betting') {
+            if (e.phase === 'offer') {
                 host.innerHTML = mine
-                    ? `<span class="you">${esc(t('table.yourBet'))}</span>`
+                    ? `<span class="you">${esc(t('dg.offer'))}</span>`
                     : `<span class="muted">${who.avatar} ${esc(t('table.betting', { name: who.name }))}</span>`;
                 return;
             }
@@ -224,13 +243,22 @@
                 return;
             }
 
-            const opt = options[0];
+            // A seat that cannot cover the minimum may still pass, and that
+            // is the only thing left on its table.
+            const opt = options.find((o) => o.type === 'bet');
+            if (!opt) {
+                host.innerHTML = `<div class="btn-row">
+                    <button class="btn ghost big" data-act="skip">${esc(t('dg.skip'))}</button></div>`;
+                return;
+            }
             const seat = e.seats[e.youSeat];
             if (this.bet === null || this.bet < opt.min || this.bet > opt.max) {
                 this.bet = Math.min(opt.max, Math.max(opt.min, this.session.lastBet || opt.min));
             }
             const chips = [opt.min, opt.min * 2, opt.min * 5, opt.max]
                 .filter((v, i, a) => v <= opt.max && a.indexOf(v) === i);
+
+            const pass = `<button class="btn ghost" data-act="skip">${esc(t('dg.skip'))}</button>`;
 
             host.innerHTML = `
                 <div class="bet-box">
@@ -242,6 +270,7 @@
                     </div>
                     <div class="btn-row">
                         <button class="btn primary big" data-act="bet">${esc(t('dg.open'))}</button>
+                        ${pass}
                     </div>
                     <div class="muted small">${esc(t('table.range', { lo: fmt(opt.min), hi: fmt(opt.max) }))}</div>
                 </div>`;
@@ -267,6 +296,11 @@
             if (type === 'bet') {
                 this.session.lastBet = this.bet;
                 this.table.dispatch({ type: 'bet', seat: this.engine.youSeat, amount: this.bet });
+                this.bet = null;
+                return;
+            }
+            if (type === 'skip') {
+                this.table.dispatch({ type: 'skip', seat: this.engine.youSeat });
                 this.bet = null;
                 return;
             }

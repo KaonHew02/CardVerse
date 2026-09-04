@@ -527,6 +527,8 @@
         /* 射龙门 */
         'dg.slip': 'Gate {lo}–{hi}', 'dg.slipEqual': '{rank} · {dir}',
         'dg.calling': '{name} is calling the gate…',
+        'dg.skip': 'Pass', 'dg.passed': 'Passed the gate',
+        'dg.offer': 'Shoot this gate, or pass.',
         'dg.house': 'The gate', 'dg.open': 'Open the gate', 'dg.shooting': 'Shooting…',
         'dg.higher': '大过 Higher', 'dg.lower': '小过 Lower',
         'dg.chooseAsk': 'Both posts are {rank}. Call it — higher or lower?',
@@ -548,6 +550,8 @@
 
         /* 老虎机 */
         'slots.spin': 'SPIN', 'slots.spinning': 'Spinning…',
+        'slots.tagline': 'Three reels · One payline',
+        'slots.credit': 'CREDIT', 'slots.meterBet': 'BET', 'slots.meterWin': 'WIN',
         'slots.leave': 'Leave machine', 'slots.finished': 'Session finished.',
         'slots.bet': 'Bet per spin', 'slots.max': 'Max',
         'slots.range': 'Machine takes {lo}–{hi} a spin',
@@ -1077,6 +1081,8 @@
         'game.dragongate': '射龙门', 'game.dragongate.blurb': '两张牌开门，赌第三张能不能穿过去。',
         'dg.slip': '龙门 {lo}–{hi}', 'dg.slipEqual': '{rank} · {dir}',
         'dg.calling': '{name} 正在选大过小过…',
+        'dg.skip': '不射', 'dg.passed': '放弃这道门',
+        'dg.offer': '射这道门，或者不射。',
         'dg.house': '龙门', 'dg.open': '开门', 'dg.shooting': '射门中…',
         'dg.higher': '大过', 'dg.lower': '小过',
         'dg.chooseAsk': '两边都是 {rank}。要大过还是小过？',
@@ -1097,6 +1103,8 @@
         'dg.rule6': '赔率跟着门走：门越窄赔越多。开牌前会显示还有几张能赢、赔多少。牌打完之前不会重新洗。',
 
         'slots.spin': '开始', 'slots.spinning': '转动中…',
+        'slots.tagline': '三轮 · 一线',
+        'slots.credit': '余额', 'slots.meterBet': '下注', 'slots.meterWin': '中奖',
         'slots.leave': '下机', 'slots.finished': '本轮结束。',
         'slots.bet': '每次下注', 'slots.max': '最大',
         'slots.range': '每次 {lo}–{hi}',
