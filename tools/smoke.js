@@ -51,6 +51,8 @@ function load(rel) {
     'js/games/dragongate/engine.js', 'js/games/dragongate/index.js',
     'js/games/bullbull/hands.js', 'js/games/bullbull/engine.js',
     'js/games/bullbull/ai.js', 'js/games/bullbull/index.js',
+    'js/games/roulette/chamber.js', 'js/games/roulette/engine.js',
+    'js/games/roulette/ai.js', 'js/games/roulette/index.js',
     'js/games/dice/dice.js', 'js/games/dice/engine.js',
     'js/games/dice/ai.js', 'js/games/dice/index.js',
     'js/games/lami/melds.js', 'js/games/lami/engine.js',
@@ -222,7 +224,7 @@ console.log(`CardVerse smoke — ${HANDS} hands per game\n`);
  * own audit further down.
  */
 const OWN_AUDIT = new Set(['slots', 'dragongate', 'doudizhu', 'bigtwo', 'poker', 'mahjong',
-                           'bullbull', 'lami', 'dice']);
+                           'bullbull', 'lami', 'dice', 'roulette']);
 
 for (const game of CV.Registry.playable()) {
     if (!game.AI || OWN_AUDIT.has(game.code)) continue;
@@ -2881,6 +2883,298 @@ function auditDice() {
     console.log('  ✓ rules card resolves');
 }
 auditDice();
+
+/* ---- Roulette Party ------------------------------------------------------ */
+
+function auditRoulette() {
+    console.log('\n🎯 Roulette Party');
+    const game = CV.Registry.get('roulette');
+    const R = CV.Roulette;
+
+    /* --- the device --------------------------------------------------------- */
+
+    {
+        for (const stage of R.STAGES) {
+            check(stage.slots.length === 6, `mj: a stage has ${stage.slots.length} slots, wanted 6`);
+            check(stage.slots.every((k) => R.SLOTS[k]), 'rr: a stage holds a slot that is not a kind');
+        }
+        check(R.FINAL.length === 6, 'rr: the final layout is not six slots');
+        // The rules' own example: four safe, a bonus and a danger.
+        const first = R.layoutFor(1, false);
+        check(first.filter((k) => k === 'SAFE').length === 4, 'rr: the opening layout should hold four safe slots');
+        check(first.filter((k) => k === 'BONUS').length === 1, 'rr: the opening layout should hold one bonus');
+        check(first.filter((k) => k === 'DANGER').length === 1, 'rr: the opening layout should hold one danger');
+        // And the final: half of it dangerous.
+        const fin = R.layoutFor(1, true);
+        check(fin.filter((k) => k === 'DANGER').length === 3 && fin.filter((k) => k === 'SAFE').length === 3,
+            'rr: the final should be three safe and three danger');
+
+        // What each slot does, straight from the rules.
+        check(R.SLOTS.SAFE.hp === 0 && R.SLOTS.SAFE.points === 10, 'rr: SAFE should be +10 and no damage');
+        check(R.SLOTS.BONUS.hp === 0 && R.SLOTS.BONUS.points === 30, 'rr: BONUS should be +30 and no damage');
+        check(R.SLOTS.TRAP.hp === -1 && R.SLOTS.TRAP.points === 0, 'rr: TRAP should cost a heart and no points');
+        check(R.SLOTS.DANGER.hp === -1 && R.SLOTS.DANGER.points === -20, 'rr: DANGER should cost a heart and 20');
+        console.log('  the opening layout is the rules\' own, and the final is half danger');
+    }
+
+    /* --- slots are used up, and the sixth is a certainty ---------------------- */
+
+    {
+        const rng = new CV.RNG(11);
+        for (let trial = 0; trial < 400; trial++) {
+            const c = new R.Chamber(rng);
+            c.load(1, false);
+            check(c.left === 6, 'rr: a fresh device does not hold six');
+            const seen = [];
+            for (let i = 0; i < 6; i++) {
+                check(c.spin(1, false) === 6 - i, 'rr: the spin miscounted what is left');
+                const slot = c.pull();
+                check(!!slot, 'rr: a pull after a spin came back empty');
+                check(c.left === 5 - i, 'rr: a pull did not use the slot up');
+                seen.push(slot.key);
+            }
+            // Six pulls empty it, and they are exactly what was loaded.
+            check(seen.slice().sort().join() === R.layoutFor(1, false).slice().sort().join(),
+                'rr: what came out is not what went in');
+            // A pull without a spin does nothing.
+            check(c.pull() === null, 'rr: a pull without a spin opened something');
+        }
+        console.log('  ✓ 400 devices emptied — six pulls take exactly the six that were loaded');
+    }
+
+    /* --- a re-spin is another draw, and the audit says so --------------------- */
+
+    {
+        // Over many draws from the same fresh device, the first spin and a
+        // re-spin land on the same distribution. That is the point: it is a
+        // nerve button, not an edge.
+        const rng = new CV.RNG(77);
+        const first = {}, again = {};
+        for (let i = 0; i < 60000; i++) {
+            const c = new R.Chamber(rng);
+            c.load(1, false);
+            c.spin(1, false);
+            const a = c.slots[c.at];
+            first[a] = (first[a] || 0) + 1;
+            c.spin(1, false);
+            const b = c.slots[c.at];
+            again[b] = (again[b] || 0) + 1;
+        }
+        for (const k of Object.keys(first)) {
+            const d = Math.abs(first[k] - (again[k] || 0)) / first[k];
+            check(d < 0.08, `rr: ${k} came up ${(d * 100).toFixed(1)}% differently after a re-spin`);
+        }
+        console.log('  ✓ a re-spin draws from the same distribution — no edge, by design');
+    }
+
+    /* --- the events, one at a time -------------------------------------------- */
+
+    const table = (n, seed) => new game.Engine({
+        rng: new CV.RNG(seed === undefined ? 3 : seed), config: { room: 'beginner' },
+        seats: Array.from({ length: n }, (_, i) => new CV.Seat(i, {
+            kind: 'ai', name: 'P' + i, coins: 9000, isYou: i === 0,
+        })),
+    });
+
+    {
+        // A shield turns the next hit into nothing.
+        const e = table(3);
+        e.start();
+        const s = e.seats[e.turn];
+        s.shield = true;
+        const hp = s.hp;
+        e.chamber.slots = ['DANGER'];
+        e.apply({ type: 'spin', seat: s.index });
+        e.apply({ type: 'pull', seat: s.index });
+        check(s.hp === hp, `rr: a shield let a hit through (${hp} → ${s.hp})`);
+        check(e.last.blocked, 'rr: the blocked hit was not reported as blocked');
+        check(!s.shield, 'rr: the shield was not used up');
+    }
+    {
+        // Doubled damage costs two hearts.
+        const e = table(3, 4);
+        e.start();
+        const s = e.seats[e.turn];
+        s.doubled = true;
+        e.chamber.slots = ['DANGER'];
+        e.apply({ type: 'spin', seat: s.index });
+        e.apply({ type: 'pull', seat: s.index });
+        check(s.hp === 1, `rr: doubled damage left ${s.hp} hearts, wanted 1`);
+    }
+    {
+        // A lucky spin turns the next safe slot into fifty.
+        const e = table(3, 5);
+        e.start();
+        const s = e.seats[e.turn];
+        s.lucky = true;
+        e.chamber.slots = ['SAFE'];
+        e.apply({ type: 'spin', seat: s.index });
+        e.apply({ type: 'pull', seat: s.index });
+        check(s.score === 50, `rr: a lucky safe scored ${s.score}, wanted 50`);
+    }
+    {
+        // A shield beats doubled damage — both at once is still nothing.
+        const e = table(3, 6);
+        e.start();
+        const s = e.seats[e.turn];
+        s.shield = true;
+        s.doubled = true;
+        const hp = s.hp;
+        e.chamber.slots = ['DANGER'];
+        e.apply({ type: 'spin', seat: s.index });
+        e.apply({ type: 'pull', seat: s.index });
+        check(s.hp === hp, 'rr: a shield should hold against doubled damage');
+    }
+    {
+        // Reverse turns the order around.
+        const e = table(4, 7);
+        e.start();
+        const before = e.turn;
+        e.dir = -1;
+        e.chamber.slots = ['SAFE'];
+        e.apply({ type: 'spin', seat: before });
+        e.apply({ type: 'pull', seat: before });
+        check(e.turn === (before - 1 + 4) % 4, `rr: reversed play went to ${e.turn}, not ${(before - 1 + 4) % 4}`);
+    }
+    console.log('  ✓ shield, double, lucky and reverse each do what the rules say');
+
+    /* --- the final round -------------------------------------------------------- */
+
+    {
+        const e = table(4, 9);
+        e.start();
+        // Knock two out by hand and let the engine notice.
+        e.seats[2].hp = 1; e.seats[3].hp = 1;
+        let guard = 0;
+        while (e.alive.length > 2 && !e.isOver() && guard++ < 200) {
+            const s = e.seats[e.turn];
+            e.chamber.slots = [(s.index === 2 || s.index === 3) ? 'DANGER' : 'SAFE'];
+            e.apply({ type: 'spin', seat: e.turn });
+            e.apply({ type: 'pull', seat: e.turn });
+        }
+        check(e.final, 'rr: two left and the final never started');
+        for (const s of e.alive) check(s.hp === e.config.finalHp, `rr: a finalist has ${s.hp} hearts, wanted 2`);
+        const layout = e.chamber.layout;
+        check(layout.filter((k) => k === 'DANGER').length === 3, 'rr: the final device is not half danger');
+        console.log('  ✓ the last two go to 2 ❤️ on a device that is half danger');
+    }
+
+    // But a table that only ever had two is the ordinary game, not the final.
+    {
+        const e = table(2, 10);
+        e.start();
+        check(!e.final, 'rr: a two-player table started on the final');
+        check(e.seats.every((s) => s.hp === e.config.hp), 'rr: a two-player table did not start on three hearts');
+    }
+
+    /* --- whole games ------------------------------------------------------------ */
+
+    const master = new CV.RNG(2211);
+    const ROUNDS = Math.max(120, Math.round(HANDS / 12));
+    const t0 = Date.now();
+    let pulls = 0, rounds = 0, shields = 0, finals = 0;
+    const winScores = [];
+
+    for (let g = 0; g < ROUNDS; g++) {
+        const n = master.range(2, 8);
+        const room = CV.Registry.ROOMS[master.int(4)].id;
+        const e = new game.Engine({
+            rng: new CV.RNG(master.int(1e9)), config: { room },
+            seats: Array.from({ length: n }, (_, i) => new CV.Seat(i, {
+                kind: 'ai', name: 'P' + i, coins: master.range(500, 40000), isYou: i === 0,
+            })),
+        });
+        const ai = new game.AI(e);
+        e.start();
+
+        check(e.seats.every((s) => s.out || s.hp === 3), 'rr: somebody did not start on three hearts');
+
+        let steps = 0;
+        while (!e.isOver()) {
+            const seat = e.turn;
+            const before = e.seats[seat].hp;
+            const action = ai.decide(seat);
+            check(!!action, 'rr: the AI had nothing to do');
+            if (!action) break;
+            check(e.apply(action), `rr: engine refused ${action.type} in ${e.phase}`);
+            // A turn never costs more than two hearts, and never adds any.
+            const after = e.seats[seat].hp;
+            check(after <= before && before - after <= 2, `rr: a pull moved ${before} hearts to ${after}`);
+            if (++steps > 3000) { check(false, 'rr: a game ran past 3000 actions'); break; }
+        }
+
+        // Somebody is left, and everybody else is at zero.
+        check(e.winner >= 0, 'rr: nobody was left standing');
+        check(e.alive.length === 1, `rr: ${e.alive.length} players survived`);
+        for (const s of e.seats) {
+            if (s.out || s.index === e.winner) continue;
+            check(s.hp === 0, 'rr: a knocked-out player still has hearts');
+        }
+        check(e.seats[e.winner].hp >= 1, 'rr: the winner has no hearts left');
+
+        // The pot is the ante and it all goes one way.
+        const playing = e.seats.filter((s) => !s.out);
+        check(e.pot === playing.length * e.ante, 'rr: the pot is not what was paid in');
+        check(e.seats.reduce((t, s) => t + s.net, 0) === 0, 'rr: the table is not zero-sum');
+        for (const s of e.seats) {
+            check(s.coins >= 0, 'rr: a seat was taken below zero');
+            check(s.coins === s.startCoins + s.net, 'rr: coins do not reconcile');
+        }
+        check(e.seats[e.winner].net === e.pot - e.ante, 'rr: the winner did not take the pot');
+
+        // The win bonus and the survival bonus, both from the rules — checked
+        // against what was actually scored during play rather than against a
+        // floor, because a winner who took two hits can finish below one.
+        const r = e.result();
+        check(r.forSeat(e.winner).rank === 1, 'rr: the winner did not come first');
+        const earned = (i) => e.events
+            .filter((x) => x.type === 'pull' && x.seat === i)
+            .reduce((n, x) => n + x.points, 0);
+        check(e.seats[e.winner].score === earned(e.winner) + 100 + e.seats[e.winner].hp * 10,
+            'rr: the winner did not get exactly the win and survival bonuses');
+        for (const s of e.seats) {
+            if (s.out || s.index === e.winner) continue;
+            check(s.score === earned(s.index),
+                'rr: a knocked-out player was given a bonus they did not earn');
+        }
+
+        pulls += e.turns;
+        rounds += e.round;
+        if (e.final) finals++;
+        shields += e.events.filter((x) => x.type === 'event' && x.kind === 'shield').length;
+        winScores.push(e.seats[e.winner].score);
+    }
+
+    const avg = (a) => a.reduce((n, x) => n + x, 0) / a.length;
+    console.log(`  ${ROUNDS} games, ${Date.now() - t0} ms — ${(pulls / ROUNDS).toFixed(0)} pulls and `
+        + `${(rounds / ROUNDS).toFixed(1)} rounds a game, ${finals} reached the final`);
+    console.log(`  winning score averages ${avg(winScores).toFixed(0)} · ${shields} shields handed out`);
+    // The rules ask for a short match; a pull is a few seconds.
+    check(pulls / ROUNDS < 110, `rr: ${(pulls / ROUNDS).toFixed(0)} pulls a game is longer than the rules ask for`);
+
+    /* --- what a host may broadcast ----------------------------------------------- */
+
+    {
+        const e = table(4, 12);
+        e.start();
+        e.apply({ type: 'spin', seat: e.turn });
+        for (let viewer = 0; viewer < 4; viewer++) {
+            const view = e.snapshotFor(viewer);
+            const wire = JSON.stringify(view);
+            check(!view.rng, 'rr: the snapshot carries the RNG');
+            // The one hidden thing in this game is which slot the spin is on,
+            // and it is not in the snapshot at all.
+            check(!/"at"\s*:/.test(wire), 'rr: the slot the spin landed on went out on the wire');
+            check(!/"slots"\s*:\s*\[/.test(wire), 'rr: the loaded slots went out in order');
+            check(typeof view.chamber.left === 'number', 'rr: the count of what is left should be public');
+        }
+    }
+    console.log('  ✓ what is left is public, and the slot under the pointer is not on the wire');
+
+    for (const key of game.rules) check(CV.t(key) !== key, `rr: rule key ${key} has no text`);
+    console.log('  ✓ rules card resolves');
+}
+auditRoulette();
 
 /* ---- what a host is allowed to broadcast ------------------------------- */
 
