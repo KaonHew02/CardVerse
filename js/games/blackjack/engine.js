@@ -43,6 +43,7 @@
         loss:      { key: 'loss',      why: () => t('why.loss') },
         bust:      { key: 'bust',      why: (h) => t('why.bust', { total: handValue(h.cards).total }) },
         surrender: { key: 'surrender', why: () => t('why.surrender') },
+        fivecard:  { key: 'fivecard',  why: () => '' },
     };
 
     /** Outcome names are looked up per call — the language can change between hands. */
@@ -553,6 +554,8 @@
                         splits:     Math.max(0, s.hands.length - 1),
                         dealerBusts: this.dealerValue().total > 21 ? 1 : 0,
                         surrenders: outcomes.filter((o) => o === 'surrender').length,
+                        fiveCards: s.hands.filter((h) => h.fiveCard).length,
+                        maBous:    s.hands.filter((h) => h.maBou).length,
                     },
                 });
             }

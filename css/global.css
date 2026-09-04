@@ -283,3 +283,8 @@ table.history td:first-child { white-space: nowrap; }
 .drive-stamp[data-state="ok"]   { filter: none; }
 .drive-stamp[data-state="warn"] { animation: stampPulse 2.4s ease-in-out infinite; }
 @keyframes stampPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
+
+/* The how-to-play card's list — a rule per line, room to breathe. */
+.rules-list { margin: 4px 0 0; padding-left: 20px; color: var(--text); }
+.rules-list li { margin-bottom: 8px; line-height: 1.45; }
+.rules-list li:last-child { margin-bottom: 0; }

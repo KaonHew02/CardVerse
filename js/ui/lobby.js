@@ -135,6 +135,10 @@
                 <p class="muted small">${esc(t('setup.aiNote'))}</p>
             </div>
 
+            <div class="btn-row">
+                <button class="btn ghost" id="setupRules">📖 ${esc(t('rules.again'))}</button>
+            </div>
+
             <div class="setup-foot">
                 <div class="muted small">${esc(t('setup.seats', { used: setup.ai + 1, max: game.players[1], coins: fmt(p.coins) }))}</div>
                 <button class="btn primary big" id="setupStart">${esc(t('setup.sit'))}</button>
@@ -144,11 +148,20 @@
         body.querySelectorAll('[data-room]').forEach((b) => b.addEventListener('click', () => { setup.room = b.dataset.room; paintSetup(); }));
         body.querySelectorAll('[data-ai]').forEach((b) => b.addEventListener('click', () => { setup.ai = Number(b.dataset.ai); paintSetup(); }));
         $('setupStart').addEventListener('click', start);
+        $('setupRules').addEventListener('click', () => CV.UI.showRules(setup.game));
     }
 
     function start() {
         CV.Settings.set('aiCount', setup.ai);
-        CV.Play.begin({ gameCode: setup.game.code, room: setup.room, aiCount: setup.ai });
+        const go = () => CV.Play.begin({ gameCode: setup.game.code, room: setup.room, aiCount: setup.ai });
+
+        // A first-timer reads the rules before the money is on the table,
+        // not after a payout they did not expect.
+        if (setup.game.rules && CV.Stats.forGame(setup.game.code).played === 0) {
+            CV.UI.showRules(setup.game, go);
+        } else {
+            go();
+        }
     }
 
     CV.UI.screen('home',  { render: renderHome });

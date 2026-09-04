@@ -30,9 +30,10 @@ keeps it a game hub.
 | Cosmetics: avatars, card backs, tables, tile skins | ✅ |
 | Leaderboard | ✅ local (your best hands); global needs a server |
 | Export / Import, Google Drive copy | ✅ `save.js`, `drive.js` |
-| 🃏 **Blackjack** | ✅ |
-| 🔢 **21** | ✅ |
-| 🏠 斗地主 · ♦️ 锄大D · ♠️ Poker · 🐂 斗牛 · 🀄 Mahjong | ⏳ next, in that order |
+| 🃏 **21** | ✅ with 孖宝 and 五小 house rules |
+| 🎴 **百家乐** | ✅ |
+| 🎰 老虎机 · 🐉 射龙门 · 👑 斗地主 · 🂢 锄大D · ♠️ Poker · 🐮 斗牛 · 🀄 Mahjong | ⏳ next |
+| How-to-play card before a first hand | ✅ per game, in both languages |
 | Online multiplayer | ⏳ Phase 5 — see `js/core/transport.js` |
 
 ## How it is put together

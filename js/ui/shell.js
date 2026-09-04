@@ -116,7 +116,7 @@
      * One dialog for every question the app asks. `field` adds a text input
      * whose value is passed to `onYes`; otherwise `onYes` takes nothing.
      */
-    function dialog({ title, body, cta = 'OK', danger = false, field = null, onYes = null, cancel = 'Cancel' }) {
+    function dialog({ title, body, cta = null, danger = false, field = null, onYes = null, cancel = null }) {
         const host = $('dialog');
         if (!host) return;
         $('dialogTitle').textContent = title;
@@ -128,10 +128,13 @@
 
         const yes = $('dialogYes');
         const no  = $('dialogNo');
-        yes.textContent = cta;
+        // Defaults come from the pack, not from a literal — the dialog is
+        // the one place every screen shares, so an English 'OK' here leaks
+        // into every language.
+        yes.textContent = cta || window.CV.t('ok');
         yes.classList.toggle('danger', danger);
         no.hidden = onYes === null;
-        no.textContent = cancel;
+        no.textContent = cancel || window.CV.t('cancel');
 
         yes.onclick = () => {
             const value = field === null ? undefined : input.value;
@@ -150,7 +153,7 @@
         if (host) host.hidden = true;
     }
 
-    const say     = (title, body) => dialog({ title, body, cta: 'OK' });
+    const say     = (title, body) => dialog({ title, body });
     const confirm = (title, body, cta, onYes, danger = false) => dialog({ title, body, cta, onYes, danger });
     const prompt  = (title, body, value, cta, onYes) => dialog({ title, body, cta, field: value, onYes });
 
@@ -169,6 +172,26 @@
         }, ms);
     }
 
+    /**
+     * The how-to-play card. Shown once before a player's first hand of a
+     * game, and on demand from the set-up screen after that — a player who
+     * has never seen 五小 should not first meet it as a surprise payout.
+     *
+     * `game.rules` is a list of translation keys, so the card follows the
+     * language like everything else.
+     */
+    function showRules(game, onOk) {
+        const CV = window.CV;
+        const first = CV.Stats.forGame(game.code).played === 0;
+        const lines = (game.rules || []).map((key) => `<li>${esc(CV.t(key))}</li>`).join('');
+        dialog({
+            title: CV.t('rules.title', { game: game.name }),
+            body: `${first ? `<p>${esc(CV.t('rules.first'))}</p>` : ''}<ul class="rules-list">${lines}</ul>`,
+            cta: onOk ? CV.t('rules.play') : CV.t('ok'),
+            onYes: onOk || null,
+        });
+    }
+
     /** Delegated click handling: `on(root, '[data-act]', fn)`. */
     function on(root, selector, fn, type = 'click') {
         root.addEventListener(type, (e) => {
@@ -181,7 +204,7 @@
     window.CV.UI = {
         $, esc, fmt, signed, pct, dmyDate,
         screen, go, back, header, toast,
-        dialog, closeDialog, say, confirm, prompt, flash, on,
+        dialog, closeDialog, say, confirm, prompt, flash, on, showRules,
         get current() { return current; },
     };
 

@@ -47,6 +47,7 @@ function load(rel) {
     'js/core/stats.js', 'js/core/achievements.js', 'js/core/missions.js', 'js/core/cosmetics.js',
     'js/core/rewards.js', 'js/core/table.js',
     'js/games/blackjack/engine.js', 'js/games/blackjack/ai.js', 'js/games/blackjack/index.js',
+    'js/games/baccarat/engine.js', 'js/games/baccarat/ai.js', 'js/games/baccarat/index.js',
     'js/games/twentyone/engine.js', 'js/games/twentyone/ai.js', 'js/games/twentyone/index.js',
 ].forEach(load);
 
@@ -86,7 +87,57 @@ function playHand(game, opts) {
 
 /* ---- invariants per hand ---------------------------------------------- */
 
+/**
+ * Checks every game must pass, whatever it deals: coins conserve, and the
+ * result rows agree with the seats they describe.
+ */
+function auditCommon(game, e) {
+    for (const s of e.seats) {
+        if (s.out) continue;
+        check(s.coins === s.startCoins + s.net,
+            `${game.code}: coins ${s.coins} != start ${s.startCoins} + net ${s.net}`);
+    }
+    const r = e.result();
+    for (const row of r.ranks) {
+        if (row.house) continue;
+        check(row.coins === e.seats[row.seat].net,
+            `${game.code}: result coins ${row.coins} != net ${e.seats[row.seat].net}`);
+    }
+}
+
+/** 百家乐: the drawing rules are fixed, so the payouts are checkable exactly. */
+function auditBaccarat(game, e) {
+    const p = e.playerTotal(), b = e.bankerTotal();
+    const want = p > b ? 'player' : b > p ? 'banker' : 'tie';
+    check(e.outcome === want, `${game.code}: called ${e.outcome} on ${p} v ${b}`);
+    check(e.player.length >= 2 && e.player.length <= 3, `${game.code}: player hand of ${e.player.length}`);
+    check(e.banker.length >= 2 && e.banker.length <= 3, `${game.code}: banker hand of ${e.banker.length}`);
+
+    // A natural stops the deal: neither side may draw a third card.
+    const natural = CV.BaccaratTotal(e.player.slice(0, 2)) >= 8
+                 || CV.BaccaratTotal(e.banker.slice(0, 2)) >= 8;
+    if (natural) {
+        check(e.player.length === 2 && e.banker.length === 2,
+            `${game.code}: drew a third card on a natural`);
+    }
+
+    for (const s of e.seats) {
+        if (s.out) continue;
+        const won = s.side === e.outcome;
+        const push = e.outcome === 'tie' && s.side !== 'tie';
+        const expect = won
+            ? (s.side === 'banker' ? s.bet * (2 - e.config.commission)
+              : s.side === 'tie' ? s.bet * (1 + e.config.tiePays) : s.bet * 2)
+            : (push ? s.bet : 0);
+        check(Math.round(expect) === s.payout,
+            `${game.code}: ${s.side} ${won ? 'win' : push ? 'push' : 'loss'} on ${s.bet} paid ${s.payout}, wanted ${Math.round(expect)}`);
+        check(s.net === s.payout - s.bet, `${game.code}: net ${s.net} != payout ${s.payout} - bet ${s.bet}`);
+    }
+    auditCommon(game, e);
+}
+
 function auditHand(game, e) {
+    if (!e.dealer) return auditBaccarat(game, e);
     const dealer = handValue(e.dealer.cards);
     const dealerBJ = isBlackjack(e.dealer.cards);
     const simple = !!game.simple;
@@ -107,6 +158,7 @@ function auditHand(game, e) {
                 bust: 0, loss: 0, push: bet, win: bet * 2, surrender: bet / 2,
                 blackjack: bet * (1 + e.config.blackjackPays),
                 twentyone: bet * (1 + e.config.exactBonus),
+                fivecard: bet * (1 + e.config.fiveCardPays),   // 五小
             }[h.outcome];
             check(Math.round(want) === h.payout, `${game.code}: ${h.outcome} on ${bet} paid ${h.payout}, wanted ${want}`);
 
@@ -160,8 +212,10 @@ for (const game of CV.Registry.playable()) {
         const e = playHand(game, { seed: master.int(1e9), seats: seats(n, master, master.int(n)), config: { room, shoe } });
         shoe = e.shoeState;
         auditHand(game, e);
+        // Blackjack stakes live on each hand; baccarat stakes live on the
+        // seat, because a seat backs an outcome rather than holding cards.
         for (const s of e.seats) if (!s.out) {
-            for (const h of s.hands) bet += h.bet;
+            bet += s.hands ? s.hands.reduce((n, h) => n + h.bet, 0) : (s.bet || 0);
             net += s.net;
         }
     }
@@ -178,8 +232,9 @@ for (const game of CV.Registry.playable()) {
     for (let i = 0; i < HANDS * 3; i++) {
         const e = playHand(game, { seed: erng.int(1e9), seats: [{ kind: 'ai', name: 'X', coins: 1e6, isYou: true }], config: { room: 'beginner', shoe: eshoe } });
         eshoe = e.shoeState;
-        for (const h of e.seats[0].hands) ebet += h.bet;
-        enet += e.seats[0].net;
+        const s0 = e.seats[0];
+        ebet += s0.hands ? s0.hands.reduce((n, h) => n + h.bet, 0) : (s0.bet || 0);
+        enet += s0.net;
     }
     const eedge = (enet / ebet) * 100;
 
@@ -191,7 +246,13 @@ for (const game of CV.Registry.playable()) {
     // spurious failure at 300 hands to learn this.
     const nHands = HANDS * 3;
     const se = 115 / Math.sqrt(nHands);
-    const expected = game.simple ? 4 : -0.5;      // 21's any-21-pays-3:2 rule is player-positive
+    // Measured, not assumed. Baccarat is the book figure for a table that
+    // backs banker most of the time. 21 is strongly player-positive by
+    // design — exact 21 pays 3:2, 五小 pays 2:1 and 孖宝 lets a good spot be
+    // doubled — so this figure is a *balance* decision, not a law of the
+    // game. If the coin economy ever inflates, this is the number to change
+    // and this check is what will notice.
+    const expected = game.code === 'baccarat' ? -1.1 : game.simple ? 8 : -0.5;
     const lo = expected - 3 * se, hi = expected + 3 * se;
     console.log(`  solo book player over ${nHands} hands: ${eedge.toFixed(2)}% of stake `
         + `(expect ${expected}% ±${(3 * se).toFixed(1)})`);
@@ -282,13 +343,25 @@ for (const game of CV.Registry.playable()) {
                 check(!/"seed"/.test(wire), `${game.code}: a seed appears in the broadcast`);
 
                 // The hole card must be absent from the wire until it is turned.
-                if (!e.dealer.revealed && e.dealer.cards.length > 1) {
+                if (e.dealer && !e.dealer.revealed && e.dealer.cards.length > 1) {
                     const hole = e.dealer.cards[1];
                     check(!wire.includes(hole.id),
                         `${game.code}: hole card ${hole.id} is in the broadcast before the reveal`);
                     check(view.dealer.cards.length === 1,
                         `${game.code}: broadcast shows ${view.dealer.cards.length} dealer cards before the reveal`);
                     checkedHidden++;
+                }
+
+                // 百家乐 hides nothing on the table, but it does hide where the
+                // other seats put their money until the deal — knowing that
+                // before betting is information nobody at a table has in time.
+                if (!e.dealer && e.phase === 'betting') {
+                    view.seats.forEach((st, si) => {
+                        if (si === viewer || !e.seats[si].side) return;
+                        check(st.side === 'hidden',
+                            `${game.code}: seat ${si}'s pick (${st.side}) is visible to seat ${viewer} before the deal`);
+                        checkedHidden++;
+                    });
                 }
 
                 // Every viewer must be told their own seat is theirs, and
@@ -305,8 +378,14 @@ for (const game of CV.Registry.playable()) {
                 // serialises as null and crashes whatever reads its rank.
                 check(!/(^|[^a-z])null([^a-z]|$)/.test(wire.replace(/"[^"]*":null/g, '')),
                     `${game.code}: a null card is in the broadcast`);
-                for (const c of (view.dealer.cards || [])) {
-                    check(c && typeof c.r === 'number', `${game.code}: broadcast dealer hand holds a non-card`);
+                // Every card the broadcast carries, wherever the game keeps
+                // them, must be a real card and not a hole where one should be.
+                const loose = []
+                    .concat((view.dealer && view.dealer.cards) || [])
+                    .concat(view.player || [])
+                    .concat(view.banker || []);
+                for (const c of loose) {
+                    check(c && typeof c.r === 'number', `${game.code}: broadcast hand holds a non-card`);
                 }
                 for (const st of view.seats) {
                     for (const h of (st.hands || [])) {
@@ -330,8 +409,13 @@ for (const game of CV.Registry.playable()) {
         // Once turned, the hole card must be visible — redaction that never
         // lifts is just a broken game.
         const done = e.snapshotFor(0);
-        check(done.dealer.revealed && done.dealer.cards.length === e.dealer.cards.length,
-            `${game.code}: dealer hand still redacted after the round ended`);
+        if (e.dealer) {
+            check(done.dealer.revealed && done.dealer.cards.length === e.dealer.cards.length,
+                `${game.code}: dealer hand still redacted after the round ended`);
+        } else {
+            check(done.seats.every((st, si) => st.side === e.seats[si].side),
+                `${game.code}: seat picks still redacted after the round ended`);
+        }
     }
     console.log(`  ${game.icon} ${game.name}: ${checkedHidden} concealed-state broadcasts audited`);
     if (failures === before) console.log('    ✓ no seed, no hole card, no undealt card on the wire');

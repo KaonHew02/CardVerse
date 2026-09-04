@@ -11,11 +11,25 @@
     'use strict';
 
     const CV = window.CV;
-    const { handValue } = CV.Cards;
+    const { handValue, pipValue } = CV.Cards;
 
     class TwentyOneAI extends CV.BlackjackAI {
 
-        trueCount() { return 0; }
+        /**
+         * 孖宝 doubles the money without taking a card, so it is worth it when
+         * the hand is already strong or the dealer's up-card is weak — the
+         * same two conditions that make any extra stake worth putting up.
+         */
+        decide(seat) {
+            const e = this.engine;
+            if (e.phase === 'playing' && e.legalActions(seat).some((o) => o.type === 'mabou')) {
+                const h = e.hand(seat);
+                const v = handValue(h.cards);
+                const up = pipValue(e.dealerUp());
+                if (v.total >= 18 || (up >= 4 && up <= 6)) return { type: 'mabou', seat };
+            }
+            return super.decide(seat);
+        }
 
         book(h, up) {
             const v = handValue(h.cards);

@@ -26,6 +26,7 @@
         loss:      { key: 'out.loss',      cls: 'loss' },
         bust:      { key: 'out.bust',      cls: 'loss' },
         surrender: { key: 'out.surrender', cls: 'loss' },
+        fivecard:  { key: 'out.fivecard',  cls: 'win' },
     };
 
     class BlackjackView {
@@ -206,7 +207,8 @@
             const outcome = h.outcome && OUTCOME[h.outcome]
                 ? `<span class="badge ${OUTCOME[h.outcome].cls}">${esc(t(OUTCOME[h.outcome].key))} ${signed(h.payout - h.bet)}</span>`
                 : '';
-            const tags = [h.doubled ? '2×' : '', h.split ? 'split' : ''].filter(Boolean).join(' · ');
+            const tags = [h.doubled ? '2×' : '', h.maBou ? t('act.mabou') : '', h.split ? 'split' : '']
+                .filter(Boolean).join(' · ');
             return `
                 <div class="seat-hand${active ? ' is-active' : ''}${h.done && !h.outcome ? ' is-done' : ''}">
                     ${this.cards(h.cards, false)}

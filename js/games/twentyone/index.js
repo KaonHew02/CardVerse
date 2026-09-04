@@ -21,7 +21,10 @@
         AI:     CV.TwentyOneAI,
         View:   CV.BlackjackView,
 
+        rules: ['to.rule1', 'to.rule2', 'to.rule3', 'to.rule4', 'to.rule5'],
+
         extraLabels: {
+            maBous: '孖宝 doubled', fiveCards: '五小 hands',
             twentyones: 'Exact 21s', blackjacks: 'Dealt 21', busts: 'Busts', dealerBusts: 'Dealer busts seen', forfeits: 'Walked away',
         },
 
@@ -36,6 +39,10 @@
               reward: { coins: 1000, xp: 200 }, check: (c) => c.gameStats.wins >= 50 },
             { id: 'to-streak-5', name: 'Five Alive', icon: '🖐️', desc: 'Win 5 games of 21 in a row.',
               reward: { coins: 600, xp: 120 }, check: (c) => c.gameStats.bestStreak >= 5 },
+            { id: 'to-fivecard', name: '五小', icon: '🐉', desc: 'Win with five cards under 21.',
+              reward: { coins: 500, xp: 100 }, check: (c) => (c.gameStats.extra.fiveCards || 0) >= 1 },
+            { id: 'to-mabou', name: '孖宝', icon: '👯', desc: 'Double your stake on a starting pair.',
+              reward: { coins: 300, xp: 60 }, check: (c) => (c.gameStats.extra.maBous || 0) >= 1 },
         ],
     });
 })();

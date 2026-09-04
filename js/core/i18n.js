@@ -333,6 +333,35 @@
         'game.baccarat': '百家乐', 'game.baccarat.blurb': 'Bet on Player, Banker or Tie. No decisions, all nerve.',
         'game.slots': '老虎机', 'game.slots.blurb': 'Spin the reels. Match three and the coins fall.',
         'game.dragongate': '射龙门', 'game.dragongate.blurb': 'Two cards set the gate. Bet whether the third lands between.',
+
+        /* 百家乐 */
+        'bac.player': 'Player', 'bac.banker': 'Banker', 'bac.tie': 'Tie',
+        'bac.pays.player': 'pays 1:1', 'bac.pays.banker': 'pays 1:1 less 5%', 'bac.pays.tie': 'pays 8:1',
+        'bac.place': 'Place bet', 'bac.yourBet': 'Choose a side and a stake',
+        'bac.dealing': 'Dealing…', 'bac.wins': '{side} wins',
+        'bac.win': 'WON', 'bac.push': 'PUSH', 'bac.loss': 'LOST',
+        'bac.rules': 'Eight decks · Banker pays 1:1 less 5% · Tie pays 8:1',
+        'bac.detail': 'Player {p} · Banker {b} — {side}',
+        'bac.rule1': 'Back the Player hand, the Banker hand, or a Tie. You are betting on an outcome, not playing a hand.',
+        'bac.rule2': 'Cards count face value, aces are 1, and tens and pictures are 0. Only the last digit counts — 7 + 8 is 5, not 15.',
+        'bac.rule3': 'Both hands are dealt two cards. Eight or nine is a natural and ends it there.',
+        'bac.rule4': 'Otherwise a third card is drawn by a fixed table — nobody chooses. The Player hand draws on 0–5, and the Banker follows a longer rule that depends on what the Player drew.',
+        'bac.rule5': 'Player pays 1:1. Banker pays 1:1 less 5% commission, because it wins slightly more often. Tie pays 8:1 and returns the other two bets.',
+
+        /* how to play */
+        'rules.title': 'How to play {game}',
+        'rules.play': 'Got it — deal',
+        'rules.again': 'Rules',
+        'rules.first': 'First time here, so here is the short version.',
+
+        /* 21 house rules */
+        'act.mabou': '孖宝',
+        'out.fivecard': '五小',
+        'to.rule1': 'Hit or stand. Get closer to 21 than the dealer without going over.',
+        'to.rule2': 'Aces are 1 or 11, whichever helps. Pictures are 10.',
+        'to.rule3': 'Exactly 21 wins on the spot and pays 3:2, whatever the dealer draws afterwards.',
+        'to.rule4': '孖宝 — if your first two cards are a pair, you may double your stake. It costs a card nothing: you keep drawing.',
+        'to.rule5': '五小 五小 — five cards without going over 21 wins outright and pays 2:1, beating anything the dealer has.',
     };
 
     /* ------------------------------------------------------------------ *
@@ -615,6 +644,32 @@
         'game.baccarat': '百家乐', 'game.baccarat.blurb': '压闲、压庄或压和。不用决策，只看胆色。',
         'game.slots': '老虎机', 'game.slots.blurb': '拉一把。三个一样就开奖。',
         'game.dragongate': '射龙门', 'game.dragongate.blurb': '两张牌开门，赌第三张能不能穿过去。',
+
+        'bac.player': '闲', 'bac.banker': '庄', 'bac.tie': '和',
+        'bac.pays.player': '赔 1:1', 'bac.pays.banker': '赔 1:1 抽水 5%', 'bac.pays.tie': '赔 8:1',
+        'bac.place': '下注', 'bac.yourBet': '选一边，再下注',
+        'bac.dealing': '发牌中…', 'bac.wins': '{side}赢',
+        'bac.win': '赢', 'bac.push': '和', 'bac.loss': '输',
+        'bac.rules': '八副牌 · 庄赔 1:1 抽水 5% · 和赔 8:1',
+        'bac.detail': '闲 {p} · 庄 {b} — {side}',
+        'bac.rule1': '压闲、压庄或压和。你赌的是结果，不是自己出牌。',
+        'bac.rule2': '牌面算点数，A 算 1，10 和公牌算 0。只看个位——7 + 8 是 5，不是 15。',
+        'bac.rule3': '两边各发两张。八点或九点是例牌，当场定输赢。',
+        'bac.rule4': '否则按固定规则补第三张，没人可以选。闲家 0–5 补牌，庄家的规则要看闲家补到什么。',
+        'bac.rule5': '闲赔 1:1。庄赢面略大，所以赔 1:1 再抽 5% 水。和赔 8:1，并退回闲庄的注。',
+
+        'rules.title': '{game}怎么玩',
+        'rules.play': '明白了 — 开牌',
+        'rules.again': '规则',
+        'rules.first': '第一次玩，先看看规则。',
+
+        'act.mabou': '孖宝',
+        'out.fivecard': '五小',
+        'to.rule1': '要牌或停牌。比庄家接近 21 点，但不能爆。',
+        'to.rule2': 'A 算 1 或 11，哪个划算算哪个。公牌算 10。',
+        'to.rule3': '刚好 21 点当场赢，赔 3:2，不管庄家后面摸到什么。',
+        'to.rule4': '孖宝 — 头两张是对子，可以加倍下注，且不用换牌，继续要牌。',
+        'to.rule5': '五小 — 五张牌不爆直接赢，赔 2:1，庄家拿什么都没用。',
     };
 
     const PACKS = { en: EN, zh: ZH };
