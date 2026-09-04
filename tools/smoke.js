@@ -49,6 +49,8 @@ function load(rel) {
     'js/games/baccarat/engine.js', 'js/games/baccarat/ai.js', 'js/games/baccarat/index.js',
     'js/games/slots/engine.js', 'js/games/slots/index.js',
     'js/games/dragongate/engine.js', 'js/games/dragongate/index.js',
+    'js/games/bullbull/hands.js', 'js/games/bullbull/engine.js',
+    'js/games/bullbull/ai.js', 'js/games/bullbull/index.js',
     'js/games/mahjong/tiles.js', 'js/games/mahjong/win.js', 'js/games/mahjong/fan.js',
     'js/games/mahjong/pay.js', 'js/games/mahjong/engine.js',
     'js/games/mahjong/ai.js', 'js/games/mahjong/index.js',
@@ -215,7 +217,7 @@ console.log(`CardVerse smoke — ${HANDS} hands per game\n`);
  * playing each other for points rather than a table paying out. Each has its
  * own audit further down.
  */
-const OWN_AUDIT = new Set(['slots', 'dragongate', 'doudizhu', 'bigtwo', 'poker', 'mahjong']);
+const OWN_AUDIT = new Set(['slots', 'dragongate', 'doudizhu', 'bigtwo', 'poker', 'mahjong', 'bullbull']);
 
 for (const game of CV.Registry.playable()) {
     if (!game.AI || OWN_AUDIT.has(game.code)) continue;
@@ -2052,6 +2054,271 @@ function auditMahjong() {
     console.log('  ✓ rules card resolves');
 }
 auditMahjong();
+
+/* ---- 斗牛 ---------------------------------------------------------------- */
+
+let bbUid = 0;
+function bbCards(str) {
+    return str.split(/\s+/).filter(Boolean).map((tok) => {
+        const s = tok.slice(-1), r = PK_RANKS[tok.slice(0, -1)];
+        if (r === undefined || !'SHDC'.includes(s)) throw new Error('bad card ' + tok);
+        return { r, s, id: 'b' + (bbUid++) };
+    });
+}
+
+function auditBullBull() {
+    console.log('\n🐮 斗牛');
+    const game = CV.Registry.get('bullbull');
+    const H = CV.BullHands;
+
+    /* --- what a card is worth ---------------------------------------------- */
+
+    const v = (tok) => H.value(bbCards(tok)[0]);
+    check(v('AS') === 1, 'bb: the ace counts one');
+    for (let n = 2; n <= 9; n++) check(v(n + 'H') === n, `bb: ${n} should count ${n}`);
+    for (const tok of ['10D', 'JC', 'QS', 'KH']) check(v(tok) === 10, `bb: ${tok} should count ten`);
+
+    /* --- the examples from the rules ---------------------------------------- */
+
+    const read = (str) => H.evaluate(bbCards(str));
+    const CASES = [
+        // A + 2 + 7 = 10, and 8 + 3 = 11 leaves a one.
+        ['AS 2H 7D 8C 3S',   'BULL_1',        1],
+        // 10 + K + Q = 30, and the pair of threes makes it 宝宝.
+        ['10D KH QC 3S 3H',  'BABY',          6],
+        // Five picture cards.
+        ['JS QH KD JC QS',   'FIVE_PIC',      null],
+        // 10 + K + Q = 30, leaving a jack and the ace of spades.
+        ['10D KH QC JS AS',  'PIC_BLACK_ACE', 1],
+        // 5 + 5 + K = 20, leaving a queen and the ace of clubs.
+        ['5S 5H KD QC AC',   'PIC_BLACK_ACE', 1],
+        // Nothing makes ten, twenty or thirty.
+        ['2S 2H 2D 2C 3S',   'NO_BULL',       null],
+        // 2 + 3 + 5 = 10, and 4 + 6 = 10 is a round bull.
+        ['2S 3H 5D 4C 6H',   'BULL_BULL',     0],
+        ['2S 3H 5D 4C 5H',   'BULL_9',        9],
+        ['2S 3H 5D 9C 2H',   'BULL_1',        1],
+    ];
+    for (const [str, type, bull] of CASES) {
+        const h = read(str);
+        check(h.type === type, `bb: "${str}" read as ${h.type}, wanted ${type}`);
+        if (bull !== null) check(h.bull === bull, `bb: "${str}" gave 牛${h.bull}, wanted 牛${bull}`);
+    }
+    console.log(`  ${CASES.length} hands read, every worked example from the rules`);
+
+    /* --- the order, top to bottom -------------------------------------------- */
+
+    const CHAIN = [
+        ['JS QH KD JC QS',  '五个 Pic'],
+        ['10D KH QC JS AS', 'Pic + Black Ace'],
+        ['2S 3H 5D 4C 6H',  '牛牛'],
+        ['10D KH QC 3S 3H', '宝宝·牛六'],
+        ['10D KH QC AS AH', '宝宝·牛二'],
+        ['2S 3H 5D 4C 5H',  '牛九'],
+        ['2S 3H 5D 9C 2H',  '牛一'],
+        ['2S 2H 2D 2C 3S',  '无牛'],
+    ];
+    for (let i = 0; i + 1 < CHAIN.length; i++) {
+        const a = read(CHAIN[i][0]), b = read(CHAIN[i + 1][0]);
+        check(H.compare(a, b) > 0, `bb: ${CHAIN[i][1]} should beat ${CHAIN[i + 1][1]}`);
+        check(H.compare(b, a) < 0, `bb: ${CHAIN[i + 1][1]} should lose to ${CHAIN[i][1]}`);
+    }
+    check(H.compare(read('2S 3H 5D 4C 5H'), read('2H 3D 5S 4H 5C')) === 0,
+        'bb: two hands of the same rank must push');
+    console.log(`  ${CHAIN.length - 1} steps of the order, and a push where they meet`);
+
+    /* --- the multiplier table ------------------------------------------------ */
+
+    const MULT = {
+        FIVE_PIC: 5, PIC_BLACK_ACE: 4, BULL_BULL: 3, BABY: 3,
+        BULL_9: 2, BULL_8: 2, BULL_7: 2,
+        BULL_6: 1, BULL_5: 1, BULL_4: 1, BULL_3: 1, BULL_2: 1, BULL_1: 1, NO_BULL: 1,
+    };
+    for (const [type, want] of Object.entries(MULT)) {
+        check(H.MULT[type] === want, `bb: ${type} pays ×${H.MULT[type]}, wanted ×${want}`);
+    }
+
+    /* --- every hand in the deck ---------------------------------------------- */
+
+    {
+        const deck = [];
+        for (const s of ['S', 'H', 'D', 'C']) for (let r = 2; r <= 14; r++) deck.push({ r, s, id: s + r });
+        const tally = {};
+        const five = new Array(5);
+        const t0 = Date.now();
+        let total = 0;
+
+        for (let a = 0; a < 48; a++) for (let b = a + 1; b < 49; b++)
+        for (let c = b + 1; c < 50; c++) for (let d = c + 1; d < 51; d++)
+        for (let e = d + 1; e < 52; e++) {
+            five[0] = deck[a]; five[1] = deck[b]; five[2] = deck[c]; five[3] = deck[d]; five[4] = deck[e];
+            const h = H.evaluate(five);
+            tally[h.type] = (tally[h.type] || 0) + 1;
+            total++;
+
+            // The invariants, on every hand there is.
+            if (h.mult !== MULT[h.type]) check(false, `bb: ${h.type} paid ×${h.mult}`);
+            if (h.type !== 'NO_BULL' && h.type !== 'FIVE_PIC') {
+                const sum = five.reduce((n, x) => n + H.value(x), 0) % 10;
+                if (h.bull !== sum) check(false, `bb: bull ${h.bull} against a hand total of ${sum}`);
+            }
+            if (h.type === 'BABY' && h.bull % 2 !== 0) {
+                check(false, `bb: a 宝宝 landed on an odd bull (${h.bull})`);
+            }
+        }
+
+        check(total === 2598960, `bb: ${total} hands read, the deck holds 2,598,960`);
+        // Twelve picture cards, five at a time — a figure that can be checked
+        // by hand, which is the point of checking it.
+        check(tally.FIVE_PIC === 792, `bb: ${tally.FIVE_PIC} 五个 Pic, the deck holds 792`);
+        check(tally.NO_BULL > 0 && tally.BULL_BULL > 0 && tally.BABY > 0 && tally.PIC_BLACK_ACE > 0,
+            'bb: some kind of hand never came up in the whole deck');
+
+        const pct = (k) => ((tally[k] || 0) / total * 100).toFixed(2);
+        console.log(`  all 2,598,960 hands read in ${Date.now() - t0} ms — `
+            + `无牛 ${pct('NO_BULL')}%, 牛牛 ${pct('BULL_BULL')}%, 宝宝 ${pct('BABY')}%`);
+        console.log(`  Pic + Black Ace ${pct('PIC_BLACK_ACE')}% · 五个 Pic ${tally.FIVE_PIC} hands exactly`);
+        console.log('  ✓ the bull is the hand\'s last digit on every one of them');
+    }
+
+    // The 3 ↔ 6 rule cannot fire, and that is a fact about pairs rather than a
+    // gap: two cards of the same value always sum to an even number.
+    {
+        let odd = 0;
+        for (let val = 1; val <= 10; val++) if ((val * 2) % 10 % 2 === 1) odd++;
+        check(odd === 0, 'bb: a pair somehow summed to an odd last digit');
+        console.log('  ✓ 宝宝 can only land on an even bull, so 牛三 never comes up to convert');
+    }
+
+    /* --- settling against the dealer ------------------------------------------ */
+
+    const table = (players, coins, seed) => new game.Engine({
+        rng: new CV.RNG(seed === undefined ? 5 : seed), config: { room: 'beginner' },
+        seats: Array.from({ length: players }, (_, i) => new CV.Seat(i, {
+            kind: 'ai', name: 'S' + i, coins, isYou: i === 0,
+        })),
+    });
+
+    /** Deal by hand, so the comparison being tested is the one that happens. */
+    const rig = (mine, dealer, bet) => {
+        const e = table(1, 100000);
+        e.start();
+        e.seats[0].bet = bet;
+        e.seats[0].coins -= bet;
+        e.seats[0].net -= bet;
+        e.phase = 'dealing';
+        e.seats[0].cards = bbCards(mine);
+        e.seats[0].hand = H.evaluate(e.seats[0].cards);
+        e.dealer.cards = bbCards(dealer);
+        e.dealer.hand = H.evaluate(e.dealer.cards);
+        e.settle();
+        return e.seats[0];
+    };
+
+    // The worked example: 牛八 against 牛五, a hundred up, pays two hundred.
+    const eight = rig('AS 4H 5D 8C KH', '2S 3H 5D 4C AH', 100);
+    check(eight.hand.type === 'BULL_8', `bb: the test hand read as ${eight.hand.type}`);
+    check(eight.outcome === 'win' && eight.net === 200,
+        `bb: 牛八 over 牛五 on 100 netted ${eight.net}, wanted 200`);
+
+    // The best hand there is, five times.
+    const pic = rig('JS QH KD JC QS', '2S 3H 5D 4C 6H', 100);
+    check(pic.net === 500, `bb: 五个 Pic over 牛牛 on 100 netted ${pic.net}, wanted 500`);
+
+    // And the same table the other way round.
+    const lost = rig('2S 3H 5D 9C 2H', 'JS QH KD JC QS', 100);
+    check(lost.outcome === 'loss' && lost.net === -500,
+        `bb: 牛一 under 五个 Pic on 100 netted ${lost.net}, wanted -500`);
+
+    const push = rig('2S 3H 5D 4C 5H', '2H 3D 5S 4H 5C', 100);
+    check(push.outcome === 'push' && push.net === 0, `bb: a push netted ${push.net}`);
+
+    // A seat cannot be taken below zero by a big dealer hand.
+    const broke = rig('2S 3H 5D 9C 2H', 'JS QH KD JC QS', 100000);
+    check(broke.coins >= 0, 'bb: a seat was taken below zero');
+    console.log('  ✓ the winner\'s multiplier sets the swing, a tie returns the bet');
+
+    /* --- whole hands ----------------------------------------------------------- */
+
+    {
+        const master = new CV.RNG(80808);
+        const ROUNDS = Math.max(200, Math.round(HANDS / 3));
+        const t0 = Date.now();
+        let staked = 0, net = 0;
+        const seen = {};
+
+        for (let g = 0; g < ROUNDS; g++) {
+            const n = master.range(1, 6);
+            const room = CV.Registry.ROOMS[master.int(4)].id;
+            const e = table(n, master.range(500, 50000), master.int(1e9));
+            const ai = new game.AI(e);
+            e.config.room = room;
+            e.start();
+            let steps = 0;
+            while (!e.isOver()) {
+                const a = ai.decide(e.turn);
+                check(!!a, 'bb: the AI had nothing to do');
+                if (!a) break;
+                check(e.apply(a), `bb: engine refused ${JSON.stringify(a)}`);
+                if (++steps > 20) { check(false, 'bb: a hand ran past 20 actions'); break; }
+            }
+
+            // Five each and five for the dealer, all from one pack.
+            const live = e.seats.filter((s) => !s.out);
+            check(e.dealer.cards.length === 5, `bb: the dealer took ${e.dealer.cards.length} cards`);
+            for (const s of live) check(s.cards.length === 5, `bb: a seat took ${s.cards.length} cards`);
+            const all = live.flatMap((s) => s.cards).concat(e.dealer.cards);
+            check(new Set(all.map((c) => c.id)).size === all.length, 'bb: a card was dealt twice');
+
+            for (const s of live) {
+                check(s.coins >= 0, 'bb: a seat was taken below zero');
+                check(s.coins === s.startCoins + s.net, 'bb: coins do not reconcile');
+                // The outcome and the comparison have to agree.
+                const cmp = H.compare(s.hand, e.dealer.hand);
+                const want = cmp > 0 ? 'win' : cmp < 0 ? 'loss' : 'push';
+                check(s.outcome === want, `bb: a ${want} was settled as a ${s.outcome}`);
+                if (want === 'win') {
+                    check(s.net === s.bet * s.hand.mult,
+                        `bb: a win on ${s.hand.type} netted ${s.net} against a bet of ${s.bet}`);
+                }
+                if (want === 'push') check(s.net === 0, 'bb: a push moved coins');
+                staked += s.bet;
+                net += s.net;
+                seen[s.hand.type] = (seen[s.hand.type] || 0) + 1;
+            }
+        }
+        const edge = (net / staked) * 100;
+        console.log(`  ${ROUNDS} hands, ${Date.now() - t0} ms — return ${edge.toFixed(2)}% of stake `
+            + `across ${Object.keys(seen).length} kinds of hand`);
+        check(Math.abs(edge) < 12, `bb: a return of ${edge.toFixed(2)}% is outside any plausible band`);
+    }
+
+    /* --- what a host may broadcast ---------------------------------------------- */
+
+    {
+        const e = table(3, 5000);
+        e.start();
+        for (let viewer = 0; viewer < 3; viewer++) {
+            const view = e.snapshotFor(viewer);
+            const wire = JSON.stringify(view);
+            check(!view.rng, 'bb: the snapshot carries the RNG');
+            check(view.dealer.cards.length === 0, 'bb: the dealer\'s cards went out before the deal');
+            view.seats.forEach((s, i) => {
+                if (i !== viewer && e.seats[i].bet) {
+                    check(s.bet === 'hidden', 'bb: another seat\'s bet is visible before the deal');
+                }
+            });
+            for (const card of e.deck.cards.slice(-8)) {
+                check(!wire.includes('"' + card.id + '"'), `bb: an undealt card (${card.id}) is on the wire`);
+            }
+        }
+    }
+    console.log('  ✓ nothing on the wire before the deal, and nothing still in the pack');
+
+    for (const key of game.rules) check(CV.t(key) !== key, `bb: rule key ${key} has no text`);
+    console.log('  ✓ rules card resolves');
+}
+auditBullBull();
 
 /* ---- what a host is allowed to broadcast ------------------------------- */
 

@@ -18,7 +18,7 @@
 
     function html(card, opts = {}) {
         const size  = opts.size ? ' card-' + opts.size : '';
-        const fresh = opts.fresh ? ' card-fresh' : '';
+        const fresh = (opts.fresh ? ' card-fresh' : '') + (opts.cls ? ' ' + opts.cls : '');
         if (!card || opts.faceDown) {
             return `<div class="card card-back${size}${fresh}" data-id="${card ? card.id : 'hole'}"><div class="card-back-inner"></div></div>`;
         }

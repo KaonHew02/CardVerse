@@ -18,7 +18,7 @@ keeps it a game hub.
 
 | Area | Status |
 | --- | --- |
-| Main menu & lobby | ✅ every game in the spec listed; unbuilt ones greyed *Coming soon* |
+| Main menu & lobby | ✅ every game in the spec, all of them playable |
 | Player profile, coins, XP, levels, titles | ✅ |
 | Rooms (Beginner / Casual / Pro / Master) | ✅ entry fee, bet range, XP multiplier |
 | Game engine, deck engine, seeded RNG | ✅ `js/core/` |
@@ -37,7 +37,7 @@ keeps it a game hub.
 | 🂡 **锄大D** | ✅ 3♦ opens, suits decide, five-card categories |
 | ♠️ **Poker** | ✅ Hold'em — blinds, four betting rounds, all-in side pots |
 | 🀄 **Mahjong** | ✅ 136 or 108 tiles, 番 with overlap rules, 5番 floor and 爆番 at three seats |
-| 🐮 斗牛 | ⏳ next |
+| 🐮 **斗牛** | ✅ 宝宝, Pic + Black Ace, 五个 Pic, and the multiplier table |
 | How-to-play card before a first hand | ✅ per game, in both languages |
 | Online multiplayer | ⏳ Phase 5 — see `js/core/transport.js` |
 
@@ -74,6 +74,7 @@ js/games/<game>/      engine.js · ai.js · view.js · index.js (registers itsel
   bigtwo/             锄大D — suits matter here, and there are no bombs
   poker/              Hold'em — hands.js evaluates, engine.js runs the betting
   mahjong/            麻将 — tiles · win · fan · pay, each its own file
+  bullbull/           斗牛 — hands.js reads it, engine.js prices it
 js/ui/                shell · lobby · play · result · profile · achievements ·
                       statistics · leaderboard · missions · settings · cardview
 js/save.js            Export / Import envelope
