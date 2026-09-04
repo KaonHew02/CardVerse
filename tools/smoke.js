@@ -46,8 +46,8 @@ function load(rel) {
     'js/core/transport.js', 'js/core/ai.js', 'js/core/registry.js', 'js/core/profile.js',
     'js/core/stats.js', 'js/core/achievements.js', 'js/core/missions.js', 'js/core/cosmetics.js',
     'js/core/rewards.js', 'js/core/table.js',
-    'js/games/blackjack/engine.js', 'js/games/blackjack/ai.js', 'js/games/blackjack/index.js',
     'js/games/baccarat/engine.js', 'js/games/baccarat/ai.js', 'js/games/baccarat/index.js',
+    // Views need CV.UI and a DOM; the engines under test do not.
     'js/games/twentyone/engine.js', 'js/games/twentyone/ai.js', 'js/games/twentyone/index.js',
 ].forEach(load);
 
@@ -138,60 +138,61 @@ function auditBaccarat(game, e) {
 
 function auditHand(game, e) {
     if (!e.dealer) return auditBaccarat(game, e);
-    const dealer = handValue(e.dealer.cards);
-    const dealerBJ = isBlackjack(e.dealer.cards);
-    const simple = !!game.simple;
+    return auditTwentyOne(game, e);
+}
+
+/**
+ * 21, to the house rules: no natural, DOUBLE, and 五龙 — exactly five cards
+ * at 21 or under — beating every normal hand including a normal 21.
+ */
+function auditTwentyOne(game, e) {
+    const score = CV.TwentyOneScore;
+    const d = score(e.dealer.cards);
 
     check(e.dealer.revealed, `${game.code}: hole card never revealed`);
+    check(e.dealer.cards.length <= 5, `${game.code}: dealer drew ${e.dealer.cards.length} cards`);
+    if (!d.bust && !d.dragons) {
+        check(d.total >= e.config.dealerStandsOn || !anyLive(e),
+            `${game.code}: dealer stopped on ${d.total}`);
+    }
 
     for (const s of e.seats) {
         if (s.out) continue;
-        let expectedNet = 0;
-        for (const h of s.hands) {
-            const v = handValue(h.cards);
-            check(h.outcome, `${game.code}: hand with no outcome`);
-            if (v.total > 21) check(h.outcome === 'bust', `${game.code}: ${v.total} called ${h.outcome}`);
+        const h = s.hands[0];
+        const p = score(h.cards);
 
-            // Payout must match the outcome exactly.
-            const bet = h.bet;
-            const want = {
-                bust: 0, loss: 0, push: bet, win: bet * 2, surrender: bet / 2,
-                blackjack: bet * (1 + e.config.blackjackPays),
-                twentyone: bet * (1 + e.config.exactBonus),
-                fivecard: bet * (1 + e.config.fiveCardPays),   // 五小
-            }[h.outcome];
-            check(Math.round(want) === h.payout, `${game.code}: ${h.outcome} on ${bet} paid ${h.payout}, wanted ${want}`);
+        check(h.cards.length <= 5, `${game.code}: player held ${h.cards.length} cards`);
+        if (p.dragons) check(h.cards.length === 5, `${game.code}: 五龙 with ${h.cards.length} cards`);
+        if (h.doubled) check(h.cards.length === 3, `${game.code}: doubled hand has ${h.cards.length} cards`);
 
-            // And the outcome must match the cards.
-            if (h.outcome === 'win')  check(v.total <= 21 && (dealer.total > 21 || v.total > dealer.total), `${game.code}: win with ${v.total} vs dealer ${dealer.total}`);
-            if (h.outcome === 'loss') check(v.total <= 21 && dealer.total <= 21 && (v.total < dealer.total || dealerBJ), `${game.code}: loss with ${v.total} vs dealer ${dealer.total}`);
-            if (h.outcome === 'push') check(v.total === dealer.total || (dealerBJ && isBlackjack(h.cards)), `${game.code}: push with ${v.total} vs ${dealer.total}`);
-            if (h.outcome === 'twentyone') check(v.total === 21, `${game.code}: 21 bonus on ${v.total}`);
-            if (simple && v.total === 21) check(h.outcome === 'twentyone' || h.outcome === 'blackjack', `21: exact 21 called ${h.outcome}`);
+        // The outcome the rules demand, derived independently of the engine.
+        let want;
+        if (p.bust) want = 'bust';
+        else if (d.bust) want = p.dragons ? 'dragons' : 'win';
+        else if (p.rank > d.rank) want = p.dragons ? 'dragons' : 'win';
+        else if (p.rank < d.rank) want = 'loss';
+        else if (p.total > d.total) want = p.dragons ? 'dragons' : 'win';
+        else if (p.total < d.total) want = 'loss';
+        else want = 'push';
+        check(h.outcome === want,
+            `${game.code}: ${h.cards.length}c ${p.total}${p.dragons ? ' 五龙' : ''} v ` +
+            `${e.dealer.cards.length}c ${d.total}${d.dragons ? ' 五龙' : ''} called ${h.outcome}, wanted ${want}`);
 
-            expectedNet += h.payout - bet;
-            if (h.doubled) check(h.cards.length === 3 || h.split, `${game.code}: doubled hand has ${h.cards.length} cards`);
-        }
-        if (s.insurance) expectedNet += (dealerBJ ? s.insurance * 3 : 0) - s.insurance;
-        check(Math.round(expectedNet) === Math.round(s.net), `${game.code}: seat net ${s.net} but hands say ${expectedNet}`);
-        check(s.coins === s.startCoins + s.net, `${game.code}: coins ${s.coins} ≠ start ${s.startCoins} + net ${s.net}`);
+        const pay = { bust: 0, loss: 0, push: h.bet, win: h.bet * 2,
+                      dragons: h.bet * (1 + e.config.dragonPays) }[want];
+        check(Math.round(pay) === h.payout,
+            `${game.code}: ${want} on ${h.bet} paid ${h.payout}, wanted ${Math.round(pay)}`);
+        check(s.net === h.payout - h.bet, `${game.code}: net ${s.net} != ${h.payout} - ${h.bet}`);
     }
 
-    // Dealer rule: if anyone was live, dealer reached 17+ (or bust).
-    const live = e.seats.some((s) => !s.out && s.hands.some((h) => ['win', 'loss', 'push'].includes(h.outcome)));
-    if (live) check(dealer.total >= 17, `${game.code}: dealer stopped on ${dealer.total} with live hands`);
-
-    // Result rows are consistent with seat nets.
     const r = e.result();
     const house = r.ranks.find((row) => row.house);
-    check(house && house.coins === -r.ranks.filter((row) => !row.house).reduce((n, row) => n + row.coins, 0), `${game.code}: house row does not balance the table`);
-    for (const row of r.ranks) {
-        if (row.house) continue;
-        const s = e.seats[row.seat];
-        check(row.coins === s.net, `${game.code}: result coins ${row.coins} ≠ net ${s.net}`);
-        check(row.outcome === (s.net > 0 ? 'win' : s.net < 0 ? 'loss' : 'draw'), `${game.code}: outcome/net mismatch`);
-    }
+    check(house && house.coins === -r.ranks.filter((row) => !row.house).reduce((n, row) => n + row.coins, 0),
+        `${game.code}: house row does not balance the table`);
+    auditCommon(game, e);
 }
+
+const anyLive = (e) => e.seats.some((s) => !s.out && !CV.TwentyOneScore(s.hands[0].cards).bust);
 
 /* ---- run --------------------------------------------------------------- */
 
@@ -252,7 +253,7 @@ for (const game of CV.Registry.playable()) {
     // doubled — so this figure is a *balance* decision, not a law of the
     // game. If the coin economy ever inflates, this is the number to change
     // and this check is what will notice.
-    const expected = game.code === 'baccarat' ? -1.1 : game.simple ? 8 : -0.5;
+    const expected = game.code === 'baccarat' ? -1.1 : 2;
     const lo = expected - 3 * se, hi = expected + 3 * se;
     console.log(`  solo book player over ${nHands} hands: ${eedge.toFixed(2)}% of stake `
         + `(expect ${expected}% ±${(3 * se).toFixed(1)})`);
@@ -273,18 +274,18 @@ for (const game of CV.Registry.playable()) {
 console.log('\n🪙 Rewards pipeline');
 {
     CV.Profile.load(); CV.Stats.load(); CV.Achievements.load(); CV.Missions.load(); CV.Cosmetics.load();
-    const game = CV.Registry.get('blackjack');
+    const game = CV.Registry.get('twentyone');
     let checked = 0;
     for (let i = 0; i < 300; i++) {
         const e = playHand(game, { seed: 9000 + i, seats: seats(3, new CV.RNG(i), 1), config: { room: 'casual' } });
         const p0 = JSON.parse(JSON.stringify(CV.Profile.get()));
-        const g0 = CV.Stats.forGame('blackjack').played;
+        const g0 = CV.Stats.forGame('twentyone').played;
         const fake = { engine: e, game, settled: false };
         const s = CV.Rewards.settle(fake, e.result());
         const p1 = CV.Profile.get();
         const extra = s.levelCoins + s.achievements.reduce((n, a) => n + (a.reward.coins || 0), 0);
         check(p1.coins === p0.coins + s.coins + extra, `profile coins moved by ${p1.coins - p0.coins}, summary says ${s.coins} + ${extra}`);
-        check(CV.Stats.forGame('blackjack').played === g0 + 1, 'stats.played did not increment');
+        check(CV.Stats.forGame('twentyone').played === g0 + 1, 'stats.played did not increment');
         check(p1.totalGames === p0.totalGames + 1, 'profile.totalGames did not increment');
         check(['win', 'loss', 'draw'].includes(s.outcome), `bad outcome ${s.outcome}`);
         if (s.outcome === 'win') check(p1.streak === p0.streak + 1, 'win did not extend streak');
@@ -294,9 +295,9 @@ console.log('\n🪙 Rewards pipeline');
     const ids = Object.keys(CV.Achievements.load());
     console.log(`  ${checked} settlements, ${ids.length} achievements unlocked, level ${CV.Profile.get().level}, ${CV.Missions.list().filter((m) => m.done).length}/4 missions done`);
     check(ids.length >= 2, 'first-game / first-win never unlocked');
-    // Only Blackjack was played, so only Blackjack's and the hub's trophies may be open.
-    const leaked = ids.filter((id) => { const d = CV.Achievements.get(id); return d.game && d.game !== 'blackjack'; });
-    check(leaked.length === 0, `another game's achievements unlocked from Blackjack: ${leaked.join(', ')}`);
+    // Only 21 was played, so only 21's and the hub's trophies may be open.
+    const leaked = ids.filter((id) => { const d = CV.Achievements.get(id); return d.game && d.game !== 'twentyone'; });
+    check(leaked.length === 0, `another game's achievements unlocked from 21: ${leaked.join(', ')}`);
 
     // Spectator table pays nothing.
     const spec = playHand(game, { seed: 1, seats: seats(2, new CV.RNG(2), -1), config: { room: 'beginner' } });

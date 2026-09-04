@@ -30,7 +30,7 @@ keeps it a game hub.
 | Cosmetics: avatars, card backs, tables, tile skins | ✅ |
 | Leaderboard | ✅ local (your best hands); global needs a server |
 | Export / Import, Google Drive copy | ✅ `save.js`, `drive.js` |
-| 🃏 **21** | ✅ with 孖宝 and 五小 house rules |
+| 🃏 **21** | ✅ house rules — no natural, DOUBLE, and 五龙 pays 2:1 |
 | 🎴 **百家乐** | ✅ |
 | 🎰 老虎机 · 🐉 射龙门 · 👑 斗地主 · 🂢 锄大D · ♠️ Poker · 🐮 斗牛 · 🀄 Mahjong | ⏳ next |
 | How-to-play card before a first hand | ✅ per game, in both languages |
@@ -61,6 +61,8 @@ js/core/              the hub — nothing in here knows a game by name
   store.js            localStorage with failure reporting
   i18n.js             languages — one flat dict per language
 js/games/<game>/      engine.js · ai.js · view.js · index.js (registers itself)
+  twentyone/          21 — its own rules, not a variant of anything
+  baccarat/           百家乐 — punto banco
 js/ui/                shell · lobby · play · result · profile · achievements ·
                       statistics · leaderboard · missions · settings · cardview
 js/save.js            Export / Import envelope
