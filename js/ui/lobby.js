@@ -64,7 +64,6 @@
             <button class="nav-tile" data-go="stats"><span class="icon">📊</span><span>${esc(t('nav.stats'))}</span><small>${esc(t('nav.games', { n: fmt(p.totalGames) }))}</small></button>
             <button class="nav-tile${todo ? ' has-badge' : ''}" data-go="missions"><span class="icon">🎁</span><span>${esc(t('nav.bonus'))}</span><small>${esc(todo ? t('nav.toClaim', { n: todo }) : login.claimedToday ? t('nav.claimed') : t('nav.ready'))}</small></button>
             <button class="nav-tile" data-go="room"><span class="icon">🌐</span><span>${esc(t('nav.friends'))}</span><small>${esc(t('nav.online'))}</small></button>
-            <button class="nav-tile" data-go="leaderboard"><span class="icon">🏅</span><span>${esc(t('nav.leaderboard'))}</span><small>${esc(t('nav.local'))}</small></button>
             <button class="nav-tile" data-go="profile"><span class="icon">👤</span><span>${esc(t('nav.profile'))}</span><small>${esc(t('lv'))} ${p.level}</small></button>
             <button class="nav-tile" data-go="settings"><span class="icon">⚙️</span><span>${esc(t('nav.settings'))}</span><small>${esc(t('set.theme'))} · ${esc(t('set.data'))}</small></button>`;
     }

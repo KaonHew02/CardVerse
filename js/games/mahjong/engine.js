@@ -4,7 +4,14 @@
  * Two modes, and they are two games rather than one game with a switch:
  *
  *     four seats   136 tiles   东 南 西 北
- *     three seats  108 tiles   东 南 西, and the characters are cut to 1 and 9
+ *                              no flowers, no fly, no minimum
+ *     three seats  72 + fly    东 南 西 — dots, winds, dragons and eight
+ *                              flowers. No characters and no bamboo at all.
+ *                              5番 to declare, and 爆番 over ten.
+ *
+ * `MODES` below is the whole difference, in the shape the rules give it, and
+ * nothing outside it branches on the seat count. That is deliberate: the
+ * three-player fly must never be able to reach the four-player game.
  *
  * Thirteen tiles each, fourteen for the dealer, and the dealer throws first.
  * Draw, claim, discard, until somebody's hand is four melds and a pair — or
@@ -38,6 +45,31 @@
     /** 胡 first, then 杠 and 碰 together, then 吃. */
     const PRIORITY = { win: 3, kong: 2, pung: 2, chow: 1 };
 
+    /**
+     * One configuration per mode, laid out the way the rules do.
+     *
+     * `flyUnit` is here and unused. The rules fix a fly at RM0.50 but leave
+     * who pays it, when, and to whom still to be decided, and say plainly not
+     * to assume — so it is carried and not spent. When the settlement arrives
+     * it goes into `pay.js` beside the fan table.
+     */
+    const MODES = {
+        3: {
+            mode: '3P', players: 3,
+            flyEnabled: true, dunFlyEnabled: true,
+            flowers: 8,
+            minimumFan: 5, baoFanThreshold: 10, baoFanPayment: 20,
+            flyUnit: 5,        // coins, the shape of RM0.50 — not yet settled
+        },
+        4: {
+            mode: '4P', players: 4,
+            flyEnabled: false, dunFlyEnabled: false,
+            flowers: 0,
+            minimumFan: 0, baoFanThreshold: 10, baoFanPayment: 20,
+            flyUnit: 0,
+        },
+    };
+
     class MahjongEngine extends CV.GameEngine {
 
         static get code() { return 'mahjong'; }
@@ -53,6 +85,8 @@
             super(opts);
             const room = CV.Registry.room(this.config.room);
             this.players = this.seats.length;
+            this.mode = Object.assign({}, MODES[this.players] || MODES[4], this.config.mode || {});
+            this.pool = MJ.keysFor(this.players);
             this.profile = CV.MJPay.profileFor(this.players);
             /** Coins one fan is worth at this table. */
             this.unit = CV.MJPay.unitFor(this.players, room.bet[0], this.config.unitStep);
@@ -81,12 +115,16 @@
                 s.hand = [];
                 s.melds = [];
                 s.discards = [];
+                s.flowers = [];
                 s.lastAction = null;
             }
         }
 
         /** The floor a hand has to clear before it may be declared at all. */
-        get minFan() { return this.profile.minFan; }
+        get minFan() { return this.mode.minimumFan; }
+
+        /** Flies in a seat's hand — wild at three seats, absent at four. */
+        wildsIn(seat) { return this.mode.flyEnabled ? MJ.split(this.seats[seat].hand).wilds : 0; }
 
         /** East keeps the seat if East wins; otherwise it moves on. */
         get shoeState() {
@@ -100,7 +138,10 @@
         /* ---- the deal ---------------------------------------------------------- */
 
         start() {
-            this.wall = MJ.build(this.players);
+            this.wall = MJ.build(this.players, {
+                fly: this.mode.flyEnabled ? MJ.FLY_COUNT : 0,
+                flowers: this.mode.flowers,
+            });
             this.rng.shuffle(this.wall);
 
             for (let k = 0; k < HAND; k++) {
@@ -110,6 +151,7 @@
             }
             // East takes one more and throws first.
             this.seats[this.dealer].hand.push(this.wall.pop());
+            for (let i = 0; i < this.players; i++) this.clearFlowers(i);
             for (const s of this.seats) s.hand = MJ.sort(s.hand);
 
             this.phase = 'discard';
@@ -120,6 +162,26 @@
         }
 
         counts(seat) { return MJ.counts(this.seats[seat].hand); }
+
+        /**
+         * A flower is never part of a hand, so it is set aside and replaced.
+         *
+         * The rules put eight flowers in the three-player set and say nothing
+         * about what they do, and a tile that sat in a hand doing nothing
+         * would make the game unwinnable — so this is the universal handling
+         * and nothing more: set aside, draw again, score nothing.
+         */
+        clearFlowers(seat) {
+            const s = this.seats[seat];
+            for (;;) {
+                const idx = s.hand.findIndex(MJ.isFlower);
+                if (idx < 0) return true;
+                s.flowers.push(s.hand.splice(idx, 1)[0]);
+                if (!this.wall.length) return false;
+                s.hand.push(this.wall.pop());
+                this.emit('flower', { seat, n: s.flowers.length });
+            }
+        }
 
         /* ---- what a seat may do -------------------------------------------------- */
 
@@ -200,6 +262,7 @@
          * seat that loses nothing by taking it.
          */
         findClaims(tile, from) {
+            if (!MJ.isPlaying(tile)) return [];
             const key = MJ.key(tile);
             const suit = tile.suit, n = tile.n;
             const out = [];
@@ -298,7 +361,9 @@
         drawFor(seat) {
             if (!this.wall.length) return this.exhausted();
             const tile = this.wall.pop();
-            this.seats[seat].hand = MJ.sort(this.seats[seat].hand.concat([tile]));
+            this.seats[seat].hand.push(tile);
+            if (!this.clearFlowers(seat)) return this.exhausted();
+            this.seats[seat].hand = MJ.sort(this.seats[seat].hand);
             this.phase = 'discard';
             this.turn = seat;
             this.emit('turn', { seat, drew: tile, wall: this.wall.length });
@@ -309,7 +374,9 @@
         replacement(seat) {
             if (!this.wall.length) return this.exhausted();
             const tile = this.wall.pop();
-            this.seats[seat].hand = MJ.sort(this.seats[seat].hand.concat([tile]));
+            this.seats[seat].hand.push(tile);
+            if (!this.clearFlowers(seat)) return this.exhausted();
+            this.seats[seat].hand = MJ.sort(this.seats[seat].hand);
             this.phase = 'discard';
             this.turn = seat;
             this.emit('replace', { seat, tile, wall: this.wall.length });
@@ -364,20 +431,50 @@
         winFor(seat, tile) {
             const s = this.seats[seat];
             const tiles = tile ? s.hand.concat([tile]) : s.hand;
-            const shape = W.isWin(MJ.counts(tiles), s.melds.length);
+            const parts = MJ.split(tiles);
+            const wilds = this.mode.flyEnabled ? parts.wilds : 0;
+            if (!this.mode.flyEnabled && parts.wilds) return null;
+            const shape = W.isWin(parts.counts, s.melds.length, wilds, this.pool);
             if (!shape) return null;
 
+            const melds = s.melds.map((m) => ({ type: m.type, key: m.key })).concat(shape.melds || []);
             const hand = {
                 shape: shape.shape,
-                melds: s.melds.map((m) => ({ type: m.type, key: m.key })).concat(shape.melds || []),
+                melds,
                 pair: shape.pair,
-                keys: tiles.map(MJ.key).concat(s.melds.flatMap((m) => m.tiles.map(MJ.key))),
+                // Read from the hand as it resolved, not from the tiles as
+                // they lie: a fly counts as whatever it was played as, which
+                // is what decides 清一色 and the rest.
+                keys: this.handKeys(shape, s.melds, melds),
                 selfDraw: !tile,
                 menzen: s.melds.every((m) => m.concealed),
                 quad: !!shape.quad,
+                // A plain fly adds nothing. 顿飞 may one day — see MJ.isDun.
+                wilds,
+                dun: this.mode.dunFlyEnabled ? parts.dun : 0,
             };
             const fan = CV.MJFan.calculateFan(hand);
-            return { shape, hand, fan, tiles, ok: CV.MJPay.canWin(this.players, fan.totalFan) };
+            return { shape, hand, fan, tiles, wilds, ok: CV.MJPay.canWin(this.players, fan.totalFan) };
+        }
+
+        /** Every tile the finished hand is made of, wilds resolved. */
+        handKeys(shape, exposed, melds) {
+            const out = exposed.flatMap((m) => m.tiles.filter(MJ.isPlaying).map(MJ.key));
+            if (shape.shape === 'sevenPairs') {
+                for (const k of shape.pairs) out.push(k, k);
+                return out;
+            }
+            if (shape.shape === 'thirteenOrphans') {
+                return out.concat(MJ.ORPHAN_KEYS, [shape.pair]);
+            }
+            for (const m of (shape.melds || [])) {
+                if (m.type === 'chow') {
+                    const suit = m.key[0], n = Number(m.key.slice(1));
+                    out.push(suit + n, suit + (n + 1), suit + (n + 2));
+                } else out.push(m.key, m.key, m.key);
+            }
+            out.push(shape.pair, shape.pair);
+            return out;
         }
 
         declareWin(seat, from) {
@@ -439,6 +536,7 @@
                     mjBig: (i === this.winner && this.fan.totalFan >= 8) ? 1 : 0,
                     mjBao: (i === this.winner && this.bao) ? 1 : 0,
                     mjKongs: s.melds.filter((m) => m.type === 'kong').length,
+                    mjFlowers: s.flowers.length,
                     forfeits: 0,
                 },
             }));
@@ -467,6 +565,7 @@
             return Object.assign(super.snapshot(), {
                 dealer: this.dealer,
                 players: this.players,
+                mode: this.mode.mode,
                 wall: this.wall.length,
                 lastDiscard: this.lastDiscard && {
                     tile: this.lastDiscard.tile, from: this.lastDiscard.from,

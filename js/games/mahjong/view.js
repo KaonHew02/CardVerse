@@ -27,6 +27,15 @@
     function tileHtml(tile, opts = {}) {
         const extra = (opts.cls ? ' ' + opts.cls : '') + (opts.small ? ' tile-sm' : '');
         if (!tile) return `<span class="tile tile-back${extra}"></span>`;
+        // 飞 is a wild card and reads as one: no number, no suit, its own face.
+        if (tile.suit === 'F') {
+            return `<span class="tile tile-fly${extra}" data-id="${tile.id}"
+                aria-label="Fly"><b>飞</b></span>`;
+        }
+        if (tile.suit === 'f') {
+            return `<span class="tile tile-flower${extra}" data-id="${tile.id}"
+                aria-label="Flower ${tile.n}"><b>花</b><i>${tile.n}</i></span>`;
+        }
         if (tile.suit === 'z') {
             return `<span class="tile tile-z z${tile.n}${extra}" data-id="${tile.id}"
                 aria-label="${esc(MJ.nameEn(tile))}"><b>${MJ.HONOURS[tile.n - 1]}</b></span>`;
@@ -103,6 +112,7 @@
                         <span class="who"><span class="name">${esc(s.name)}</span>
                             <span class="coins">🪙 ${fmt(s.coins)}</span></span>
                         <span class="tag mj-count">${s.hand.length}</span>
+                        ${s.flowers.length ? `<span class="tag mj-flowers">花 ${s.flowers.length}</span>` : ''}
                         <span class="tag mj-wind${i === e.dealer ? ' is-dealer' : ''}">${this.windOf(i)}</span>
                     </div>
                     <div class="mj-hand-row">${row(hand, { small: true })}</div>
@@ -135,6 +145,7 @@
                 <span class="pile-label">${esc(t('mj.wall', { n: e.wallLeft }))}</span>
                 <span class="mj-mode">${esc(t('mj.mode', { n: e.players }))}</span>
                 <span class="mj-mode">${esc(t('mj.unit', { n: e.unit }))}</span>
+                ${e.mode.flyEnabled ? `<span class="mj-mode">${esc(t('mj.flyOn'))}</span>` : ''}
                 ${e.minFan ? `<span class="mj-min">${esc(t('mj.min', { n: e.minFan }))}</span>` : ''}`;
         }
 
@@ -177,6 +188,7 @@
             host.innerHTML = `
                 <div class="hand-head">
                     <span class="tag mj-wind${this.you === e.dealer ? ' is-dealer' : ''}">${this.windOf(this.you)}</span>
+                    ${s.flowers.length ? `<span class="tag mj-flowers">花 ${s.flowers.length}</span>` : ''}
                     <span class="seat-count">${esc(t('mj.wall', { n: e.wallLeft }))}</span>
                 </div>
                 <div class="mj-melds mine">${s.melds.map((m) => this.meldHtml(m)).join('')}</div>

@@ -1677,26 +1677,96 @@ function auditMahjong() {
 
     /* --- the two tile sets ------------------------------------------------- */
 
-    for (const [players, total] of [[4, 136], [3, 108]]) {
-        const set = MJ.build(players);
-        check(set.length === total, `mj: ${players}-player set has ${set.length} tiles, wanted ${total}`);
-        check(new Set(set.map((x) => x.id)).size === total, 'mj: the set holds a duplicate id');
-        const cnt = MJ.counts(set);
+    {
+        const four = MJ.build(4);
+        check(four.length === 136, `mj: the four-player set has ${four.length} tiles, wanted 136`);
+        check(four.every(MJ.isPlaying), 'mj: a flower or a fly got into the four-player set');
+        const cnt = MJ.counts(four);
         for (const [, n] of cnt) check(n === 4, 'mj: a tile does not appear exactly four times');
-        // No flowers, no seasons — honours stop at seven.
-        check([...cnt.keys()].every((k) => k[0] !== 'z' || Number(k.slice(1)) <= 7),
-            'mj: something beyond the seven honours got into the set');
+        for (const suit of ['m', 's', 'p']) {
+            const kinds = [...cnt.keys()].filter((k) => k[0] === suit);
+            check(kinds.length === 9, `mj: the four-player set has ${kinds.length} kinds of ${suit}`);
+        }
         const winds = ['z1', 'z2', 'z3', 'z4'].reduce((n, k) => n + (cnt.get(k) || 0), 0);
         const dragons = ['z5', 'z6', 'z7'].reduce((n, k) => n + (cnt.get(k) || 0), 0);
         check(winds === 16 && dragons === 12, `mj: ${winds} winds and ${dragons} dragons`);
-        const chars = [...cnt.keys()].filter((k) => k[0] === 'm');
-        check(chars.length === (players === 3 ? 2 : 9),
-            `mj: ${players}-player set has ${chars.length} kinds of character`);
-        if (players === 3) {
-            check(chars.sort().join() === 'm1,m9', 'mj: the three-player set must keep only 1 and 9 characters');
-        }
     }
-    console.log('  136 tiles for four seats, 108 for three, four of each and no flowers');
+
+    {
+        // Three seats play a different box: dots, winds, dragons, eight
+        // flowers — and the fly on top. No characters and no bamboo at all.
+        const three = MJ.build(3);
+        const cnt = MJ.counts(three);
+        const flowers = three.filter(MJ.isFlower).length;
+        const fly = three.filter(MJ.isFly).length;
+        const playing = three.filter(MJ.isPlaying).length;
+
+        check(playing === 64, `mj: ${playing} playing tiles, wanted 36 dots + 28 honours`);
+        check(flowers === 8, `mj: ${flowers} flowers, wanted 8`);
+        check(playing + flowers === 72, `mj: ${playing + flowers} base tiles, wanted 72`);
+        check(fly === MJ.FLY_COUNT, `mj: ${fly} fly tiles, wanted ${MJ.FLY_COUNT}`);
+        check(three.length === 72 + MJ.FLY_COUNT, `mj: the three-player set has ${three.length} tiles`);
+        check([...cnt.keys()].every((k) => k[0] === 'p' || k[0] === 'z'),
+            'mj: a character or a bamboo got into the three-player set');
+        const dots = [...cnt.keys()].filter((k) => k[0] === 'p');
+        check(dots.length === 9, `mj: ${dots.length} kinds of dot`);
+        for (const [, n] of cnt) check(n === 4, 'mj: a tile does not appear exactly four times');
+        check(MJ.keysFor(3).every((k) => k[0] === 'p' || k[0] === 'z'),
+            'mj: the three-player pool offers a tile the set does not hold');
+    }
+    console.log(`  136 tiles for four seats; 72 + ${CV.MJ.FLY_COUNT} fly for three, dots and honours only`);
+
+    /* --- the fly is wild, and only inside its own set ----------------------- */
+
+    {
+        const pool3 = MJ.keysFor(3);
+        const pool4 = MJ.keysFor(4);
+
+        // One tile short of four melds and a pair, with a fly to cover it.
+        const short = MJ.counts(mjTiles('123456789p1122z'));   // 13 tiles + a fly
+        check(!W.isWin(short, 0, 0, pool3), 'mj: that hand should not win without the fly');
+        check(!!W.isWin(short, 0, 1, pool3), 'mj: a fly should complete the hand');
+
+        // A wild that is left over is a tile left over.
+        check(!W.isWin(MJ.counts(mjTiles('123456789p11223z')), 0, 1, pool3),
+            'mj: a spare fly should not be allowed to sit in a finished hand');
+
+        // Three flies make a meld of their own.
+        check(!!W.isWin(MJ.counts(mjTiles('123456789p11z')), 0, 3, pool3),
+            'mj: three flies should make the fourth meld');
+
+        // Seven pairs, one of them made of a fly and a single.
+        check(!!W.isWin(MJ.counts(mjTiles('112233445566p1z')), 0, 1, pool3),
+            'mj: a fly should pair with the odd tile');
+
+        // 十三幺 needs four tiles the three-player set does not contain, so no
+        // number of flies can make it — but at four seats it still can.
+        const orphans = MJ.counts(mjTiles('19p1234567z'));
+        check(!W.isWin(orphans, 0, 2, pool3), 'mj: 十三幺 must be unreachable at three seats');
+        check(!!W.isWin(MJ.counts(mjTiles('119m19s19p1234567z')), 0, 0, pool4),
+            'mj: 十三幺 should still stand at four seats');
+
+        console.log('  ✓ a fly stands in for any tile the set holds, and for nothing it does not');
+    }
+
+    /* --- an ordinary fly is worth no 番 -------------------------------------- */
+
+    {
+        // The same hand, once made of tiles and once with a fly standing in.
+        // The rules are explicit: an ordinary fly adds nothing.
+        const plain = mjFanOf('123456789p11122z');
+        const withFly = CV.MJFan.calculateFan({
+            shape: 'standard',
+            melds: [{ type: 'chow', key: 'p1' }, { type: 'chow', key: 'p4' },
+                    { type: 'chow', key: 'p7' }, { type: 'pung', key: 'z1', wild: 1 }],
+            pair: 'z2',
+            keys: 'p1 p2 p3 p4 p5 p6 p7 p8 p9 z1 z1 z1 z2 z2'.split(' '),
+            selfDraw: false, menzen: false, wilds: 1, dun: 0,
+        });
+        check(plain && plain.totalFan === withFly.totalFan,
+            `mj: a fly changed the 番 count (${plain && plain.totalFan} against ${withFly.totalFan})`);
+        console.log('  ✓ an ordinary fly is a wild card and nothing more');
+    }
 
     /* --- what wins --------------------------------------------------------- */
 
@@ -1891,40 +1961,56 @@ function auditMahjong() {
     /* --- a hand that wins but may not be declared --------------------------- */
 
     {
-        // 平胡, worth one 番, at a table that demands five.
         const e = new game.Engine({
             rng: new CV.RNG(21), config: { room: 'beginner' },
             seats: [0, 1, 2].map((i) => new CV.Seat(i, { kind: 'ai', name: 'S' + i, coins: 5000 })),
         });
         e.start();
         check(e.minFan === 5, `mj: three seats should demand 5番, demand ${e.minFan}`);
-        const s = e.seats[e.dealer];
-        s.hand = mjTiles('123s456s789s555p99p');
-        const got = e.winFor(e.dealer, null);
-        check(!!got, 'mj: 123s456s789s555p99p should be a winning shape');
-        check(got.fan.totalFan < 5, `mj: that hand is ${got.fan.totalFan}番, the test needs it under five`);
-        check(got.ok === false, 'mj: a hand under the minimum was declarable');
-        check(!e.legalActions(e.dealer).some((o) => o.type === 'win'),
-            'mj: 胡 was offered on a hand under the minimum');
-        check(e.declareWin(e.dealer, null) === false, 'mj: a hand under the minimum was declared anyway');
 
-        // The same shape in one suit clears it, and then it may be taken.
-        s.hand = mjTiles('11223344556677s');
-        const big = e.winFor(e.dealer, null);
+        // With dots the only numbered suit, every concealed hand is already
+        // 混一色 or better — so the floor only ever bites on a discard, where
+        // there is no 自摸 to carry it over. 3 + 门清 is four, and four is not
+        // enough.
+        const B = (e.dealer + 1) % 3;
+        e.seats[B].hand = mjTiles('12456789p111z22z');      // thirteen, waiting on 3筒
+        const tile = mjTiles('3p')[0];
+        const got = e.winFor(B, tile);
+        check(!!got, 'mj: that hand plus 3筒 should be a winning shape');
+        check(got.fan.totalFan === 4, `mj: 混一色 with 门清 is ${got && got.fan.totalFan}番, wanted 4`);
+        check(got.ok === false, 'mj: a hand under the minimum was declarable');
+
+        e.seats[e.dealer].discards.push(tile);
+        e.lastDiscard = { tile, from: e.dealer };
+        const claims = e.findClaims(tile, e.dealer);
+        const mine = claims.find((c) => c.seat === B);
+        check(!mine || !mine.options.some((o) => o.type === 'win'),
+            'mj: 胡 was offered on a hand under the minimum');
+        check(e.declareWin(B, e.dealer) === false, 'mj: a hand under the minimum was declared anyway');
+
+        // Self-drawn, the same shape carries 自摸 and clears it exactly.
+        e.seats[B].hand = mjTiles('123456789p111z22z');
+        const drawn = e.winFor(B, null);
+        check(drawn && drawn.fan.totalFan === 5, `mj: the same hand self-drawn is ${drawn && drawn.fan.totalFan}番`);
+        check(drawn && drawn.ok, 'mj: five 番 should be enough to declare');
+
+        // And one suit on its own is well clear of it.
+        e.seats[B].hand = mjTiles('11223344556677p');
+        const big = e.winFor(B, null);
         check(big && big.ok, 'mj: 清七对 should clear a 5番 minimum');
         check(big.fan.totalFan >= 8, `mj: 清七对 came to ${big && big.fan.totalFan}番`);
-        check(e.legalActions(e.dealer).some((o) => o.type === 'win'), 'mj: 胡 was not offered on 清七对');
 
-        // Four seats have no floor, so the same small hand stands.
+        // Four seats have no floor, so a plain 平胡 stands.
         const four = new game.Engine({
             rng: new CV.RNG(22), config: { room: 'beginner' },
             seats: [0, 1, 2, 3].map((i) => new CV.Seat(i, { kind: 'ai', name: 'S' + i, coins: 5000 })),
         });
         four.start();
         check(four.minFan === 0, 'mj: four seats should have no minimum');
-        four.seats[four.dealer].hand = mjTiles('123s456s789s555p99p');
+        four.seats[four.dealer].hand = mjTiles('123m456m789s555p99p');
         const small = four.winFor(four.dealer, null);
         check(small && small.ok, 'mj: a 平胡 should stand at a four-seat table');
+        check(small.fan.totalFan < 5, 'mj: that hand was supposed to be a small one');
         console.log('  ✓ 5番 or nothing at three seats, no floor at four');
     }
 
@@ -1952,7 +2038,9 @@ function auditMahjong() {
             const ai = new game.AI(e);
             e.start();
 
-            const full = MJ.build(players).length;
+            const full = MJ.build(players, {
+                fly: e.mode.flyEnabled ? MJ.FLY_COUNT : 0, flowers: e.mode.flowers,
+            }).length;
             check(e.seats[e.dealer].hand.length === 14, 'mj: East was not dealt fourteen tiles');
             for (let i = 0; i < players; i++) {
                 if (i === e.dealer) continue;
@@ -1974,12 +2062,22 @@ function auditMahjong() {
             // Every tile is somewhere, and only in one place.
             const seen = [];
             for (const s of e.seats) {
-                seen.push(...s.hand, ...s.discards, ...s.melds.flatMap((m) => m.tiles));
+                seen.push(...s.hand, ...s.discards, ...s.flowers,
+                    ...s.melds.flatMap((m) => m.tiles));
             }
             seen.push(...e.wall);
             if (e.winner >= 0 && e.winFrom >= 0) seen.push(e.lastDiscard.tile);
             check(seen.length === full, `mj: ${seen.length} tiles accounted for, the set holds ${full}`);
             check(new Set(seen.map((x) => x.id)).size === full, 'mj: a tile is in two places at once');
+
+            check(e.seats.every((s) => !s.hand.some(MJ.isFlower)),
+                'mj: a flower was left sitting in a hand');
+            check(e.seats.every((s) => !s.discards.some(MJ.isFlower)),
+                'mj: a flower was discarded instead of set aside');
+            if (players === 4) {
+                check(e.seats.every((s) => !s.flowers.length && !s.hand.some(MJ.isFly)),
+                    'mj: a flower or a fly reached the four-player game');
+            }
 
             // 吃 only ever comes from the seat before.
             for (let i = 0; i < players; i++) {
@@ -2011,7 +2109,9 @@ function auditMahjong() {
                     `mj: a ${e.fan.totalFan}番 hand was declared at a ${e.minFan}番 table`);
                 check(e.bao === (e.fan.totalFan >= 10), 'mj: 爆番 disagrees with the 番 count');
                 if (e.bao) check(e.payFan === 20, `mj: 爆番 settled at ${e.payFan}番`);
-                check(!!W.isWin(MJ.counts(e.winTiles), e.seats[e.winner].melds.length),
+                const parts = MJ.split(e.winTiles);
+                check(!!W.isWin(parts.counts, e.seats[e.winner].melds.length,
+                    e.mode.flyEnabled ? parts.wilds : 0, e.pool),
                     'mj: the declared winner does not hold a winning hand');
                 if (e.winFrom < 0) selfDraws++;
                 // East keeps the seat by winning, and gives it up otherwise.

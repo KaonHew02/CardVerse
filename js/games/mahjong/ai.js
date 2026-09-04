@@ -46,7 +46,10 @@
             return this.discard(seat, options);
         }
 
-        get pool() { return MJ.keysFor(this.engine.players); }
+        get pool() { return this.engine.pool; }
+
+        /** A fly is a tile already found, so the search has to know about it. */
+        wilds(seat) { return this.engine.wildsIn(seat); }
 
         /* ---- your own turn ------------------------------------------------------ */
 
@@ -61,18 +64,22 @@
             if (kong && this.kongIsFree(seat, kong.key)) return { type: 'kong', seat, key: kong.key };
 
             const tiles = options.filter((o) => o.type === 'discard');
+            const wilds = this.wilds(seat);
             let best = null, bestSt = 99, bestJunk = -1;
             const seen = new Set();
 
             for (const opt of tiles) {
                 const tile = s.hand.find((x) => x.id === opt.tile);
+                // A fly is worth more than any tile it could stand in for, so
+                // it is never thrown while there is anything else to throw.
+                if (MJ.isFly(tile)) continue;
                 const key = MJ.key(tile);
                 if (seen.has(key)) continue;      // two copies throw the same
                 seen.add(key);
 
                 const cnt = MJ.counts(s.hand);
                 cnt.set(key, cnt.get(key) - 1);
-                const st = W.shanten(cnt, exposed, this.pool);
+                const st = W.shanten(cnt, exposed, wilds, this.pool);
                 const junk = this.junk(seat, tile);
                 if (st < bestSt || (st === bestSt && junk > bestJunk)) {
                     best = opt; bestSt = st; bestJunk = junk;
@@ -89,13 +96,14 @@
             const s = this.engine.seats[seat];
             const tally = { m: 0, s: 0, p: 0 };
             for (const tile of s.hand.concat(s.melds.flatMap((x) => x.tiles))) {
-                if (tile.suit !== 'z') tally[tile.suit]++;
+                if (MJ.isPlaying(tile) && tile.suit !== 'z') tally[tile.suit]++;
             }
             return ['m', 's', 'p'].sort((a, b) => tally[b] - tally[a])[0];
         }
 
         /** How little this tile is worth keeping. Higher is more throwable. */
         junk(seat, tile) {
+            if (MJ.isFly(tile)) return -1;      // never the tile to throw
             const s = this.engine.seats[seat];
             const cnt = MJ.counts(s.hand);
             const held = cnt.get(MJ.key(tile)) || 0;
@@ -114,13 +122,14 @@
         kongIsFree(seat, key) {
             const e = this.engine;
             const s = e.seats[seat];
-            const before = W.shanten(MJ.counts(s.hand), s.melds.length, this.pool);
+            const wilds = this.wilds(seat);
+            const before = W.shanten(MJ.counts(s.hand), s.melds.length, wilds, this.pool);
             const cnt = MJ.counts(s.hand);
             const take = Math.min(cnt.get(key) || 0, 4);
             cnt.set(key, (cnt.get(key) || 0) - take);
             const melds = s.melds.some((m) => m.key === key && m.type === 'pung')
                 ? s.melds.length : s.melds.length + 1;
-            return W.shanten(cnt, melds, this.pool) <= before;
+            return W.shanten(cnt, melds, wilds, this.pool) <= before;
         }
 
         /* ---- somebody else's discard --------------------------------------------- */
@@ -130,7 +139,8 @@
             const s = e.seats[seat];
             const tile = e.lastDiscard.tile;
             const key = MJ.key(tile);
-            const before = W.shanten(MJ.counts(s.hand), s.melds.length, this.pool);
+            const wilds = this.wilds(seat);
+            const before = W.shanten(MJ.counts(s.hand), s.melds.length, wilds, this.pool);
 
             // With a floor to clear, 吃 and 碰 cost a 番 and buy nothing.
             // Only a kong is worth taking, and only when it is free.
@@ -152,7 +162,7 @@
                         if (k !== key) cnt.set(k, (cnt.get(k) || 0) - 1);
                     }
                 }
-                const st = W.shanten(cnt, melds, this.pool);
+                const st = W.shanten(cnt, melds, wilds, this.pool);
                 if (st < bestSt) { bestSt = st; best = opt; }
             }
             if (!best) return { type: 'pass', seat };

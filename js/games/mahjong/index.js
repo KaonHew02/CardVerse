@@ -21,7 +21,7 @@
         code: 'mahjong',
         name: 'Mahjong',
         icon: '🀄',
-        blurb: 'Draw, meld, discard. Four melds and a pair — three seats or four.',
+        blurb: 'Four melds and a pair. Three seats play dots and fly; four play the full set.',
         category: 'tiles',
         players: [3, 4],
         wagers: true,
@@ -39,14 +39,14 @@
             choices: (room) => [2, 5, 10].map((n) => ({ value: n, label: '🪙 ' + (n * room.bet[0]) })),
         }],
 
-        rules: ['mj.rule1', 'mj.rule2', 'mj.rule3', 'mj.rule4', 'mj.rule5',
-                'mj.rule6', 'mj.rule7', 'mj.rule8', 'mj.rule9', 'mj.rule10'],
+        rules: ['mj.rule1', 'mj.rule11', 'mj.rule12', 'mj.rule2', 'mj.rule3', 'mj.rule4',
+                'mj.rule5', 'mj.rule6', 'mj.rule7', 'mj.rule8', 'mj.rule9', 'mj.rule10'],
 
         extraLabels: {
             mjRounds: 'Hands played', mjWins: 'Hands won', mjSelfDraw: '自摸',
             mjDealtIn: 'Dealt in', mjDraws: '流局', mjFan: 'Total 番',
             mjBig: 'Hands of 8番 or more', mjBao: '爆番', mjKongs: 'Kongs',
-            forfeits: 'Walked away',
+            mjFlowers: 'Flowers drawn', forfeits: 'Walked away',
         },
 
         achievements: [

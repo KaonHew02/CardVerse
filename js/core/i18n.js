@@ -51,10 +51,10 @@
         'lobby.footnote': 'Virtual coins only. Nothing in CardVerse can be bought, sold or cashed out.',
         'nav.achievements': 'Achievements', 'nav.stats': 'Statistics',
         'nav.bonus': 'Daily Bonus', 'nav.friends': 'Play with Friends',
-        'nav.leaderboard': 'Leaderboard', 'nav.profile': 'Profile', 'nav.settings': 'Settings',
+        'nav.profile': 'Profile', 'nav.settings': 'Settings',
         'nav.achCount': '{done} / {total}', 'nav.games': '{n} games',
         'nav.toClaim': '{n} to claim', 'nav.claimed': 'Claimed today', 'nav.ready': 'Ready',
-        'nav.online': 'Online', 'nav.local': 'Local',
+        'nav.online': 'Online',
 
         /* set-up */
         'setup.title': 'Choose a table',
@@ -133,13 +133,6 @@
         'stats.recent': 'Recent games',
         'stats.empty': 'Play a hand and the numbers appear here.',
 
-        /* leaderboard */
-        'lb.title': '🏅 Leaderboard',
-        'lb.all': '🌐 All',
-        'lb.biggest': 'Biggest wins',
-        'lb.none': 'No winning hands recorded yet.',
-        'lb.localNote': 'Rankings are local to this browser. A global board arrives with online play.',
-        'lb.summary': 'Level {level} · 🪙 {coins} · {wins} wins · net {net}',
 
         /* missions */
         'miss.title': '🎁 Daily Bonus',
@@ -387,7 +380,9 @@
         'mj.selfDraw': '自摸', 'mj.byDiscard': '放铳',
         'mj.detailWin': '{name} · {how} · {n}番',
         'mj.detailDraw': '流局 — nobody was home',
-        'mj.rule1': 'Three seats play the 108-tile game and four the 136-tile one. No flowers and no seasons. Thirteen tiles each, and East takes a fourteenth and throws first.',
+        'mj.rule1': 'Four seats play the standard 136 tiles. Three seats play a different box altogether: dots, winds, dragons and eight flowers — 72 tiles — plus the fly. There are no characters and no bamboo at three seats.',
+        'mj.rule11': '飞 is wild at three seats: it stands in for any tile the set holds, and it adds nothing to the score by itself. 顿飞 is a fly that can count towards 番 — the rules have not fixed when a fly becomes one, so for now none do.',
+        'mj.rule12': 'A flower is never part of a hand. Draw one and it is set aside and replaced, and it scores nothing. Four seats have no flowers and no fly at all.',
         'mj.rule2': 'A winning hand is four melds and a pair. A meld is a chow — three in a run, all one suit — a pung of three the same, or a kong of four the same.',
         'mj.rule3': 'Two other hands win: 七对子, seven pairs, and 十三幺, all thirteen terminals and honours with one of them twice.',
         'mj.rule4': 'Draw, then discard. Anyone may claim the tile thrown: 胡 beats 碰 and 杠, which beat 吃, and 吃 is only for the seat immediately after the thrower.',
@@ -398,7 +393,7 @@
         'mj.rule9': 'Three seats have a floor: a hand worth fewer than 5番 cannot be declared at all, however finished it looks. Four seats have no minimum.',
         'mj.rule10': '10番 or more is 爆番 and settles at a flat 20番, so an 11番 hand and a 16番 hand pay the same. With three seats a 自摸 is paid double by both opponents, and on a discard the thrower pays double while the other pays once. With four seats a 自摸 is paid once by each, and a discard is covered by whoever threw it.',
         'mj.fanUnit': 'Table stake', 'mj.fanUnitNote': 'What one 番 is worth. Three seats need 5番 to win, so this is what a hand actually pays.',
-        'mj.unit': '🪙 {n} a 番', 'mj.min': 'minimum {n}番',
+        'mj.unit': '🪙 {n} a 番', 'mj.min': 'minimum {n}番', 'mj.flyOn': '飞 wild',
         'mj.short': 'A winning hand — but {have}番 against a {need}番 minimum. Keep building.',
         'mj.bao': '💥 爆番, paid at {n}番',
 
@@ -563,10 +558,10 @@
         'lobby.footnote': '只用虚拟金币。CardVerse 中的一切都不能购买、出售或兑现。',
         'nav.achievements': '成就', 'nav.stats': '统计',
         'nav.bonus': '每日奖励', 'nav.friends': '好友对战',
-        'nav.leaderboard': '排行榜', 'nav.profile': '个人资料', 'nav.settings': '设置',
+        'nav.profile': '个人资料', 'nav.settings': '设置',
         'nav.achCount': '{done} / {total}', 'nav.games': '{n} 局',
         'nav.toClaim': '{n} 项可领', 'nav.claimed': '今日已领', 'nav.ready': '可领取',
-        'nav.online': '联机', 'nav.local': '本机',
+        'nav.online': '联机',
 
         'setup.title': '选择牌桌',
         'setup.you': '你：已玩 {played} 局 · 胜 {wins} 局 · {rate}',
@@ -639,12 +634,6 @@
         'stats.recent': '最近对局',
         'stats.empty': '玩一局，这里就会出现数据。',
 
-        'lb.title': '🏅 排行榜',
-        'lb.all': '🌐 全部',
-        'lb.biggest': '最大赢局',
-        'lb.none': '还没有获胜记录。',
-        'lb.localNote': '排名只保存在这个浏览器。全球排行榜会随联机对战一起推出。',
-        'lb.summary': '等级 {level} · 🪙 {coins} · 胜 {wins} 局 · 净 {net}',
 
         'miss.title': '🎁 每日奖励',
         'miss.login': '📅 每日登录',
@@ -877,7 +866,9 @@
         'mj.selfDraw': '自摸', 'mj.byDiscard': '放铳',
         'mj.detailWin': '{name} · {how} · {n}番',
         'mj.detailDraw': '流局——没人和牌',
-        'mj.rule1': '三个人打 108 张，四个人打 136 张。没有花牌，没有季节牌。每人 13 张，庄家多摸一张先打。',
+        'mj.rule1': '四人打标准 136 张。三人用的是另一副牌：筒子、风牌、三元牌加八张花牌——共 72 张——再加飞牌。三人麻将没有万子，也没有索子。',
+        'mj.rule11': '三人麻将的飞是万能牌：可以当作这副牌里的任何一张，本身不加番。顿飞是可以算番的飞，但什么情况下变成顿飞还没定，所以目前不会出现。',
+        'mj.rule12': '花牌不算在手牌里。摸到就补一张，花牌本身不计分。四人麻将没有花牌，也没有飞牌。',
         'mj.rule2': '和牌是四副面子加一对将。面子可以是吃（同花色三张连着）、碰（三张一样）或杠（四张一样）。',
         'mj.rule3': '另外两种也能和：七对子，七组对子；十三幺，十三张幺九字牌加其中一张。',
         'mj.rule4': '先摸后打。别人打出的牌大家都可以要：胡大过碰和杠，碰杠大过吃，而吃只有下家能叫。',
@@ -888,7 +879,7 @@
         'mj.rule9': '三人麻将有底线：不够 5 番就不能胡，牌型再漂亮也一样。四人麻将没有最低番数。',
         'mj.rule10': '10 番以上就是爆番，一律按 20 番结算，所以 11 番和 16 番赔一样多。三人自摸时两家都赔双倍；放铳时放铳的那家赔双倍，另一家赔正常。四人自摸时三家各赔一份，放铳则由打出那张牌的人全包。',
         'mj.fanUnit': '桌码', 'mj.fanUnitNote': '一番值多少。三人要 5 番才能胡，所以这就是一手牌真正的价钱。',
-        'mj.unit': '一番 🪙 {n}', 'mj.min': '最低 {n} 番',
+        'mj.unit': '一番 🪙 {n}', 'mj.min': '最低 {n} 番', 'mj.flyOn': '有飞',
         'mj.short': '牌是和了——但只有 {have} 番，要 {need} 番才能胡。继续做大。',
         'mj.bao': '💥 爆番，按 {n} 番算',
  'out.win': '赢',

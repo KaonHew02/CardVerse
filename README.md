@@ -27,7 +27,6 @@ keeps it a game hub.
 | Achievements, hub-wide and per game | ✅ |
 | Daily missions, daily login calendar, win streaks | ✅ |
 | Cosmetics: avatars, card backs, tables, tile skins | ✅ |
-| Leaderboard | ✅ local (your best hands); global needs a server |
 | Export / Import, Google Drive copy | ✅ `save.js`, `drive.js` |
 | 🃏 **21** | ✅ house rules — no natural, DOUBLE, and 五龙 pays 2:1 |
 | 🎴 **百家乐** | ✅ |
@@ -36,7 +35,7 @@ keeps it a game hub.
 | 👑 **斗地主** | ✅ bidding, every combination, bombs, 春天 and 反春 |
 | 🂡 **锄大D** | ✅ 3♦ opens, suits decide, five-card categories |
 | ♠️ **Poker** | ✅ Hold'em — blinds, four betting rounds, all-in side pots |
-| 🀄 **Mahjong** | ✅ 136 or 108 tiles, 番 with overlap rules, 5番 floor and 爆番 at three seats |
+| 🀄 **Mahjong** | ✅ 136 tiles at four seats; dots, flowers and 飞 at three, with a 5番 floor and 爆番 |
 | 🐮 **斗牛** | ✅ 宝宝, Pic + Black Ace, 五个 Pic, and the multiplier table |
 | How-to-play card before a first hand | ✅ per game, in both languages |
 | Online multiplayer | ⏳ Phase 5 — see `js/core/transport.js` |
@@ -76,7 +75,7 @@ js/games/<game>/      engine.js · ai.js · view.js · index.js (registers itsel
   mahjong/            麻将 — tiles · win · fan · pay, each its own file
   bullbull/           斗牛 — hands.js reads it, engine.js prices it
 js/ui/                shell · lobby · play · result · profile · achievements ·
-                      statistics · leaderboard · missions · settings · cardview
+                      statistics · missions · settings · cardview
 js/save.js            Export / Import envelope
 drive.js              the Drive copy (ported from FinSim)
 drive-config.js       your OAuth client ID and folder ID

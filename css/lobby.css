@@ -131,10 +131,6 @@
 .mission-side .reward { color: var(--accent); font-weight: 600; font-size: 0.85rem; white-space: nowrap; }
 .mission.is-claimed { opacity: 0.55; }
 
-/* ---- leaderboard ------------------------------------------------------- */
-
-.lb-you { display: flex; align-items: center; gap: 12px; }
-
 /* ---- online room ------------------------------------------------------- */
 
 .room-choice { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin-bottom: 14px; }

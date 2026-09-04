@@ -527,3 +527,7 @@
 }
 .bb-name { font-weight: 800; color: var(--accent); min-height: 1.4em; }
 .bb-mult { background: rgba(0,0,0,.35); border-radius: 999px; padding: 1px 8px; font-weight: 800; }
+/* 飞 is a wild card and reads as one — its own face, not a suit. */
+.tile-fly { background: linear-gradient(150deg, #ffd88a, #e0a63c); color: #4a2c00; }
+.tile-flower { background: linear-gradient(150deg, #ffe9f2, #f6c9dc); color: #8a2a53; }
+.mj-flowers { background: rgba(246,201,220,.22); color: #ffd8e8; }
