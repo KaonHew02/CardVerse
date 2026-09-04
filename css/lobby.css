@@ -24,6 +24,11 @@
     font-size: 1.9rem; background: var(--panel2); flex: none;
 }
 .game-icon.big { width: 72px; height: 72px; font-size: 2.5rem; }
+/* A drawn card icon, sized in em so it tracks the tile it sits in. */
+.icon-card { width: .78em; height: 1.08em; display: block; filter: drop-shadow(0 1px 2px rgba(0,0,0,.45)); }
+.icon-card .ic-r { font: 700 11px/1 var(--font); fill: #111; }
+.icon-card .ic-b { text-anchor: end; transform-box: fill-box; transform-origin: center; transform: rotate(180deg); }
+.icon-card .ic-p { font: 400 17px/1 var(--font); fill: #111; text-anchor: middle; }
 .game-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .game-body h3 { margin: 0; }
 .game-body p  { margin: 0; color: var(--muted); font-size: 0.9rem; }
