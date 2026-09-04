@@ -22,8 +22,7 @@ keeps it a game hub.
 | Player profile, coins, XP, levels, titles | ✅ |
 | Rooms (Beginner / Casual / Pro / Master) | ✅ entry fee, bet range, XP multiplier |
 | Game engine, deck engine, seeded RNG | ✅ `js/core/` |
-| AI players, four difficulties | ✅ basic strategy + Hi-Lo count at Expert |
-| Pass-and-play (extra humans on one device) | ✅ |
+| AI players | ✅ one standard of play — luck, skill and the odds |
 | Statistics, per game and overall | ✅ |
 | Achievements, hub-wide and per game | ✅ |
 | Daily missions, daily login calendar, win streaks | ✅ |
@@ -33,7 +32,8 @@ keeps it a game hub.
 | 🃏 **21** | ✅ house rules — no natural, DOUBLE, and 五龙 pays 2:1 |
 | 🎴 **百家乐** | ✅ |
 | 🎰 **老虎机** | ✅ 3 reels, 1 payline, auto-spin |
-| 🐉 射龙门 · 👑 斗地主 · 🂢 锄大D · ♠️ Poker · 🐮 斗牛 · 🀄 Mahjong | ⏳ next |
+| 🐉 **射龙门** | ✅ ace low, 压线 loses, equal posts ask 大过/小过, price from the pack |
+| 👑 斗地主 · 🂢 锄大D · ♠️ Poker · 🐮 斗牛 · 🀄 Mahjong | ⏳ next |
 | How-to-play card before a first hand | ✅ per game, in both languages |
 | Online multiplayer | ⏳ Phase 5 — see `js/core/transport.js` |
 
@@ -65,6 +65,7 @@ js/games/<game>/      engine.js · ai.js · view.js · index.js (registers itsel
   twentyone/          21 — its own rules, not a variant of anything
   baccarat/           百家乐 — punto banco
   slots/              老虎机 — a session of spins is one round
+  dragongate/         射龙门 — the gate is priced from the cards left
 js/ui/                shell · lobby · play · result · profile · achievements ·
                       statistics · leaderboard · missions · settings · cardview
 js/save.js            Export / Import envelope

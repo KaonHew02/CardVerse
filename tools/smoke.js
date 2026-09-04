@@ -48,6 +48,7 @@ function load(rel) {
     'js/core/rewards.js', 'js/core/table.js',
     'js/games/baccarat/engine.js', 'js/games/baccarat/ai.js', 'js/games/baccarat/index.js',
     'js/games/slots/engine.js', 'js/games/slots/index.js',
+    'js/games/dragongate/engine.js', 'js/games/dragongate/index.js',
     // Views need CV.UI and a DOM; the engines under test do not.
     'js/games/twentyone/engine.js', 'js/games/twentyone/ai.js', 'js/games/twentyone/index.js',
 ].forEach(load);
@@ -453,6 +454,194 @@ function auditBaccaratTable() {
     console.log('  ✓ scoring keeps only the last digit');
 }
 auditBaccaratTable();
+
+/* ---- 射龙门, gate by gate ----------------------------------------------- */
+
+/**
+ * The gate is small enough to check completely, so it is: every pair of posts
+ * against every third card, in both post orders, and both calls on an equal
+ * gate. Cheaper than sampling, and it cannot miss the rare cell the way a
+ * played-out game does.
+ *
+ * The three rules with the most room to go quietly wrong are asserted by
+ * name: the ace ranks 1, a card level with a post is 压线 and loses, and an
+ * equal gate is *never* resolved for the player.
+ */
+function auditDragonGate() {
+    console.log('\n🐉 射龙门');
+    const game = CV.Registry.get('dragongate');
+    const rank = CV.DragonGateRank;
+
+    check(rank({ r: 14 }) === 1, 'dragongate: the ace must rank 1, never 14');
+    for (let r = 2; r <= 13; r++) check(rank({ r }) === r, `dragongate: rank ${r} does not rank ${r}`);
+
+    let n = 0;
+    const cardOf = (r) => ({ r: r === 1 ? 14 : r, s: 'S', id: 'dg' + (n++) });
+
+    /** The rules as written, re-derived here rather than asked of the engine. */
+    const verdict = (lo, hi, pick, r) => {
+        if (lo === hi) {
+            if (r === lo) return 'post';
+            if (pick === 'higher') return r > lo ? 'gate' : 'outside';
+            return r < lo ? 'gate' : 'outside';
+        }
+        if (r === lo || r === hi) return 'post';
+        return (r > lo && r < hi) ? 'gate' : 'outside';
+    };
+
+    /** An engine whose next three cards are exactly a, b, third. */
+    const rigged = (a, b, third, coins) => {
+        const e = new game.Engine({
+            rng: new CV.RNG(7),
+            seats: [new CV.Seat(0, { kind: 'human', isYou: true, coins: coins || 100000 })],
+            config: {},
+        });
+        e.start();
+        // draw() pops, so the first card dealt is the last in the array.
+        e.deck.cards = e.deck.cards.slice(0, 20).concat([cardOf(third), cardOf(b), cardOf(a)]);
+        return e;
+    };
+
+    /* --- every gate against every third card ---------------------------- */
+
+    let cells = 0, gates = 0, posts = 0, outside = 0, shut = 0;
+    for (let a = 1; a <= 13; a++) {
+        for (let b = 1; b <= 13; b++) {
+            for (let third = 1; third <= 13; third++) {
+                const picks = (a === b) ? ['higher', 'lower'] : [null];
+                for (const pick of picks) {
+                    const e = rigged(a, b, third);
+                    e.handle({ type: 'bet', amount: 10 });
+
+                    if (a === b) {
+                        // The rule that must never be shortcut: an equal gate
+                        // is a question put to the player, not a loss.
+                        check(e.phase === 'choose', `dragongate: gate ${a}=${b} did not ask 大过/小过`);
+                        check(e.third === null, `dragongate: gate ${a}=${b} drew a third card before the call`);
+                        check(e.outcome === null, `dragongate: gate ${a}=${b} was resolved without a call`);
+                        const opts = e.legalActions(0);
+                        check(opts.length === 2 && opts[0].dir === 'higher' && opts[1].dir === 'lower',
+                            `dragongate: gate ${a}=${b} offered ${opts.length} calls`);
+                        e.handle({ type: 'pick', dir: pick });
+                    }
+
+                    const lo = Math.min(a, b), hi = Math.max(a, b);
+                    const want = verdict(lo, hi, pick, third);
+                    check(e.outcome === want,
+                        `dragongate: posts ${a}/${b}${pick ? ' called ' + pick : ''} v ${third} `
+                        + `gave ${e.outcome}, wanted ${want}`);
+
+                    // The payout follows the verdict and the priced gate, and
+                    // a loss pays nothing at all.
+                    const paid = want === 'gate' ? Math.round(10 * e.odds.mult) : 0;
+                    check(e.seat.payout === paid,
+                        `dragongate: ${want} paid ${e.seat.payout}, wanted ${paid}`);
+                    check(e.seat.coins === e.seat.startCoins - 10 + paid,
+                        'dragongate: coins do not reconcile');
+                    check(e.isOver(), `dragongate: posts ${a}/${b} v ${third} never finished`);
+
+                    if (e.odds.winners === 0) { shut++; check(paid === 0, 'dragongate: a shut gate paid out'); }
+                    if (want === 'gate') gates++; else if (want === 'post') posts++; else outside++;
+                    cells++;
+                }
+            }
+        }
+    }
+    console.log(`  ${cells.toLocaleString('en-US')} gates played out — `
+        + `${gates} 射中龙门, ${posts} 压线, ${outside} 龙门外`);
+    console.log('  ✓ level with a post always loses · ✓ an equal gate always asks 大过/小过');
+
+    /* --- the price is the gate, not the bet ----------------------------- */
+
+    // The result may not depend on what was staked, or on the call.
+    const small = rigged(4, 10, 7), big = rigged(4, 10, 7);
+    small.handle({ type: 'bet', amount: 5 });
+    big.handle({ type: 'bet', amount: 5000 });
+    check(rank(small.third) === rank(big.third) && small.outcome === big.outcome,
+        'dragongate: the third card moved with the size of the bet');
+    check(small.odds.mult === big.odds.mult, 'dragongate: the price moved with the size of the bet');
+
+    const up = rigged(9, 9, 12), down = rigged(9, 9, 12);
+    up.handle({ type: 'bet', amount: 10 });   up.handle({ type: 'pick', dir: 'higher' });
+    down.handle({ type: 'bet', amount: 10 }); down.handle({ type: 'pick', dir: 'lower' });
+    check(rank(up.third) === rank(down.third), 'dragongate: the third card moved with the call');
+    check(up.outcome === 'gate' && down.outcome === 'outside', 'dragongate: the call was not honoured');
+    console.log('  ✓ neither the stake nor the call moves the card');
+
+    /* --- an adjacent gate cannot be won, and says so -------------------- */
+
+    for (const pair of [[7, 8], [1, 2], [12, 13]]) {
+        const e = rigged(pair[0], pair[1], 5);
+        e.handle({ type: 'bet', amount: 10 });
+        check(e.odds.winners === 0, `dragongate: gate ${pair[0]}/${pair[1]} claims ${e.odds.winners} winning cards`);
+        check(e.odds.mult === 0, `dragongate: gate ${pair[0]}/${pair[1]} quoted a price it cannot pay`);
+        check(e.outcome !== 'gate', `dragongate: something got through gate ${pair[0]}/${pair[1]}`);
+    }
+    console.log(`  ✓ adjacent posts have no winners, and ${shut.toLocaleString('en-US')} shut gates paid nothing`);
+
+    /* --- the count of winning cards is the real count ------------------- */
+
+    {
+        const e = rigged(3, 11, 6);
+        e.handle({ type: 'bet', amount: 10 });
+        // Counted before the third card was taken, so put it back.
+        const left = e.deck.cards.concat([e.third]);
+        const want = left.filter((c) => rank(c) > 3 && rank(c) < 11).length;
+        check(e.odds.winners === want,
+            `dragongate: quoted ${e.odds.winners} winning cards, the pack holds ${want}`);
+        check(e.odds.remaining === left.length,
+            `dragongate: quoted ${e.odds.remaining} cards left, the pack holds ${left.length}`);
+        const fair = Math.round((1 / (want / left.length)) * 0.95 * 100) / 100;
+        check(e.odds.mult === fair, `dragongate: priced at x${e.odds.mult}, fair is x${fair}`);
+        console.log(`  ✓ the price is the true count — gate 3 to J quoted x${e.odds.mult}`);
+    }
+
+    /* --- the pack is not reshuffled between rounds ---------------------- */
+
+    {
+        let shoe = null, seen = new Set(), rounds = 0, reshuffles = 0, coins = 100000;
+        while (rounds < 40) {
+            const e = new game.Engine({
+                rng: new CV.RNG(31 + rounds),
+                seats: [new CV.Seat(0, { kind: 'human', isYou: true, coins })],
+                config: { shoe },
+            });
+            const before = shoe ? shoe.cards.length : 52;
+            e.start();
+            if (e.deck.remaining > before) { reshuffles++; seen = new Set(); }
+            e.handle({ type: 'bet', amount: 10 });
+            if (e.phase === 'choose') e.handle({ type: 'pick', dir: 'higher' });
+            for (const c of e.gate.cards.concat([e.third])) {
+                check(!seen.has(c.id), `dragongate: card ${c.id} came out twice without a reshuffle`);
+                seen.add(c.id);
+            }
+            coins = e.seat.coins;
+            shoe = e.shoeState;
+            rounds++;
+        }
+        check(reshuffles > 0, 'dragongate: 40 rounds off one pack — it never reshuffled');
+        console.log(`  ✓ 40 rounds, no card repeated between reshuffles (${reshuffles} of them)`);
+    }
+
+    /* --- what the table is allowed to say out loud ---------------------- */
+
+    {
+        const e = rigged(5, 9, 7);
+        e.handle({ type: 'bet', amount: 10 });
+        const view = e.snapshotFor(0);
+        check(!view.rng, 'dragongate: the snapshot carries the RNG');
+        check(!('deck' in view), 'dragongate: the snapshot carries the pack');
+        check(view.shoeRemaining === e.deck.remaining, 'dragongate: the snapshot misreports the pack');
+    }
+
+    // The rules card must have something to show a first-time player.
+    check(game.rules && game.rules.length >= 5, 'dragongate: too few rules to teach the game');
+    for (const key of game.rules) check(CV.t(key) !== key, `dragongate: rule key ${key} has no text`);
+    for (const key of ['dg.gate', 'dg.post', 'dg.outside', 'dg.higher', 'dg.lower', 'dg.shut'])
+        check(CV.t(key) !== key, `dragongate: ${key} has no text`);
+    console.log('  ✓ rules card and verdict labels all resolve');
+}
+auditDragonGate();
 
 /* ---- what a host is allowed to broadcast ------------------------------- */
 

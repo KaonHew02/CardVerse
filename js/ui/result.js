@@ -35,7 +35,8 @@
         const handStrip = (h) => `
             <span class="rc-hand">
                 ${CV.CardView.hand(h.cards || [], { size: 'sm' })}
-                <span class="rc-total${h.total > 21 ? ' bad' : ''}">${h.total > 21 ? 'BUST' : h.total}</span>
+                ${h.total === null || h.total === undefined ? ''
+                    : `<span class="rc-total${h.total > 21 ? ' bad' : ''}">${h.total > 21 ? 'BUST' : h.total}</span>`}
                 ${h.doubled ? '<span class="tag">2×</span>' : ''}${h.split ? '<span class="tag">split</span>' : ''}
             </span>`;
 

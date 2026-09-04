@@ -84,3 +84,13 @@
     .slot-go { width: 100%; }
     .slot-spin { width: 100%; }
 }
+
+@media (max-width: 560px) {
+    /* The gate has to stay one row — three cards stacked is not a gate. And
+     * with the bet box docked to the bottom of the screen, the gate is the
+     * only thing on the felt, so it sits nearer its middle than its top. */
+    .dg { padding-top: 10vh; }
+    .dg-gate { gap: 10px; }
+    .dg-arch { height: 18px; }
+    .dg-verdict { font-size: 1.05rem; }
+}
