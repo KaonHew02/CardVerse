@@ -42,6 +42,7 @@
 
             <div class="card-panel">
                 <h3>${esc(t('prof.form'))}</h3>
+                <p class="muted small">${esc(t('prof.formNote'))}</p>
                 <div class="form-strip">
                     ${recent.length ? recent.map((h) => `<span class="dot ${h.outcome}" title="${esc(CV.Registry.get(h.game).name)}">${esc(t(h.outcome === 'win' ? 'w' : h.outcome === 'loss' ? 'l' : 'd'))}</span>`).join('') : `<span class="muted small">${esc(t('prof.noGames'))}</span>`}
                 </div>

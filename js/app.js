@@ -17,11 +17,17 @@
     function registerStubs() {
         const R = CV.Registry;
         // English names and blurbs; i18n.localize() translates them in place.
-        R.stub('doudizhu', '斗地主', '🏠', 'Landlord vs Farmers. Bombs and rockets.', [3, 3]);
-        R.stub('bigtwo',   '锄大D',  '♦️', 'Malaysian Big Two. First out wins.', [4, 4]);
-        R.stub('poker',    'Poker',  '♠️', "Texas Hold'em. Best five of seven.", [2, 9]);
-        R.stub('bullbull', '斗牛',   '🐂', 'Bull Bull. Three to ten, two to score.', [2, 6]);
-        R.stub('mahjong',  'Mahjong', '🀄', 'Hong Kong style. Four sets and a pair.', [4, 4]);
+        // Blackjack is deliberately absent: 21 covers the same table, and
+        // 百家乐 took its place in the lineup. Its engine still loads, because
+        // 21 is built on it.
+        R.stub('baccarat',   '百家乐', '🎴', 'Bet on Player, Banker or Tie. No decisions, all nerve.', [1, 6]);
+        R.stub('slots',      '老虎机', '🎰', 'Spin the reels. Match three and the coins fall.', [1, 1]);
+        R.stub('dragongate', '射龙门', '🐉', 'Two cards set the gate. Bet whether the third lands between.', [1, 6]);
+        R.stub('doudizhu',   '斗地主', '👑', 'Landlord vs Farmers. Bombs and rockets.', [3, 3]);
+        R.stub('bigtwo',     '锄大D',  '2️⃣', 'Malaysian Big Two. First out wins.', [4, 4]);
+        R.stub('poker',      'Poker',  '♠️', "Texas Hold'em. Best five of seven.", [2, 9]);
+        R.stub('bullbull',   '斗牛',   '🐮', 'Bull Bull. Three to ten, two to score.', [2, 6]);
+        R.stub('mahjong',    'Mahjong', '🀄', 'Hong Kong style. Four sets and a pair.', [4, 4]);
     }
 
     function wireGlobal() {

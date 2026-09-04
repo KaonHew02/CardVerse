@@ -81,10 +81,8 @@
 
         setup = {
             game,
-            room:   CV.Registry.roomsFor(code)[0].id,
-            ai:     Math.min(maxOthers, S.aiCount),
-            level:  S.aiLevel,
-            guests: (S.guestNames || []).slice(0, Math.max(0, Math.min(S.guests, maxOthers - Math.min(maxOthers, S.aiCount)))),
+            room: CV.Registry.roomsFor(code)[0].id,
+            ai:   Math.min(maxOthers, S.aiCount),
         };
         paintSetup();
     }
@@ -131,66 +129,26 @@
                     <span>${esc(t('setup.aiPlayers'))}</span>
                     <div class="seg" id="setupAi">
                         ${Array.from({ length: maxOthers + 1 }, (_, n) =>
-                            `<button class="${setup.ai === n ? 'is-on' : ''}" data-ai="${n}" ${n + setup.guests.length > maxOthers ? 'disabled' : ''}>${n}</button>`).join('')}
+                            `<button class="${setup.ai === n ? 'is-on' : ''}" data-ai="${n}">${n}</button>`).join('')}
                     </div>
                 </div>
-                <div class="row-opt">
-                    <span>${esc(t('setup.difficulty'))}</span>
-                    <div class="seg" id="setupLevel">
-                        ${Object.entries(CV.AI_LEVELS).map(([k, v]) =>
-                            `<button class="${setup.level === k ? 'is-on' : ''}" data-level="${k}">${v.icon} ${v.label}</button>`).join('')}
-                    </div>
-                </div>
-            </div>
-
-            <div class="card-panel">
-                <h3>${esc(t('setup.hotseat'))}</h3>
-                <p class="muted small">${esc(t('setup.hotseatNote'))}</p>
-                <div class="row-opt">
-                    <span>${esc(t('setup.extra'))}</span>
-                    <div class="seg" id="setupGuests">
-                        ${Array.from({ length: maxOthers + 1 }, (_, n) =>
-                            `<button class="${setup.guests.length === n ? 'is-on' : ''}" data-guests="${n}" ${n + setup.ai > maxOthers ? 'disabled' : ''}>${n}</button>`).join('')}
-                    </div>
-                </div>
-                <div id="setupGuestNames" class="guest-names">
-                    ${setup.guests.map((g, i) => `<input type="text" maxlength="12" placeholder="${esc(t('setup.guestN', { n: i + 1 }))}" value="${esc(g)}" data-guest="${i}">`).join('')}
-                </div>
+                <p class="muted small">${esc(t('setup.aiNote'))}</p>
             </div>
 
             <div class="setup-foot">
-                <div class="muted small">${esc(t('setup.seats', { used: setup.ai + setup.guests.length + 1, max: game.players[1], coins: fmt(p.coins) }))}</div>
+                <div class="muted small">${esc(t('setup.seats', { used: setup.ai + 1, max: game.players[1], coins: fmt(p.coins) }))}</div>
                 <button class="btn primary big" id="setupStart">${esc(t('setup.sit'))}</button>
             </div>`;
 
         const body = $('setupBody');
         body.querySelectorAll('[data-room]').forEach((b) => b.addEventListener('click', () => { setup.room = b.dataset.room; paintSetup(); }));
         body.querySelectorAll('[data-ai]').forEach((b) => b.addEventListener('click', () => { setup.ai = Number(b.dataset.ai); paintSetup(); }));
-        body.querySelectorAll('[data-level]').forEach((b) => b.addEventListener('click', () => { setup.level = b.dataset.level; paintSetup(); }));
-        body.querySelectorAll('[data-guests]').forEach((b) => b.addEventListener('click', () => {
-            const n = Number(b.dataset.guests);
-            setup.guests = Array.from({ length: n }, (_, i) => setup.guests[i] || '');
-            paintSetup();
-        }));
-        body.querySelectorAll('[data-guest]').forEach((inp) => inp.addEventListener('input', () => {
-            setup.guests[Number(inp.dataset.guest)] = inp.value;
-        }));
         $('setupStart').addEventListener('click', start);
     }
 
     function start() {
-        const S = CV.Settings;
-        S.set('aiCount', setup.ai);
-        S.set('aiLevel', setup.level);
-        S.set('guests', setup.guests.length);
-        S.set('guestNames', setup.guests.map((g, i) => (g || '').trim() || t('setup.guestN', { n: i + 1 })));
-        CV.Play.begin({
-            gameCode: setup.game.code,
-            room: setup.room,
-            aiCount: setup.ai,
-            aiLevel: setup.level,
-            guests: S.get().guestNames.slice(0, setup.guests.length),
-        });
+        CV.Settings.set('aiCount', setup.ai);
+        CV.Play.begin({ gameCode: setup.game.code, room: setup.room, aiCount: setup.ai });
     }
 
     CV.UI.screen('home',  { render: renderHome });

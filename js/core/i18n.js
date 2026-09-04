@@ -63,10 +63,6 @@
         'setup.freeEntry': 'Free entry', 'setup.entry': 'Entry 🪙 {n}',
         'setup.bets': 'Bets {lo}–{hi}', 'setup.need': 'Need 🪙 {n}',
         'setup.opponents': 'Opponents', 'setup.aiPlayers': 'AI players',
-        'setup.difficulty': 'Difficulty',
-        'setup.hotseat': 'Pass-and-play',
-        'setup.hotseatNote': 'Friends on this device take their own seats. They play with 5,000 table coins; only your seat earns coins, XP and stats.',
-        'setup.extra': 'Extra players', 'setup.guestN': 'Guest {n}',
         'setup.seats': '{used} of {max} seats · you have 🪙 {coins}',
         'setup.sit': 'Sit down',
         'setup.cantAfford': 'You need {n} coins to sit in the {room}.',
@@ -80,7 +76,6 @@
         'table.yourBet': 'Your bet', 'table.someoneBet': '{who} bet',
         'table.yourTurn': 'Your turn', 'table.someoneTurn': '{who} turn',
         'table.handOf': ' — hand {n} of {total}',
-        'table.passDevice': ' — pass the device',
         'table.insuranceAsk': 'Dealer shows an ace. {who} call: insurance?',
         'table.thinking': '{name} is thinking…',
         'table.betting': '{name} is betting…',
@@ -105,9 +100,6 @@
         'res.win': 'YOU WIN!', 'res.loss': 'YOU LOSE', 'res.draw': 'PUSH',
         'res.rank': 'Rank', 'res.coins': 'Coins', 'res.xp': 'XP', 'res.winRate': 'Win rate',
         'res.board': "Everyone's cards",
-        'res.money': 'How your coins worked out',
-        'res.staked': 'staked 🪙{stake} → back 🪙{back}',
-        'res.net': 'Net this hand',
         'res.again': 'Play again', 'res.lobby': 'Back to lobby',
         'res.levelUp': '⬆️ Level {n} — {title}!', 'res.levelCoins': '+{n} coins',
         'res.streak': '🔥 {n} in a row', 'res.streakBonus': '+{n} XP bonus',
@@ -177,8 +169,8 @@
         'set.appearance': 'Appearance',
         'set.language': 'Language',
         'set.theme': 'Theme', 'set.themeAuto': 'Follow system', 'set.themeDark': 'Dark', 'set.themeLight': 'Light',
-        'set.fast': 'Fast animations', 'set.sound': 'Sound effects',
-        'set.table': 'Table', 'set.hints': 'Show strategy hints', 'set.aiLevel': 'Default AI difficulty',
+        'set.fast': 'Fast animations',
+        'set.table': 'Table', 'set.hints': 'Show strategy hints',
         'set.player': 'Player', 'set.avatarNote': 'Avatars are chosen in your Profile.',
         'set.data': 'Your data',
         'set.dataNote': 'Everything lives in this browser. Export keeps a copy anywhere you like; Drive keeps one in your Google Drive.',
@@ -262,7 +254,6 @@
         'rooms.master': 'Master Room', 'rooms.master.blurb': 'Deep pockets only.',
 
         /* AI difficulty */
-        'ai.easy': 'Easy', 'ai.normal': 'Normal', 'ai.hard': 'Hard', 'ai.expert': 'Expert',
 
         /* rank titles */
         'title.Novice': 'Novice', 'title.Beginner': 'Beginner', 'title.Player': 'Player',
@@ -283,16 +274,6 @@
         /* blackjack outcomes */
         'out.blackjack': 'Blackjack', 'out.twentyone': 'Exactly 21', 'out.win': 'Win',
         'out.push': 'Push', 'out.loss': 'Lose', 'out.bust': 'Bust', 'out.surrender': 'Surrendered',
-        'out.hand': '{label} · hand {n}',
-        'why.blackjack': 'pays {odds}', 'why.twentyone': 'pays {odds}',
-        'why.win': 'beat the dealer, pays 1:1',
-        'why.push': 'same as the dealer, stake returned',
-        'why.loss': 'dealer was higher',
-        'why.bust': 'went over 21 on {total}',
-        'why.surrender': 'half the stake back',
-        'out.insurance': 'Insurance',
-        'why.insuranceWon': 'dealer had blackjack, pays 2:1',
-        'why.insuranceLost': 'dealer had no blackjack',
         'note.dealerStands': 'Stands on {n}', 'note.dealerBust': 'Bust',
         'detail.dealerBusts': 'Dealer busts', 'detail.dealer': 'Dealer {n}',
 
@@ -342,6 +323,16 @@
         'miss.r100': '100 coins', 'miss.r150': '150 coins', 'miss.r200': '200 coins',
         'miss.r250xp': '250 coins + 100 XP', 'miss.r500': '500 coins', 'miss.r300xp': '300 XP',
         'miss.r1500': '1,500 coins + 500 XP',
+
+        /* simplified settings */
+        'setup.aiNote': 'Every AI plays correct basic strategy — no difficulty tiers, and none of them can see a card you cannot.',
+        'set.aiNote': 'Opponents play correct basic strategy. There are no difficulty settings, and no AI ever sees a card you cannot.',
+        'set.fastNote': 'shortens the deal and the pause between turns',
+        'prof.formNote': 'Your last 12 results — W win, L lose, D push.',
+
+        'game.baccarat': '百家乐', 'game.baccarat.blurb': 'Bet on Player, Banker or Tie. No decisions, all nerve.',
+        'game.slots': '老虎机', 'game.slots.blurb': 'Spin the reels. Match three and the coins fall.',
+        'game.dragongate': '射龙门', 'game.dragongate.blurb': 'Two cards set the gate. Bet whether the third lands between.',
     };
 
     /* ------------------------------------------------------------------ *
@@ -376,10 +367,6 @@
         'setup.freeEntry': '免费入场', 'setup.entry': '入场费 🪙 {n}',
         'setup.bets': '下注 {lo}–{hi}', 'setup.need': '需要 🪙 {n}',
         'setup.opponents': '对手', 'setup.aiPlayers': '电脑玩家',
-        'setup.difficulty': '难度',
-        'setup.hotseat': '同机轮流玩',
-        'setup.hotseatNote': '朋友用这台设备各坐一个座位，使用 5,000 桌上金币；只有你的座位会累积金币、经验和统计。',
-        'setup.extra': '额外玩家', 'setup.guestN': '玩家 {n}',
         'setup.seats': '{max} 个座位已坐 {used} 个 · 你有 🪙 {coins}',
         'setup.sit': '入座',
         'setup.cantAfford': '进入{room}需要 {n} 金币。',
@@ -392,7 +379,6 @@
         'table.yourBet': '你的下注', 'table.someoneBet': '{who}下注',
         'table.yourTurn': '轮到你了', 'table.someoneTurn': '轮到{who}',
         'table.handOf': ' — 第 {n} / {total} 副手牌',
-        'table.passDevice': ' — 请把设备递过去',
         'table.insuranceAsk': '庄家明牌是 A。{who}要买保险吗？',
         'table.thinking': '{name} 思考中…',
         'table.betting': '{name} 下注中…',
@@ -416,9 +402,6 @@
         'res.win': '你赢了！', 'res.loss': '你输了', 'res.draw': '平局',
         'res.rank': '名次', 'res.coins': '金币', 'res.xp': '经验', 'res.winRate': '胜率',
         'res.board': '所有人的牌',
-        'res.money': '金币是怎么算的',
-        'res.staked': '下注 🪙{stake} → 拿回 🪙{back}',
-        'res.net': '本局净得',
         'res.again': '再来一局', 'res.lobby': '返回大厅',
         'res.levelUp': '⬆️ 等级 {n} — {title}！', 'res.levelCoins': '+{n} 金币',
         'res.streak': '🔥 连胜 {n} 局', 'res.streakBonus': '+{n} 经验奖励',
@@ -482,8 +465,8 @@
         'set.appearance': '外观',
         'set.language': '语言',
         'set.theme': '主题', 'set.themeAuto': '跟随系统', 'set.themeDark': '深色', 'set.themeLight': '浅色',
-        'set.fast': '快速动画', 'set.sound': '音效',
-        'set.table': '牌桌', 'set.hints': '显示策略提示', 'set.aiLevel': '默认电脑难度',
+        'set.fast': '快速动画',
+        'set.table': '牌桌', 'set.hints': '显示策略提示',
         'set.player': '玩家', 'set.avatarNote': '头像在个人资料里选择。',
         'set.data': '你的数据',
         'set.dataNote': '所有数据都存在这个浏览器里。导出可以自己保存一份；Drive 会在你的 Google 云端硬盘保存一份。',
@@ -563,8 +546,6 @@
         'rooms.pro': '高手房', 'rooms.pro.blurb': '给懂概率的人。',
         'rooms.master': '大师房', 'rooms.master.blurb': '家底厚的才进来。',
 
-        'ai.easy': '简单', 'ai.normal': '普通', 'ai.hard': '困难', 'ai.expert': '专家',
-
         'title.Novice': '新手', 'title.Beginner': '入门', 'title.Player': '玩家',
         'title.Veteran': '老手', 'title.Expert': '高手', 'title.Master': '大师',
         'title.Legend': '传奇',
@@ -581,16 +562,6 @@
 
         'out.blackjack': '黑杰克', 'out.twentyone': '正好 21 点', 'out.win': '赢',
         'out.push': '和局', 'out.loss': '输', 'out.bust': '爆牌', 'out.surrender': '已投降',
-        'out.hand': '{label} · 第 {n} 副',
-        'why.blackjack': '赔 {odds}', 'why.twentyone': '赔 {odds}',
-        'why.win': '赢过庄家，赔 1:1',
-        'why.push': '与庄家同点，退回本金',
-        'why.loss': '庄家点数更大',
-        'why.bust': '{total} 点，超过 21',
-        'why.surrender': '退回一半本金',
-        'out.insurance': '保险',
-        'why.insuranceWon': '庄家是黑杰克，赔 2:1',
-        'why.insuranceLost': '庄家不是黑杰克',
         'note.dealerStands': '{n} 点停牌', 'note.dealerBust': '爆牌',
         'detail.dealerBusts': '庄家爆牌', 'detail.dealer': '庄家 {n} 点',
 
@@ -635,6 +606,15 @@
         'miss.r100': '100 金币', 'miss.r150': '150 金币', 'miss.r200': '200 金币',
         'miss.r250xp': '250 金币 + 100 经验', 'miss.r500': '500 金币', 'miss.r300xp': '300 经验',
         'miss.r1500': '1,500 金币 + 500 经验',
+
+        'setup.aiNote': '所有电脑都按正确的基本策略出牌 — 没有难度分级，也看不到你看不到的牌。',
+        'set.aiNote': '对手按正确的基本策略出牌。没有难度设置，电脑也永远看不到你看不到的牌。',
+        'set.fastNote': '缩短发牌和回合之间的停顿',
+        'prof.formNote': '最近 12 局结果 — 胜、负、平。',
+
+        'game.baccarat': '百家乐', 'game.baccarat.blurb': '压闲、压庄或压和。不用决策，只看胆色。',
+        'game.slots': '老虎机', 'game.slots.blurb': '拉一把。三个一样就开奖。',
+        'game.dragongate': '射龙门', 'game.dragongate.blurb': '两张牌开门，赌第三张能不能穿过去。',
     };
 
     const PACKS = { en: EN, zh: ZH };
@@ -709,10 +689,6 @@
             apply(a, 'desc', 'achv.' + a.id + '.desc');
         }
         for (const m of CV.Missions.POOL) apply(m, 'text', 'miss.' + m.id);
-        for (const [, v] of Object.entries(CV.AI_LEVELS)) {
-            const id = Object.keys(CV.AI_LEVELS).find((k) => CV.AI_LEVELS[k] === v);
-            apply(v, 'label', 'ai.' + id);
-        }
         for (const ttl of CV.Profile.TITLES) {
             apply(ttl, 'name', 'title.' + (ttl.__en_name || ttl.name));
         }

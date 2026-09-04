@@ -18,13 +18,9 @@
 
     const DEFAULTS = {
         theme: 'auto',        // auto | dark | light
-        sound: true,
         fastAnim: false,
-        hints: true,          // show the AI's basic-strategy hint at the table
-        aiLevel: 'normal',
+        hints: true,          // show the basic-strategy hint at the table
         aiCount: 2,
-        guests: 0,            // extra humans sharing this device
-        guestNames: [],
     };
 
     let state = null;
@@ -73,12 +69,8 @@
                     </select>
                 </label>
                 <label class="row-opt">
-                    <span>${esc(t('set.fast'))}</span>
+                    <span>${esc(t('set.fast'))}<small class="muted"> — ${esc(t('set.fastNote'))}</small></span>
                     <input type="checkbox" data-set="fastAnim" ${s.fastAnim ? 'checked' : ''}>
-                </label>
-                <label class="row-opt">
-                    <span>${esc(t('set.sound'))}</span>
-                    <input type="checkbox" data-set="sound" ${s.sound ? 'checked' : ''}>
                 </label>
             </div>
 
@@ -88,13 +80,7 @@
                     <span>${esc(t('set.hints'))}</span>
                     <input type="checkbox" data-set="hints" ${s.hints ? 'checked' : ''}>
                 </label>
-                <label class="row-opt">
-                    <span>${esc(t('set.aiLevel'))}</span>
-                    <select data-set="aiLevel">
-                        ${Object.entries(CV.AI_LEVELS).map(([k, v]) =>
-                            `<option value="${k}" ${s.aiLevel === k ? 'selected' : ''}>${v.icon} ${esc(v.label)}</option>`).join('')}
-                    </select>
-                </label>
+                <p class="muted small">${esc(t('set.aiNote'))}</p>
             </div>
 
             <div class="card-panel">

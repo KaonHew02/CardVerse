@@ -1,15 +1,14 @@
 /**
  * CardVerse — the Blackjack AI.
  *
- * Expert plays basic strategy for the configured rules and keeps a Hi-Lo
- * running count from cards it has legitimately seen (`engine.seen` — nothing
- * face-down). Hard plays the same book without the count. Normal and Easy
- * play the book and then spoil it at the rate ai.js sets, which is how a
- * Normal opponent stands on a 14 against a 6 and then hits a 16 against a 5:
- * not two rules, one rule and a coin.
+ * Basic strategy, exactly. Every seat plays the correct move for its own
+ * two cards against the dealer's up-card, which is the only information a
+ * person at that table has. Deliberately **no card counting**: it would give
+ * the machine knowledge the player lacks, and a table you cannot beat because
+ * the opponents can see further than you is not a fair table.
  *
- * Counting is the one place an AI adapts across hands, and it is why the
- * shoe is carried between engines rather than reshuffled each deal.
+ * The bet size is the luck: a seat stakes a random slice of the room's range,
+ * the way a person with no system does.
  */
 
 (() => {
@@ -18,64 +17,34 @@
     const CV = window.CV;
     const { handValue, pipValue } = CV.Cards;
 
-    /** Hi-Lo tag for one card. */
-    const tag = (c) => (c.r >= 2 && c.r <= 6) ? 1 : (c.r >= 10 ? -1 : 0);
-
     class BlackjackAI extends CV.AIPlayer {
-
-        /** True count: running count per remaining deck, floored to whole decks. */
-        trueCount() {
-            const e = this.engine;
-            const running = e.seen.reduce((n, c) => n + tag(c), 0);
-            const decksLeft = Math.max(1, Math.round(e.shoe.remaining / 52));
-            return running / decksLeft;
-        }
 
         decide(seat) {
             const e = this.engine;
-            const s = e.seats[seat];
             const options = e.legalActions(seat);
             if (!options.length) return null;
-            const can = (t) => options.some((o) => o.type === t);
-            const lvl = (s.level || 'normal');
+            const can = (type) => options.some((o) => o.type === type);
 
-            if (e.phase === 'betting') return this.bet(seat, options[0], lvl);
+            if (e.phase === 'betting') return this.bet(seat, options[0]);
 
-            if (e.phase === 'insurance') {
-                // The book says never — unless you are counting and the shoe is rich.
-                const take = lvl === 'expert' && can('insure') && this.trueCount() >= 3;
-                return { type: take ? 'insure' : 'noInsure', seat };
-            }
+            // The book says never take insurance, and without a count there is
+            // nothing that would change its mind.
+            if (e.phase === 'insurance') return { type: 'noInsure', seat };
 
             if (e.phase !== 'playing') return this.fallback(seat);
 
             const h  = e.hand(seat);
             const up = pipValue(e.dealerUp());   // 2..11
-            let type = this.book(h, up, can, lvl);
-
-            if (this.blunder(seat)) {
-                const spoil = ['hit', 'stand'].filter((t) => t !== type && can(t));
-                if (spoil.length) type = e.rng.pick(spoil);
-            }
+            let type = this.book(h, up, can);
             if (!can(type)) type = can('hit') ? 'hit' : 'stand';
             return { type, seat };
         }
 
-        /** Bet sizing: a share of the range by level; expert presses a good count. */
-        bet(seat, opt, lvl) {
+        /** A random slice of the room's range — this is where the luck lives. */
+        bet(seat, opt) {
             const e = this.engine;
-            const span = opt.max - opt.min;
-            let frac;
-            switch (lvl) {
-                case 'easy':   frac = e.rng.next() * 0.4; break;
-                case 'normal': frac = 0.2 + e.rng.next() * 0.4; break;
-                case 'hard':   frac = 0.3 + e.rng.next() * 0.4; break;
-                default: {
-                    const tc = this.trueCount();
-                    frac = tc >= 2 ? Math.min(1, 0.5 + tc * 0.15) : 0.15 + e.rng.next() * 0.2;
-                }
-            }
-            const amount = Math.round((opt.min + span * frac) / 5) * 5;
+            const frac = 0.15 + e.rng.next() * 0.5;
+            const amount = Math.round((opt.min + (opt.max - opt.min) * frac) / 5) * 5;
             return { type: 'bet', seat, amount: Math.max(opt.min, Math.min(opt.max, amount)) };
         }
 
@@ -83,13 +52,12 @@
          * Basic strategy, S17 / DAS / 4–8 decks. Returns the ideal action;
          * the caller degrades it to what is actually legal.
          */
-        book(h, up, can, lvl) {
+        book(h, up, can) {
             const v = handValue(h.cards);
             const pair = h.cards.length === 2 && pipValue(h.cards[0]) === pipValue(h.cards[1]);
-            const strong = lvl === 'hard' || lvl === 'expert';
 
             // Surrender first — it is only ever the first decision.
-            if (strong && can('surrender')) {
+            if (can('surrender')) {
                 if (!v.soft && v.total === 16 && up >= 9) return 'surrender';
                 if (!v.soft && v.total === 15 && up === 10) return 'surrender';
             }

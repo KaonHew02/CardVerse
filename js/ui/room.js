@@ -22,10 +22,11 @@
 
     let host = null;      // CV.Net.Host when hosting
     let client = null;    // CV.Net.Client when guesting
-    let room = null;      // { code, gameCode, roomId, aiLevel, seats, started }
+    let room = null;      // { code, gameCode, roomId, fill, seats, started }
     let table = null;
     let view = null;
 
+    /** Table coins for a friend who joined online — their own profile is untouched. */
     const GUEST_STACK = 5000;
 
     /* ------------------------------------------------------------------ *
@@ -70,7 +71,7 @@
 
     function paintHost() {
         const games = CV.Registry.playable();
-        room = room || { gameCode: games[0].code, roomId: 'beginner', aiLevel: CV.Settings.get().aiLevel, fill: true };
+        room = room || { gameCode: games[0].code, roomId: 'beginner', fill: true };
 
         $('roomBody').innerHTML = `
             <div class="card-panel">
@@ -84,16 +85,12 @@
                 <label class="row-opt"><span>${esc(t('room.fillAI'))}</span>
                     <input type="checkbox" id="rmFill" ${room.fill ? 'checked' : ''}>
                 </label>
-                <label class="row-opt"><span>${esc(t('setup.difficulty'))}</span>
-                    <select id="rmLevel">${Object.entries(CV.AI_LEVELS).map(([k, v]) => `<option value="${k}" ${room.aiLevel === k ? 'selected' : ''}>${v.icon} ${v.label}</option>`).join('')}</select>
-                </label>
                 <div class="btn-row"><button class="btn primary big" id="rmOpen">${esc(t('room.open'))}</button></div>
             </div>
             <div id="rmLobby"></div>`;
 
         $('rmGame').addEventListener('change', (e) => { room.gameCode = e.target.value; });
         $('rmRoom').addEventListener('change', (e) => { room.roomId = e.target.value; });
-        $('rmLevel').addEventListener('change', (e) => { room.aiLevel = e.target.value; });
         $('rmFill').addEventListener('change', (e) => { room.fill = e.target.checked; });
         $('rmOpen').addEventListener('click', openTable);
     }
@@ -178,7 +175,6 @@
         if (!table || !table.engine.seats[entry.seat]) return;
         const seat = table.engine.seats[entry.seat];
         seat.kind = 'ai';
-        seat.level = room.aiLevel;
         seat.name = seat.name + ' (AI)';
         table.tick();
     }
@@ -205,7 +201,7 @@
             } else if (person) {
                 seats.push({ kind: 'remote', name: person.name, avatar: person.avatar, coins: GUEST_STACK });
             } else if (room.fill) {
-                seats.push({ kind: 'ai', name: bots[i].name, avatar: bots[i].avatar, level: room.aiLevel, coins: roomDef.bet[1] * 30 });
+                seats.push({ kind: 'ai', name: bots[i].name, avatar: bots[i].avatar, coins: roomDef.bet[1] * 30 });
             }
         }
 

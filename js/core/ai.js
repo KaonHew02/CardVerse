@@ -1,30 +1,29 @@
 /**
  * CardVerse — the base for computer players.
  *
- * Difficulty is not "how much the AI cheats". No AI in this hub is allowed to
- * look at a card it has not been dealt; an opponent that wins by reading the
- * shoe is not a harder opponent, it is a broken one, and players work that out
- * quickly. Difficulty is how good the *decision* is:
+ * **There are no difficulty tiers.** Every AI plays the same way: correct
+ * play for the cards it can see, and nothing else. The variation between
+ * hands is the deal — which is the only thing that should vary at a card
+ * table.
  *
- *   easy    plays legally, often the first thing that works
- *   normal  follows the basic shape of correct play, with lapses
- *   hard    plays the book, and remembers what has been shown
- *   expert  plays the book, counts, and adjusts to the table
+ * Two rules that follow, and both matter:
  *
- * `blunder()` is how the lower tiers are built: run the strong decision, then
- * spoil it with some probability. Writing four separate strategies instead
- * gives you four things to keep correct, and the weak ones never get tested.
+ * - **No AI reads a card it has not been dealt.** An opponent that wins by
+ *   knowing the shoe is not a better opponent, it is a broken one, and
+ *   players work that out quickly.
+ * - **No AI counts.** Counting is real skill, but it gives the machine
+ *   information the player at the same table does not have, which reads as
+ *   the house cheating rather than as a worthy opponent.
+ *
+ * So: luck from the cards, skill and probability from the book, nothing up
+ * anyone's sleeve.
  */
 
 (() => {
     'use strict';
 
-    const LEVELS = {
-        easy:   { label: 'Easy',   icon: '🟢', blunder: 0.40, think: [350, 800] },
-        normal: { label: 'Normal', icon: '🟡', blunder: 0.18, think: [400, 950] },
-        hard:   { label: 'Hard',   icon: '🔴', blunder: 0.05, think: [500, 1100] },
-        expert: { label: 'Expert', icon: '👑', blunder: 0.00, think: [550, 1200] },
-    };
+    /** How long a seat appears to think. Long enough to be seen deciding. */
+    const THINK = [420, 1050];
 
     /** Table personalities, so four AI seats are not four clones. */
     const PERSONAS = [
@@ -40,23 +39,9 @@
             this.engine = engine;
         }
 
-        level(seat) {
-            const s = this.engine.seats[seat];
-            return LEVELS[(s && s.level) || 'normal'] || LEVELS.normal;
-        }
-
-        /** Milliseconds before this seat acts — enough to be seen deciding. */
-        thinkTime(seat) {
-            const [lo, hi] = this.level(seat.index !== undefined ? seat.index : seat).think;
-            return this.engine.rng.range(lo, hi);
-        }
-
-        /**
-         * True when this seat should throw the point away on purpose.
-         * Uses the engine's RNG so a seeded table replays identically.
-         */
-        blunder(seat) {
-            return this.engine.rng.chance(this.level(seat).blunder);
+        /** Milliseconds before this seat acts. */
+        thinkTime() {
+            return this.engine.rng.range(THINK[0], THINK[1]);
         }
 
         /** Any legal action, as a floor no subclass should fall through. */
@@ -85,6 +70,5 @@
     }
 
     window.CV = window.CV || {};
-    window.CV.AIPlayer  = AIPlayer;
-    window.CV.AI_LEVELS = LEVELS;
+    window.CV.AIPlayer = AIPlayer;
 })();

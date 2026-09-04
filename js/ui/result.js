@@ -60,26 +60,6 @@
                 </tbody></table>
             </div>` : '';
 
-        // And the arithmetic behind your own figure, so it can be checked
-        // rather than believed. The lines sum to exactly what was paid.
-        const money = (mine && mine.lines && mine.lines.length) ? `
-            <details class="rc-money" open>
-                <summary>${esc(t('res.money'))}</summary>
-                <table class="rc-money-table"><tbody>
-                    ${mine.lines.map((l) => `
-                        <tr>
-                            <td>
-                                <b>${esc(l.label)}</b><small class="muted"> — ${esc(l.why)}</small>
-                                <small class="rc-sum">${esc(t('res.staked', { stake: fmt(l.stake), back: fmt(l.returned) }))}</small>
-                            </td>
-                            <td class="num ${l.amount > 0 ? 'good' : l.amount < 0 ? 'bad' : ''}">${signed(l.amount)}</td>
-                        </tr>`).join('')}
-                    <tr class="rc-total-row">
-                        <td><b>${esc(t('res.net'))}</b></td>
-                        <td class="num ${summary.coins > 0 ? 'good' : summary.coins < 0 ? 'bad' : ''}"><b>${signed(summary.coins)}</b></td>
-                    </tr>
-                </tbody></table>
-            </details>` : '';
 
         const table = rows.map((r) => `
             <tr class="${r.seat === you ? 'is-you' : ''}">
@@ -121,7 +101,6 @@
                 </div>
 
                 ${cardsBlock}
-                ${money}
                 ${levelUp}${streak}
                 ${unlocked}${missions}
 
@@ -134,9 +113,15 @@
             </div>`;
 
         host.hidden = false;
+        host.scrollTop = 0;
         $('resultAgain').addEventListener('click', () => { host.hidden = true; onAgain(); });
         $('resultLobby').addEventListener('click', () => { host.hidden = true; onLobby(); });
-        setTimeout(() => $('resultAgain').focus(), 50);
+
+        // preventScroll matters. Focusing a button at the bottom of a card
+        // taller than the screen scrolls it into view, which drags the
+        // "YOU WIN" header off the top — the round then appears to open
+        // half-way through itself. Keep the keyboard focus, lose the scroll.
+        setTimeout(() => $('resultAgain').focus({ preventScroll: true }), 50);
     }
 
     CV.ResultView = { show };

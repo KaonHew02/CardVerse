@@ -237,10 +237,19 @@ table.history td:first-child { white-space: nowrap; }
 .toast[data-kind="ok"]   { border-color: var(--good); }
 .toast[data-kind="warn"] { border-color: var(--warn); }
 
+/* flex + `margin: auto` on the child, never `place-items: center` with a
+ * scrollbar. A centred child taller than its scroll container overflows
+ * equally top and bottom, and the top half is then unreachable because
+ * scrollTop cannot go negative — which is how a result card's header ended up
+ * clipped off with no way to scroll back up to it. `margin: auto` centres
+ * when there is room and falls back to the top when there is not. */
 .dialog-back {
-    position: fixed; inset: 0; z-index: 60; display: grid; place-items: center;
-    background: rgba(0, 0, 0, 0.55); backdrop-filter: blur(3px); padding: 16px;
+    position: fixed; inset: 0; z-index: 60;
+    display: flex; align-items: flex-start; justify-content: center;
+    background: rgba(0, 0, 0, 0.55); backdrop-filter: blur(3px);
+    padding: 16px; overflow: auto; overscroll-behavior: contain;
 }
+.dialog { margin: auto; }
 .dialog {
     width: min(460px, 100%); background: var(--panel); border: 1px solid var(--border);
     border-radius: var(--radius); padding: 20px; box-shadow: var(--shadow);
@@ -254,8 +263,10 @@ table.history td:first-child { white-space: nowrap; }
 }
 
 .overlay {
-    position: absolute; inset: 0; z-index: 30; display: grid; place-items: center;
-    background: rgba(0, 0, 0, 0.6); backdrop-filter: blur(4px); padding: 16px; overflow: auto;
+    position: fixed; inset: 0; z-index: 40;
+    display: flex; align-items: flex-start; justify-content: center;
+    background: rgba(0, 0, 0, 0.6); backdrop-filter: blur(4px);
+    padding: 16px; overflow: auto; overscroll-behavior: contain;
 }
 
 .footnote { margin-top: 28px; }

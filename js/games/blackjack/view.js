@@ -176,7 +176,7 @@
                 const turn  = e.turn === i && !e.over && e.phase !== 'dealer';
                 const cls = ['seat', s.isYou ? 'is-you' : '', s.isHuman && !s.isYou ? 'is-guest' : '', turn ? 'is-turn' : '', s.out ? 'is-out' : '']
                     .filter(Boolean).join(' ');
-                const lvl = s.kind === 'ai' ? `<span class="tag">${CV.AI_LEVELS[s.level].icon} ${CV.AI_LEVELS[s.level].label}</span>` : '';
+                const lvl = '';
                 const hands = s.hands.map((h, k) => this.handHtml(s, h, k, turn && s.active === k)).join('');
                 return `
                     <div class="${cls}" data-seat="${i}">
@@ -235,10 +235,7 @@
             if (seat.isHuman) {
                 const mine = seat.isYou;
                 const who = mine ? '' : esc(seat.name);
-                // A guest at an online table is another person, not someone to
-                // hand the phone to — that prompt belongs to pass-and-play only.
-                const pass = (!mine && !CV.Room.active)
-                    ? `<small class="muted">${esc(t('table.passDevice'))}</small>` : '';
+                const pass = '';
                 let line;
                 if (e.phase === 'betting') {
                     line = mine ? t('table.yourBet') : t('table.someoneBet', { who });

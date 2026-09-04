@@ -11,7 +11,7 @@
     CV.Registry.add({
         code: 'twentyone',
         name: '21',
-        icon: '🔢',
+        icon: '🃏',
         blurb: 'Hit or stand. Exactly 21 wins outright.',
         category: 'cards',
         players: [1, 5],

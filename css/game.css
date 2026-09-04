@@ -228,7 +228,7 @@
 /* The result card must never be widened by its own contents — it is a fixed
  * overlay, and a table that pushes it past the viewport takes the buttons
  * with it. */
-.result { max-width: 100%; overflow-x: hidden; }
+.result { max-width: 100%; overflow-x: hidden; margin: auto; }
 .result-table { table-layout: fixed; }
 /* break-word, not break-all: a name should wrap between words or overflow
  * gracefully, never split into "Deale / r". */

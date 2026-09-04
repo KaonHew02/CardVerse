@@ -24,9 +24,7 @@
     let table   = null;
     let view    = null;
 
-    const GUEST_STACK = 5000;
-
-    function begin({ gameCode, room: roomId, aiCount, aiLevel, guests }) {
+    function begin({ gameCode, room: roomId, aiCount }) {
         const game = CV.Registry.get(gameCode);
         const room = CV.Registry.room(roomId);
         const p    = CV.Profile.get();
@@ -38,11 +36,9 @@
         if (room.entry && !CV.Profile.spend(room.entry)) return false;
 
         const rng   = new CV.RNG();
-        const bots  = CV.AIPlayer.personas(aiCount, rng);
-        const seats = [];
-        bots.forEach((b) => seats.push({ kind: 'ai', name: b.name, avatar: b.avatar, level: aiLevel, coins: room.bet[1] * 30 }));
+        const seats = CV.AIPlayer.personas(aiCount, rng)
+            .map((b) => ({ kind: 'ai', name: b.name, avatar: b.avatar, coins: room.bet[1] * 30 }));
         seats.push({ kind: 'human', isYou: true, name: p.name, avatar: p.avatar, coins: p.coins });
-        (guests || []).forEach((name, i) => seats.push({ kind: 'human', name: name || `Guest ${i + 1}`, avatar: '👤', coins: GUEST_STACK }));
 
         session = { game, gameCode, room, seats, shoe: null, lastBet: null, hands: 0, aiStack: room.bet[1] * 30 };
         CV.UI.go('table');

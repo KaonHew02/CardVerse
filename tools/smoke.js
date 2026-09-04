@@ -60,12 +60,10 @@ function check(cond, msg) {
     if (!cond) { failures++; console.error('  ✗', msg); }
 }
 
-const LEVELS = ['easy', 'normal', 'hard', 'expert'];
-
 function seats(n, rng, youIndex = 0) {
     const out = [];
     for (let i = 0; i < n; i++) {
-        out.push({ kind: 'ai', name: 'S' + i, avatar: '🙂', level: LEVELS[rng.int(4)], coins: 20000, isYou: i === youIndex });
+        out.push({ kind: 'ai', name: 'S' + i, avatar: '🙂', coins: 20000, isYou: i === youIndex });
     }
     return out;
 }
@@ -169,16 +167,16 @@ for (const game of CV.Registry.playable()) {
     }
     const edge = (net / bet) * 100;
     console.log(`  ${HANDS} hands, ${Date.now() - t0} ms, mixed-level return ${edge.toFixed(2)}% of stake`);
-    // A quarter of these seats are Easy, which spoils 40% of its decisions;
-    // a table like that loses heavily and should. The band only catches a
-    // payout bug (which shows up as ±30%+), not a bad player.
-    check(edge > -30 && edge < 8, `${game.code}: return ${edge.toFixed(2)}% is outside any plausible band`);
+    // Every seat plays the book now, so a mixed table lands near the same
+    // edge as the solo run below. Still a wide band: this sample mixes rooms
+    // and seat counts, and it is only here to catch a payout bug.
+    check(edge > -12 && edge < 10, `${game.code}: return ${edge.toFixed(2)}% is outside any plausible band`);
 
     // Expert alone, one seat, should sit near the book's house edge.
     let ebet = 0, enet = 0, eshoe = null;
     const erng = new CV.RNG(777);
     for (let i = 0; i < HANDS * 3; i++) {
-        const e = playHand(game, { seed: erng.int(1e9), seats: [{ kind: 'ai', name: 'X', level: 'expert', coins: 1e6, isYou: true }], config: { room: 'beginner', shoe: eshoe } });
+        const e = playHand(game, { seed: erng.int(1e9), seats: [{ kind: 'ai', name: 'X', coins: 1e6, isYou: true }], config: { room: 'beginner', shoe: eshoe } });
         eshoe = e.shoeState;
         for (const h of e.seats[0].hands) ebet += h.bet;
         enet += e.seats[0].net;
@@ -195,10 +193,10 @@ for (const game of CV.Registry.playable()) {
     const se = 115 / Math.sqrt(nHands);
     const expected = game.simple ? 4 : -0.5;      // 21's any-21-pays-3:2 rule is player-positive
     const lo = expected - 3 * se, hi = expected + 3 * se;
-    console.log(`  expert solo over ${nHands} hands: ${eedge.toFixed(2)}% of stake `
+    console.log(`  solo book player over ${nHands} hands: ${eedge.toFixed(2)}% of stake `
         + `(expect ${expected}% ±${(3 * se).toFixed(1)})`);
     check(eedge > lo && eedge < hi,
-        `${game.code}: expert return ${eedge.toFixed(2)}% is outside ${lo.toFixed(1)}..${hi.toFixed(1)}%`);
+        `${game.code}: solo return ${eedge.toFixed(2)}% is outside ${lo.toFixed(1)}..${hi.toFixed(1)}%`);
 
     // Determinism: same seed and seats → same log and same events.
     const a = playHand(game, { seed: 4242, seats: seats(4, new CV.RNG(1)), config: { room: 'casual' } });
