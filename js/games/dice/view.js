@@ -179,6 +179,8 @@
                     <div class="btn-row chips">
                         ${chips.map((v) => `<button class="chip" data-act="chip" data-v="${v}">${fmt(v)}</button>`).join('')}
                     </div>
+                    <div class="pick-line">${esc(t('dice.backing'))}
+                        <b class="dice-pick is-${this.side}">${esc(this.pickName())}</b></div>
                     <div class="btn-row">
                         <button class="btn primary big" data-act="roll">${esc(t('dice.throw'))}</button>
                     </div>
@@ -190,6 +192,11 @@
                 this.bet = Number(range.value);
                 this.$('diceBetAmt').textContent = fmt(this.bet);
             });
+        }
+
+        /** "围骰 6" or "大" — the bet as it stands, before it is placed. */
+        pickName() {
+            return this.side === 'exact' ? t('dice.exactOf', { n: this.face }) : t('dice.' + this.side);
         }
 
         /* ---- input ------------------------------------------------------------ */

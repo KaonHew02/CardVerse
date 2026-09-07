@@ -231,7 +231,7 @@
             seats: session.seats.map((s, i) => new CV.Seat(i, s)),
             config: { room: room.roomId, shoe: session.shoe },
         });
-        table.speed = CV.Settings.get().fastAnim ? 0.4 : 1;
+        table.speed = CV.Settings.speed();
 
         view = new session.game.View(root, table, session);
         view.mount();

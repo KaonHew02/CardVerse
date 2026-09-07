@@ -19,14 +19,14 @@
         icon: '🐮',
         blurb: 'Five cards. Three make ten, the other two make the bull.',
         category: 'cards',
-        players: [1, 6],
+        players: [3, 6],
         wagers: true,
         Engine: CV.BullBullEngine,
         AI:     CV.BullBullAI,
         View:   CV.BullBullView,
 
         rules: ['bb.rule1', 'bb.rule2', 'bb.rule3', 'bb.rule4',
-                'bb.rule5', 'bb.rule6', 'bb.rule7'],
+                'bb.rule5', 'bb.rule8', 'bb.rule6', 'bb.rule7'],
 
         extraLabels: {
             bbRounds: 'Hands played', bbWins: 'Hands won', bbBull: '牛牛',

@@ -69,7 +69,7 @@
             seats: session.seats.map((s, i) => new CV.Seat(i, s)),
             config: Object.assign({ room: session.room.id, shoe: session.shoe }, session.opts),
         });
-        table.speed = CV.Settings.get().fastAnim ? 0.4 : 1;
+        table.speed = CV.Settings.speed();
 
         const root = $('tableRoot');
         view = new session.game.View(root, table, session);

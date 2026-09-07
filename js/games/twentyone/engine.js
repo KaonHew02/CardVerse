@@ -12,6 +12,11 @@
  *     cards ends the hand; there is no sixth card.
  *   - **The dealer can make 五龙 too**, and it beats a player's normal hand
  *     the same way.
+ *   - **十五点可以跑.** Exactly fifteen on the first two cards lets a seat
+ *     walk away from the hand with its stake back — no win, no loss. Fifteen
+ *     is the worst total in the game (every hit under a six busts it, and
+ *     standing on it loses to every dealer hand that is not a bust), so the
+ *     escape is the whole reason the number is interesting.
  *   - No insurance, no split, no surrender.
  *
  * Phases:  betting → playing → dealer → over
@@ -30,6 +35,9 @@
     const { Deck, handValue } = CV.Cards;
 
     const FIVE_DRAGONS = 5;
+
+    /** The two-card total that may walk away from the hand. */
+    const RUN_TOTAL = 15;
 
     /**
      * Score one hand.
@@ -59,7 +67,7 @@
 
         /** Safe to put on a wire; `shoe` is deliberately absent. */
         static get publicConfig() {
-            return ['room', 'decks', 'dealerStandsOn', 'dragonPays', 'double'];
+            return ['room', 'decks', 'dealerStandsOn', 'dragonPays', 'double', 'runOn'];
         }
 
         static get defaults() {
@@ -69,6 +77,7 @@
                 dealerStandsOn: 17,     // hits on 16 or below
                 dragonPays: 2,          // 五龙 wins pay 2:1; a normal win pays 1:1
                 double: true,
+                runOn: RUN_TOTAL,       // 0 turns the 十五点可以跑 rule off
                 penetration: 0.6,
                 shoe: null,             // carried between hands at the same table
             };
@@ -155,6 +164,8 @@
                 if (this.config.double && h.cards.length === 2 && s.coins >= h.bet) {
                     out.push({ type: 'double', label: t('act.double') });
                 }
+                // 跑 is the opening decision too, and only on the number.
+                if (this.canRun(h)) out.push({ type: 'run', label: t('act.run') });
                 return out;
             }
             return [];
@@ -166,8 +177,22 @@
                 case 'hit':    return this.doHit(action.seat);
                 case 'stand':  return this.doStand(action.seat);
                 case 'double': return this.doDouble(action.seat);
+                case 'run':    return this.doRun(action.seat);
                 default:       return false;
             }
+        }
+
+        /**
+         * May this hand walk away?
+         *
+         * The first two cards only, and on the number exactly. `handValue`
+         * decides the total, so A+4 is fifteen the same way K+5 is — the seat
+         * is offered the escape from the total it can see on its own cards,
+         * and there is no second reading of an ace hiding behind it.
+         */
+        canRun(h) {
+            return !!this.config.runOn && !!h && !h.done
+                && h.cards.length === 2 && handValue(h.cards).total === this.config.runOn;
         }
 
         /* ---- betting ------------------------------------------------------ */
@@ -248,6 +273,30 @@
             return true;
         }
 
+        /**
+         * 跑 — leave the hand on fifteen and take the stake back.
+         *
+         * Settled here rather than in `settle()`, because a hand that has run
+         * is no longer in the comparison at all: it does not beat the dealer,
+         * the dealer does not beat it, and it must not keep the dealer drawing
+         * on its behalf. Marking it paid now is what keeps all three true in
+         * one place.
+         */
+        doRun(seat) {
+            const s = this.seats[seat];
+            const h = this.hand(seat);
+            if (!this.canRun(h)) return false;
+            h.done    = true;
+            h.ran     = true;
+            h.outcome = 'run';
+            h.payout  = h.bet;
+            s.coins  += h.payout;
+            s.net    += h.payout;
+            this.emit('run', { seat, total: handValue(h.cards).total });
+            this.advance(seat);
+            return true;
+        }
+
         /** Double the bet, take exactly one card, then stand — win or bust. */
         doDouble(seat) {
             const s = this.seats[seat];
@@ -274,9 +323,13 @@
             this.emit('reveal', { card: this.dealer.cards[1] });
         }
 
-        /** Anyone still standing? If not, the dealer only turns the hole card. */
+        /**
+         * Anyone still standing? If not, the dealer only turns the hole card.
+         * A hand that ran is already settled and is not somebody to draw for.
+         */
         anyoneLive() {
-            return this.seats.some((s) => !s.out && s.hands.some((h) => !score(h.cards).bust));
+            return this.seats.some((s) => !s.out
+                && s.hands.some((h) => !h.ran && !score(h.cards).bust));
         }
 
         /**
@@ -336,6 +389,9 @@
             for (let i = this.firstSeat(); i >= 0; i = this.nextSeat(i)) {
                 const s = this.seats[i];
                 const h = s.hands[0];
+                // A hand that ran was paid the moment it did. Judging it here
+                // would hand the stake back a second time.
+                if (h.ran) { this.emit('handResult', { seat: i, outcome: 'run', payout: h.payout }); continue; }
                 const r = this.judge(h, dealer);
                 h.outcome = r.outcome;
                 h.payout  = Math.round(r.payout);
@@ -367,15 +423,16 @@
                     hands: [{
                         cards: h.cards.slice(), bet: h.bet, payout: h.payout,
                         outcome: h.outcome, total: sc.total,
-                        doubled: h.doubled, dragons: sc.dragons,
+                        doubled: h.doubled, dragons: sc.dragons, ran: !!h.ran,
                     }],
                     extra: {
                         dragons:     sc.dragons ? 1 : 0,
                         dragonWins:  h.outcome === 'dragons' ? 1 : 0,
-                        busts:       sc.bust ? 1 : 0,
+                        busts:       (!h.ran && sc.bust) ? 1 : 0,
                         doubles:     h.doubled ? 1 : 0,
+                        runs:        h.ran ? 1 : 0,
                         dealerBusts: dealer.bust ? 1 : 0,
-                        exact21:     (!sc.bust && sc.total === 21) ? 1 : 0,
+                        exact21:     (!h.ran && !sc.bust && sc.total === 21) ? 1 : 0,
                     },
                 });
             }

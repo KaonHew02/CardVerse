@@ -17,18 +17,18 @@
         icon: '🃏',
         blurb: 'Get closer to 21 than the dealer. Five cards under 21 beats everything.',
         category: 'cards',
-        players: [1, 5],
+        players: [3, 5],
         wagers: true,
         Engine: CV.TwentyOneEngine,
         AI:     CV.TwentyOneAI,
         View:   CV.TwentyOneView,
 
-        rules: ['to.rule1', 'to.rule2', 'to.rule3', 'to.rule4', 'to.rule5', 'to.rule6'],
+        rules: ['to.rule1', 'to.rule2', 'to.rule3', 'to.rule4', 'to.rule5', 'to.rule7', 'to.rule6'],
 
         extraLabels: {
             dragons: '五龙 hands', dragonWins: '五龙 wins', exact21: 'Reached exactly 21',
             busts: 'Busts', doubles: 'Doubles', dealerBusts: 'Dealer busts seen',
-            forfeits: 'Walked away',
+            runs: '十五点跑了', forfeits: 'Walked away',
         },
 
         achievements: [

@@ -26,23 +26,53 @@
     const CV = window.CV;
 
     /**
-     * The reel strip. Every symbol is equally likely on every reel, so the
-     * odds are exactly 1 in 8³ for any given triple and 1 in 64 for a win of
-     * some kind. See the note on return-to-player in index.js.
+     * The reel strip. Every symbol is equally likely on every reel, so a named
+     * triple is exactly 1 in 8³ and *some* triple is 1 in 64.
+     *
+     * `mult` is three on the line; `pair` is two on the line and the third
+     * something else. Two prices, because one was the whole problem: three of
+     * a kind alone pays 278 stakes across 512 equally likely spins, which is a
+     * 54% return — sixty-three dead pulls out of sixty-four, and a machine
+     * nobody would sit at. Adding the pair line brings it to
+     *
+     *     (278 + 21 × 10) / 512 = 95.3%
+     *
+     * — 21 spins land each pair, ten stakes are paid across the eight of them
+     * — which is where a real cabinet sits. A third of pulls now return
+     * something, and 7️⃣ 7️⃣ still means what it meant.
+     *
+     * If a price here changes, that arithmetic is what has to be redone.
      */
     const SYMBOLS = [
-        { id: 'cherry',  icon: '🍒', mult: 5 },
-        { id: 'lemon',   icon: '🍋', mult: 8 },
-        { id: 'orange',  icon: '🍊', mult: 10 },
-        { id: 'melon',   icon: '🍉', mult: 15 },
-        { id: 'bell',    icon: '🔔', mult: 25 },
-        { id: 'star',    icon: '⭐', mult: 40 },
-        { id: 'diamond', icon: '💎', mult: 75 },
-        { id: 'seven',   icon: '7️⃣', mult: 100 },
+        { id: 'cherry',  icon: '🍒', mult: 5,   pair: 1 },
+        { id: 'lemon',   icon: '🍋', mult: 8,   pair: 1 },
+        { id: 'orange',  icon: '🍊', mult: 10,  pair: 1 },
+        { id: 'melon',   icon: '🍉', mult: 15,  pair: 1 },
+        { id: 'bell',    icon: '🔔', mult: 25,  pair: 1 },
+        { id: 'star',    icon: '⭐', mult: 40,  pair: 1 },
+        { id: 'diamond', icon: '💎', mult: 75,  pair: 2 },
+        { id: 'seven',   icon: '7️⃣', mult: 100, pair: 2 },
     ];
 
     const JACKPOT = 'seven';
     const REELS = 3;
+
+    /**
+     * What the payline is worth, as a multiple of the stake.
+     *
+     * Three of a kind first, then a pair. They cannot both be true, because
+     * three matching is not two matching — that ordering is the whole rule and
+     * it is why it is written once here rather than at the call site.
+     *
+     * @returns {{symbol:object|null, mult:number, kind:string}}
+     */
+    function readLine(reels) {
+        const [a, b, c] = reels;
+        if (a.id === b.id && b.id === c.id) return { symbol: a, mult: a.mult, kind: 'triple' };
+        const pair = (a.id === b.id) ? a : (b.id === c.id) ? b : (a.id === c.id) ? a : null;
+        if (pair) return { symbol: pair, mult: pair.pair, kind: 'pair' };
+        return { symbol: null, mult: 0, kind: 'none' };
+    }
 
     class SlotsEngine extends CV.GameEngine {
 
@@ -133,12 +163,9 @@
             for (let i = 0; i < REELS; i++) reels.push(this.rng.pick(SYMBOLS));
             this.reels = reels;
 
-            // Only three of a kind pays. Two matching is nothing.
-            const same = reels.every((r) => r.id === reels[0].id);
-            const symbol = same ? reels[0] : null;
-            const mult = same ? symbol.mult : 0;
-            const payout = Math.round(bet * mult);
-            const jackpot = same && symbol.id === JACKPOT;
+            const line = readLine(reels);
+            const payout = Math.round(bet * line.mult);
+            const jackpot = line.kind === 'triple' && line.symbol.id === JACKPOT;
 
             s.coins += payout;
             s.net   += payout;
@@ -146,8 +173,10 @@
             const spinResult = {
                 reels: reels.map((r) => r.id),
                 icons: reels.map((r) => r.icon),
-                bet, payout, mult, jackpot,
-                symbol: symbol ? symbol.id : null,
+                bet, payout, jackpot,
+                mult: line.mult,
+                kind: line.kind,
+                symbol: line.symbol ? line.symbol.id : null,
                 net: payout - bet,
                 at: this.tally.spins + 1,
             };

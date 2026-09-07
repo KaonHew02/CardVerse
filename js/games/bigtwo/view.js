@@ -29,6 +29,11 @@
             this.session = session;
             this.selected = new Set();
             this.last    = [null, null, null, null];
+            // Everything each seat has put down this round, in order. `last`
+            // is only the current trick and is wiped when it clears, which
+            // took the round's whole record with it — and Big Two is a game
+            // about what has already gone.
+            this.played  = [[], [], [], []];
             this.hintAt  = -1;
             this.known   = new Set();
         }
@@ -61,10 +66,17 @@
 
         onChange(events) {
             for (const e of events) {
-                if (e.type === 'play')     this.last[e.seat] = { cards: e.cards, combo: e.combo };
+                if (e.type === 'play') {
+                    this.last[e.seat] = { cards: e.cards, combo: e.combo };
+                    this.played[e.seat] = this.played[e.seat].concat(e.cards);
+                }
                 if (e.type === 'pass')     this.last[e.seat] = { pass: true };
                 if (e.type === 'trickEnd') this.last = [null, null, null, null];
-                if (e.type === 'deal')     { this.last = [null, null, null, null]; this.selected.clear(); }
+                if (e.type === 'deal') {
+                    this.last = [null, null, null, null];
+                    this.played = [[], [], [], []];
+                    this.selected.clear();
+                }
                 if (e.type === 'play' && e.seat === this.you) this.selected.clear();
             }
             this.hintAt = -1;
@@ -104,6 +116,24 @@
                         <span class="tag b2-left">${s.cards.length}</span>
                     </div>
                     <div class="seat-play">${this.playedBy(i)}</div>
+                    ${this.historyHtml(i)}
+                </div>`;
+        }
+
+        /**
+         * Everything this seat has already put down, smallest the cards will
+         * legibly go. It is the one thing a Big Two player actually wants to
+         * look up mid-round — whether the 2♠ has gone, how many diamonds are
+         * left — and counting it off a trick that has already been cleared is
+         * not something a screen should make you do from memory.
+         */
+        historyHtml(i) {
+            const gone = this.played[i];
+            if (!gone.length) return '';
+            return `
+                <div class="b2-history">
+                    <span class="b2-history-label">${esc(t('b2.gone', { n: gone.length }))}</span>
+                    ${CV.CardView.hand(gone, { size: 'sm' })}
                 </div>`;
         }
 
@@ -158,6 +188,7 @@
             const hand = e.seats[this.you].cards;
 
             host.innerHTML = `
+                ${this.historyHtml(this.you)}
                 <div class="hand-head">
                     <span class="seat-count">${esc(t('b2.cardsLeft', { n: hand.length }))}</span>
                 </div>

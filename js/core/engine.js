@@ -217,10 +217,16 @@
      * Every engine returns this so the screen never learns a game's rules.
      */
     class GameResult {
-        constructor({ ranks = [], detail = '', draw = false } = {}) {
+        constructor({ ranks = [], detail = '', draw = false, board = null, boardLabel = '' } = {}) {
             this.ranks  = ranks;   // [{ seat, name, rank, score, coins, note }]
             this.detail = detail;  // one line of game-specific colour
             this.draw   = draw;
+            // Cards nobody owned but everybody played off — Hold'em's five
+            // community cards. Optional, and the result screen draws it above
+            // the per-seat hands so the two can be read together, which is the
+            // only way "why did that hand win" is answerable after the fact.
+            this.board      = board;
+            this.boardLabel = boardLabel;
         }
         get winners() { return this.ranks.filter((r) => r.rank === 1); }
         forSeat(i)    { return this.ranks.find((r) => r.seat === i) || null; }

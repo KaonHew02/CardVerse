@@ -40,6 +40,7 @@
         mount() {
             this.root.innerHTML = `
                 <div class="dg">
+                    <div class="dg-pot" id="dgPot"></div>
                     <div class="dg-gate">
                         <div class="dg-post" id="dgPostA"></div>
                         <div class="dg-middle">
@@ -103,6 +104,7 @@
             this.$('dgShot').className = 'dg-shot'
                 + (e.third && this.showThird && e.outcome ? ' is-' + e.outcome : '');
 
+            this.paintPot();
             this.paintOdds();
             this.paintSeats();
             this.paintStatus();
@@ -153,8 +155,9 @@
                         </div>
                         <div class="hand-meta">
                             ${s.out ? `<span class="muted small">${esc(t('table.sittingOut'))}</span>` : ''}
+                            ${s.ante ? `<span class="dg-ante">${esc(t('dg.anteChip', { n: fmt(s.ante) }))}</span>` : ''}
                             ${gate}
-                            ${s.bet ? `<span class="bet">🪙 ${fmt(s.bet)}</span>` : ''}
+                            ${s.bet && !s.skipped ? `<span class="bet">🪙 ${fmt(s.bet)}</span>` : ''}
                             ${verdict}
                             ${s.done ? `<span class="${s.net > 0 ? 'good' : s.net < 0 ? 'bad' : ''}">${signed(s.net)}</span>` : ''}
                         </div>
@@ -163,12 +166,28 @@
         }
 
         /**
-         * The price of the gate on the table.
+         * The pile in the middle. It is what the whole table is shooting at,
+         * so it is the biggest number on the screen — and the cap on what
+         * anybody may call, which is the part a player has to see before they
+         * pick an amount.
+         */
+        paintPot() {
+            const e = this.engine;
+            this.$('dgPot').innerHTML = `
+                <span class="dg-pot-label">${esc(t('dg.pot'))}</span>
+                <b class="dg-pot-amt">🪙 ${fmt(e.pot)}</b>
+                <span class="muted small">${esc(t('dg.potNote'))}</span>`;
+        }
+
+        /**
+         * What the gate on the table is worth shooting at.
          *
-         * Before a stake is down this is the *quote* — what the seat is being
-         * offered, which is the entire basis for shooting or passing. An
-         * equal gate carries two quotes, because 大过 and 小过 are not worth
-         * the same and the seat has to see both to judge either.
+         * There is no price here — a winning shot pays what you called, out of
+         * the middle. What there is instead is the chance, from the cards
+         * actually left, and beside it how many of them land on a post, since
+         * that is the branch that costs double. An equal gate carries two
+         * quotes, because 大过 and 小过 are not worth the same and the seat has
+         * to see both to judge either.
          */
         paintOdds() {
             const e = this.engine;
@@ -176,16 +195,12 @@
             if (!e.gate) { host.innerHTML = ''; return; }
 
             const line = (o) => {
-                const chance = ((o.winners / o.remaining) * 100).toFixed(0);
-                return `<span>${esc(t('dg.odds', { n: o.winners, of: o.remaining, pct: chance }))}</span>`
-                     + `<b class="dg-mult">${esc(t('dg.pays', { mult: o.mult.toFixed(2) }))}</b>`;
+                const pct = (o.pct * 100).toFixed(0);
+                return `<span>${esc(t('dg.odds', { n: o.winners, of: o.remaining, pct }))}</span>`
+                     + (o.posts ? `<b class="dg-posts">${esc(t('dg.postRisk', { n: o.posts }))}</b>` : '');
             };
             const shut = `<span class="dg-shut">${esc(t('dg.shut'))}</span>`;
 
-            if (e.odds) {
-                host.innerHTML = e.odds.winners === 0 ? shut : line(e.odds);
-                return;
-            }
             const q = e.quote;
             if (!q) { host.innerHTML = ''; return; }
             if (q.one) { host.innerHTML = q.one.winners === 0 ? shut : line(q.one); return; }
@@ -263,23 +278,37 @@
             host.innerHTML = `
                 <div class="bet-box">
                     <div class="bet-amount">🪙 <b id="dgBetAmt">${fmt(this.bet)}</b>
-                        <small class="muted">${esc(t('table.ofCoins', { n: fmt(seat.coins) }))}</small></div>
+                        <small class="muted">${esc(t('dg.ofPot', { n: fmt(e.pot) }))}</small></div>
                     <input type="range" id="dgBetRange" min="${opt.min}" max="${opt.max}" step="5" value="${this.bet}">
                     <div class="btn-row chips">
                         ${chips.map((v) => `<button class="chip" data-act="chip" data-v="${v}">${fmt(v)}</button>`).join('')}
                     </div>
+                    <div class="pick-line">${esc(t('dg.swing'))}
+                        <b class="good" id="dgWinAmt">+${fmt(this.bet)}</b>
+                        <b class="bad" id="dgLoseAmt">−${fmt(this.bet * e.config.postPenalty)}</b></div>
                     <div class="btn-row">
                         <button class="btn primary big" data-act="bet">${esc(t('dg.open'))}</button>
                         ${pass}
                     </div>
-                    <div class="muted small">${esc(t('table.range', { lo: fmt(opt.min), hi: fmt(opt.max) }))}</div>
+                    <div class="muted small">${esc(t('dg.callNote', { lo: fmt(opt.min), hi: fmt(opt.max) }))}</div>
                 </div>`;
 
             const range = this.$('dgBetRange');
             range.addEventListener('input', () => {
                 this.bet = Number(range.value);
-                this.$('dgBetAmt').textContent = fmt(this.bet);
+                this.showCall();
             });
+        }
+
+        /** The two numbers the amount actually means, kept in step with it. */
+        showCall() {
+            const amt = this.$('dgBetAmt');
+            if (!amt) return;
+            amt.textContent = fmt(this.bet);
+            const win = this.$('dgWinAmt');
+            const lose = this.$('dgLoseAmt');
+            if (win) win.textContent = '+' + fmt(this.bet);
+            if (lose) lose.textContent = '−' + fmt(this.bet * this.engine.config.postPenalty);
         }
 
         /* ---- input --------------------------------------------------------- */
@@ -290,7 +319,7 @@
                 const range = this.$('dgBetRange');
                 this.bet = Math.min(Number(range.max), Math.max(Number(range.min), Number(el.dataset.v)));
                 range.value = this.bet;
-                this.$('dgBetAmt').textContent = fmt(this.bet);
+                this.showCall();
                 return;
             }
             if (type === 'bet') {

@@ -29,6 +29,16 @@
 
     const CARDS = 5;
 
+    /**
+     * The cards that come out on the first pass.
+     *
+     * 斗牛 is dealt in two halves at a table and it is worth keeping: three
+     * cards is the part that has to make the ten, and the last two are the
+     * number. Dropping all five at once turns the deal into a single frame
+     * with a verdict already in it.
+     */
+    const FIRST_PASS = 3;
+
     class BullBullEngine extends CV.GameEngine {
 
         static get code() { return 'bullbull'; }
@@ -105,15 +115,30 @@
 
         /* ---- the deal, which decides itself --------------------------------- */
 
+        /**
+         * Three cards each, then the other two, then the comparison.
+         *
+         * The two passes are separate events rather than one, because the
+         * screen paces itself off them: the engine still resolves the whole
+         * deal in this one synchronous call, and the view is what turns that
+         * into a deal you can watch. `pass` is the number of cards on the
+         * table after that pass, which is what a paced view actually needs.
+         */
         deal() {
             this.phase = 'dealing';
             this.turn = -1;
 
-            // Round by round, the way they come off the pack at a real table.
-            for (let k = 0; k < CARDS; k++) {
-                for (const s of this.seats) if (!s.out) s.cards.push(this.deck.draw());
-                this.dealer.cards.push(this.deck.draw());
-            }
+            const pass = (upTo) => {
+                // Round by round, the way they come off the pack at a real table.
+                for (let k = 0; k < upTo; k++) {
+                    for (const s of this.seats) if (!s.out) s.cards.push(this.deck.draw());
+                    this.dealer.cards.push(this.deck.draw());
+                }
+                this.emit('dealt', { each: this.dealer.cards.length });
+            };
+            pass(FIRST_PASS);
+            pass(CARDS - FIRST_PASS);
+
             for (const s of this.seats) if (!s.out) s.hand = H.evaluate(s.cards);
             this.dealer.hand = H.evaluate(this.dealer.cards);
             this.emit('deal', { dealer: this.dealer.cards.slice() });
@@ -245,5 +270,6 @@
         }
     }
 
-    CV.BullBullEngine = BullBullEngine;
+    CV.BullBullEngine  = BullBullEngine;
+    CV.BullBullFirstPass = FIRST_PASS;
 })();

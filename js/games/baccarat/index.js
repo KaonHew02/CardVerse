@@ -16,7 +16,7 @@
         icon: '🎴',
         blurb: 'Bet on Player, Banker or Tie. No decisions, all nerve.',
         category: 'cards',
-        players: [1, 6],
+        players: [3, 6],
         wagers: true,
         Engine: CV.BaccaratEngine,
         AI:     CV.BaccaratAI,

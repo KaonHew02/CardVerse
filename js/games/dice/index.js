@@ -19,7 +19,7 @@
         icon: '🎲',
         blurb: 'Three dice. Back 大, 小 or 围骰 and watch them land.',
         category: 'dice',
-        players: [1, 6],
+        players: [3, 6],
         wagers: true,
         Engine: CV.DiceEngine,
         AI:     CV.DiceAI,

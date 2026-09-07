@@ -53,7 +53,7 @@
         icon: ICON,
         blurb: 'Rummy on mahjong tiles. Runs, sets, jokers — empty your rack.',
         category: 'tiles',
-        players: [2, 4],
+        players: [3, 4],
         wagers: true,
         Engine: CV.LamiEngine,
         AI:     CV.LamiAI,

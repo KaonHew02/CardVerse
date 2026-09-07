@@ -28,7 +28,7 @@
         icon: '🎡',
         blurb: 'Cover the layout, then one ball settles the table. Single zero.',
         category: 'table',
-        players: [1, 6],
+        players: [5, 8],
         wagers: true,
         Engine: CV.RouletteEngine,
         AI:     CV.RouletteAI,

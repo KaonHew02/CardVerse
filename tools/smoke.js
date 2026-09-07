@@ -161,8 +161,9 @@ function auditHand(game, e) {
 }
 
 /**
- * 21, to the house rules: no natural, DOUBLE, and 五龙 — exactly five cards
- * at 21 or under — beating every normal hand including a normal 21.
+ * 21, to the house rules: no natural, DOUBLE, 五龙 — exactly five cards at 21
+ * or under — beating every normal hand including a normal 21, and 十五点可以跑,
+ * which takes a hand out of the comparison entirely.
  */
 function auditTwentyOne(game, e) {
     const score = CV.TwentyOneScore;
@@ -183,6 +184,18 @@ function auditTwentyOne(game, e) {
         check(h.cards.length <= 5, `${game.code}: player held ${h.cards.length} cards`);
         if (p.dragons) check(h.cards.length === 5, `${game.code}: 五龙 with ${h.cards.length} cards`);
         if (h.doubled) check(h.cards.length === 3, `${game.code}: doubled hand has ${h.cards.length} cards`);
+
+        // 跑 is only offered on exactly fifteen and only on two cards, and it
+        // returns the stake untouched. A hand that ran is out of the
+        // comparison, so it is checked here and skipped below.
+        if (h.ran) {
+            check(h.cards.length === 2 && handValue(h.cards).total === e.config.runOn,
+                `${game.code}: ran on ${h.cards.length}c ${p.total}`);
+            check(h.outcome === 'run', `${game.code}: ran but outcome is ${h.outcome}`);
+            check(h.payout === h.bet, `${game.code}: run paid ${h.payout}, wanted ${h.bet}`);
+            check(s.net === 0, `${game.code}: run left net ${s.net}`);
+            continue;
+        }
 
         // The outcome the rules demand, derived independently of the engine.
         let want;
@@ -211,7 +224,13 @@ function auditTwentyOne(game, e) {
     auditCommon(game, e);
 }
 
-const anyLive = (e) => e.seats.some((s) => !s.out && !CV.TwentyOneScore(s.hands[0].cards).bust);
+/**
+ * Anybody the dealer still has to draw against. A hand that busted is already
+ * lost and a hand that ran is already settled, so neither keeps the dealer
+ * playing — which is why the dealer may legitimately stop on twelve.
+ */
+const anyLive = (e) => e.seats.some((s) => !s.out
+    && !s.hands[0].ran && !CV.TwentyOneScore(s.hands[0].cards).bust);
 
 /* ---- run --------------------------------------------------------------- */
 
@@ -341,9 +360,15 @@ console.log('\n🪙 Rewards pipeline');
  * The paytable, the win condition, and the return-to-player.
  *
  * RTP is the number that decides whether the machine is playable, so it is
- * measured rather than assumed: with equal reels and this paytable it works
- * out at (5+8+10+15+25+40+75+100) / 8³ ≈ 54%. If the reels are ever weighted
- * or the multipliers changed, this is what will say so.
+ * measured rather than assumed. With equal reels, 512 lines are possible: 8
+ * of them are a triple and 168 are exactly a pair (8 symbols × 3 positions ×
+ * 7 others), so
+ *
+ *     (Σ triple mults + 21 × Σ pair mults) / 512
+ *
+ * is the theoretical return. Three of a kind alone came to 54%, which is a
+ * machine nobody would sit at; the pair line is what brings it to ~95%. If
+ * the reels are ever weighted or a price changed, this is what will say so.
  */
 function auditSlots() {
     console.log('\n🎰 老虎机');
@@ -356,9 +381,17 @@ function auditSlots() {
         const sym = syms.find((s) => s.id === id);
         check(sym && sym.mult === mult, `slots: ${id} pays ×${sym && sym.mult}, expected ×${mult}`);
     }
+    const wantedPair = { cherry: 1, lemon: 1, orange: 1, melon: 1, bell: 1, star: 1, diamond: 2, seven: 2 };
+    for (const [id, mult] of Object.entries(wantedPair)) {
+        const sym = syms.find((s) => s.id === id);
+        check(sym && sym.pair === mult, `slots: two ${id} pays ×${sym && sym.pair}, expected ×${mult}`);
+    }
 
-    // The theoretical figure, straight from the paytable.
-    const theory = syms.reduce((n, s) => n + s.mult, 0) / Math.pow(syms.length, 3);
+    // The theoretical figure, straight from the paytable — see the note above.
+    const LINES = Math.pow(syms.length, 3);
+    const PAIR_LINES = 3 * (syms.length - 1);
+    const theory = (syms.reduce((n, s) => n + s.mult, 0)
+        + PAIR_LINES * syms.reduce((n, s) => n + s.pair, 0)) / LINES;
 
     const rng = new CV.RNG(2468);
     const e = new game.Engine({
@@ -377,18 +410,31 @@ function auditSlots() {
         const r = e.last;
 
         const same = r.reels[0] === r.reels[1] && r.reels[1] === r.reels[2];
-        check(same === (r.payout > 0), `slots: three-alike ${same} but payout ${r.payout}`);
+        const pairId = same ? null
+            : r.reels[0] === r.reels[1] ? r.reels[0]
+            : r.reels[1] === r.reels[2] ? r.reels[1]
+            : r.reels[0] === r.reels[2] ? r.reels[0] : null;
+        check((same || !!pairId) === (r.payout > 0),
+            `slots: line ${r.reels.join('/')} paid ${r.payout}`);
 
         if (same) {
             const sym = syms.find((s) => s.id === r.reels[0]);
+            check(r.kind === 'triple', `slots: three alike read as ${r.kind}`);
             check(r.payout === BET * sym.mult,
                 `slots: ${r.reels[0]} paid ${r.payout}, expected ${BET * sym.mult}`);
             check(r.jackpot === (r.reels[0] === CV.SlotsJackpot), 'slots: jackpot flag disagrees with the reels');
             paidOnWin++;
+        } else if (pairId) {
+            // Exactly two, which is a different price and never the jackpot.
+            const sym = syms.find((s) => s.id === pairId);
+            twoMatch++;
+            check(r.kind === 'pair', `slots: a pair read as ${r.kind}`);
+            check(r.payout === BET * sym.pair,
+                `slots: two ${pairId} paid ${r.payout}, expected ${BET * sym.pair}`);
+            check(!r.jackpot, 'slots: a pair was called a jackpot');
+            paidOnWin++;
         } else {
-            // Two of a kind must pay nothing — the rule players get wrong.
-            const pairish = r.reels[0] === r.reels[1] || r.reels[1] === r.reels[2] || r.reels[0] === r.reels[2];
-            if (pairish) { twoMatch++; check(r.payout === 0, 'slots: two matching symbols paid'); }
+            check(r.payout === 0, `slots: three different paid ${r.payout}`);
         }
     }
 
@@ -399,8 +445,8 @@ function auditSlots() {
     check(e.seat.coins === e.seat.startCoins + e.seat.net, 'slots: coins do not reconcile');
     check(g.won === g.staked * rtp, 'slots: rtp arithmetic');
 
-    console.log(`  ${g.spins.toLocaleString('en-US')} spins · win rate ${(g.wins / g.spins * 100).toFixed(2)}% `
-        + `(1 in ${(g.spins / g.wins).toFixed(0)}) · ${twoMatch.toLocaleString('en-US')} near misses paid nothing`);
+    console.log(`  ${g.spins.toLocaleString('en-US')} spins · hit rate ${(g.wins / g.spins * 100).toFixed(2)}% `
+        + `(1 in ${(g.spins / g.wins).toFixed(1)}) · ${twoMatch.toLocaleString('en-US')} of them a pair`);
     console.log(`  RTP ${(rtp * 100).toFixed(1)}% measured against ${(theory * 100).toFixed(1)}% theoretical`);
     console.log(`  jackpots ${g.jackpots} · biggest single win 🪙 ${g.biggest.toLocaleString('en-US')}`);
 
@@ -418,7 +464,7 @@ function auditSlots() {
     check(poor.seat.startCoins - poor.seat.coins + poor.last.payout === poor.last.payout - poor.last.net + 0
         || poor.last.bet <= 3, `slots: staked ${poor.last.bet} with only 3 coins`);
     check(poor.last.bet <= 3, `slots: bet ${poor.last.bet} exceeded the balance of 3`);
-    console.log('  ✓ bet never exceeds the balance, and two-of-a-kind never pays');
+    console.log('  ✓ bet never exceeds the balance, and every line is priced once');
 }
 auditSlots();
 
@@ -497,6 +543,7 @@ function auditDragonGate() {
     console.log('\n🐉 射龙门');
     const game = CV.Registry.get('dragongate');
     const rank = CV.DragonGateRank;
+    const ANTE = CV.Registry.room('beginner').bet[0];
 
     check(rank({ r: 14 }) === 1, 'dragongate: the ace must rank 1, never 14');
     for (let r = 2; r <= 13; r++) check(rank({ r }) === r, `dragongate: rank ${r} does not rank ${r}`);
@@ -515,6 +562,13 @@ function auditDragonGate() {
         return (r > lo && r < hi) ? 'gate' : 'outside';
     };
 
+    /** The quote a seat is looking at, for the call it is actually making. */
+    const quoteFor = (e, pick) => {
+        const q = e.quote;
+        if (!q) return null;
+        return q.one || (pick === 'lower' ? q.lower : q.higher);
+    };
+
     /** An engine whose next three cards are exactly a, b, third. */
     const rigged = (a, b, third, coins) => {
         const e = new game.Engine({
@@ -523,7 +577,7 @@ function auditDragonGate() {
             config: {},
         });
         // draw() pops, so the first card dealt is the last in the array. This
-        // has to happen before start(), which now opens the gate itself.
+        // has to happen before start(), which antes and opens the gate.
         e.deck.cards = e.deck.cards.slice(0, 20).concat([cardOf(third), cardOf(b), cardOf(a)]);
         e.start();
         return e;
@@ -538,7 +592,10 @@ function auditDragonGate() {
                 const picks = (a === b) ? ['higher', 'lower'] : [null];
                 for (const pick of picks) {
                     const e = rigged(a, b, third);
-                    e.handle({ type: 'bet', amount: 10 });
+                    const pot = e.pot;
+                    check(pot === ANTE, `dragongate: a solo table anted ${pot}, wanted ${ANTE}`);
+                    const called = Math.min(ANTE, e.callCap(e.seat));
+                    e.handle({ type: 'bet', amount: called });
 
                     if (a === b) {
                         // The rule that must never be shortcut: an equal gate
@@ -558,16 +615,21 @@ function auditDragonGate() {
                         `dragongate: posts ${a}/${b}${pick ? ' called ' + pick : ''} v ${third} `
                         + `gave ${e.outcome}, wanted ${want}`);
 
-                    // The payout follows the verdict and the priced gate, and
-                    // a loss pays nothing at all.
-                    const paid = want === 'gate' ? Math.round(10 * e.odds.mult) : 0;
-                    check(e.seat.payout === paid,
-                        `dragongate: ${want} paid ${e.seat.payout}, wanted ${paid}`);
-                    check(e.seat.coins === e.seat.startCoins - 10 + paid,
+                    // The money follows the verdict: what you called comes out
+                    // of the middle, goes into it, or goes into it twice over.
+                    const swing = want === 'gate' ? called
+                        : want === 'post' ? -called * e.config.postPenalty
+                        : -called;
+                    check(e.seat.net === swing - ANTE,
+                        `dragongate: ${want} left net ${e.seat.net}, wanted ${swing - ANTE}`);
+                    check(e.seat.coins === e.seat.startCoins + e.seat.net,
                         'dragongate: coins do not reconcile');
+                    check(e.pot === pot - swing,
+                        `dragongate: the middle holds ${e.pot}, wanted ${pot - swing}`);
                     check(e.isOver(), `dragongate: posts ${a}/${b} v ${third} never finished`);
 
-                    if (e.odds.winners === 0) { shut++; check(paid === 0, 'dragongate: a shut gate paid out'); }
+                    const q = quoteFor(e, pick);
+                    if (q.winners === 0) { shut++; check(want !== 'gate', 'dragongate: a shut gate let one through'); }
                     if (want === 'gate') gates++; else if (want === 'post') posts++; else outside++;
                     cells++;
                 }
@@ -576,32 +638,48 @@ function auditDragonGate() {
     }
     console.log(`  ${cells.toLocaleString('en-US')} gates played out — `
         + `${gates} 射中龙门, ${posts} 压线, ${outside} 龙门外`);
-    console.log('  ✓ level with a post always loses · ✓ an equal gate always asks 大过/小过');
+    console.log('  ✓ level with a post always loses double · ✓ an equal gate always asks 大过/小过');
 
-    /* --- the price is the gate, not the bet ----------------------------- */
+    /* --- the card is the card, whatever was called ---------------------- */
 
-    // The result may not depend on what was staked, or on the call.
     const small = rigged(4, 10, 7), big = rigged(4, 10, 7);
-    small.handle({ type: 'bet', amount: 5 });
-    big.handle({ type: 'bet', amount: 5000 });
+    small.handle({ type: 'bet', amount: 1 });
+    big.handle({ type: 'bet', amount: big.callCap(big.seat) });
     check(rank(small.third) === rank(big.third) && small.outcome === big.outcome,
-        'dragongate: the third card moved with the size of the bet');
-    check(small.odds.mult === big.odds.mult, 'dragongate: the price moved with the size of the bet');
+        'dragongate: the third card moved with the size of the call');
+    check(small.quote.one.winners === big.quote.one.winners,
+        'dragongate: the quote moved with the size of the call');
 
     const up = rigged(9, 9, 12), down = rigged(9, 9, 12);
     up.handle({ type: 'bet', amount: 10 });   up.handle({ type: 'pick', dir: 'higher' });
     down.handle({ type: 'bet', amount: 10 }); down.handle({ type: 'pick', dir: 'lower' });
     check(rank(up.third) === rank(down.third), 'dragongate: the third card moved with the call');
     check(up.outcome === 'gate' && down.outcome === 'outside', 'dragongate: the call was not honoured');
-    console.log('  ✓ neither the stake nor the call moves the card');
+    console.log('  ✓ neither the call nor its size moves the card');
+
+    /* --- nobody may call more than is in the middle --------------------- */
+
+    {
+        const e = rigged(2, 12, 7, 1e6);
+        check(e.callCap(e.seat) <= e.pot,
+            `dragongate: a seat could call ${e.callCap(e.seat)} at a pot of ${e.pot}`);
+        e.handle({ type: 'bet', amount: 1e6 });
+        check(e.seats[0].bet <= ANTE, `dragongate: called ${e.seats[0].bet} at a pot of ${ANTE}`);
+
+        // And never more than it can settle twice over, because 撞柱 doubles.
+        const thin = rigged(2, 12, 7, ANTE + 3);
+        check(thin.callCap(thin.seat) <= Math.floor(thin.seat.coins / thin.config.postPenalty),
+            'dragongate: a seat could call more than it could pay for a post');
+    }
+    console.log('  ✓ a call is capped by the middle, and by what a post would cost');
 
     /* --- an adjacent gate cannot be won, and says so -------------------- */
 
     for (const pair of [[7, 8], [1, 2], [12, 13]]) {
         const e = rigged(pair[0], pair[1], 5);
         e.handle({ type: 'bet', amount: 10 });
-        check(e.odds.winners === 0, `dragongate: gate ${pair[0]}/${pair[1]} claims ${e.odds.winners} winning cards`);
-        check(e.odds.mult === 0, `dragongate: gate ${pair[0]}/${pair[1]} quoted a price it cannot pay`);
+        check(e.quote.one.winners === 0,
+            `dragongate: gate ${pair[0]}/${pair[1]} claims ${e.quote.one.winners} winning cards`);
         check(e.outcome !== 'gate', `dragongate: something got through gate ${pair[0]}/${pair[1]}`);
     }
     console.log(`  ✓ adjacent posts have no winners, and ${shut.toLocaleString('en-US')} shut gates paid nothing`);
@@ -610,17 +688,20 @@ function auditDragonGate() {
 
     {
         const e = rigged(3, 11, 6);
+        const q = e.quote.one;
         e.handle({ type: 'bet', amount: 10 });
         // Counted before the third card was taken, so put it back.
         const left = e.deck.cards.concat([e.third]);
         const want = left.filter((c) => rank(c) > 3 && rank(c) < 11).length;
-        check(e.odds.winners === want,
-            `dragongate: quoted ${e.odds.winners} winning cards, the pack holds ${want}`);
-        check(e.odds.remaining === left.length,
-            `dragongate: quoted ${e.odds.remaining} cards left, the pack holds ${left.length}`);
-        const fair = Math.round((1 / (want / left.length)) * 0.95 * 100) / 100;
-        check(e.odds.mult === fair, `dragongate: priced at x${e.odds.mult}, fair is x${fair}`);
-        console.log(`  ✓ the price is the true count — gate 3 to J quoted x${e.odds.mult}`);
+        const onPost = left.filter((c) => rank(c) === 3 || rank(c) === 11).length;
+        check(q.winners === want,
+            `dragongate: quoted ${q.winners} winning cards, the pack holds ${want}`);
+        check(q.posts === onPost,
+            `dragongate: quoted ${q.posts} posts, the pack holds ${onPost}`);
+        check(q.remaining === left.length,
+            `dragongate: quoted ${q.remaining} cards left, the pack holds ${left.length}`);
+        check(Math.abs(q.pct - want / left.length) < 1e-9, 'dragongate: the chance is not the count');
+        console.log(`  ✓ the quote is the true count — gate 3 to J: ${q.winners} of ${q.remaining} get through`);
     }
 
     /* --- the pack is not reshuffled between rounds ---------------------- */
@@ -633,14 +714,14 @@ function auditDragonGate() {
                 seats: [new CV.Seat(0, { kind: 'human', isYou: true, coins })],
                 config: { shoe },
             });
-            const before = shoe ? shoe.cards.length : 52;
+            const before = shoe ? shoe.deck.cards.length : 52;
             e.start();
             // start() has already taken the two posts, so add them back before
             // comparing — otherwise every round looks like it shrank the pack.
             if (e.deck.remaining + 2 > before) { reshuffles++; seen = new Set(); }
-            e.handle({ type: 'bet', seat: 0, amount: 10 });
+            e.handle({ type: 'bet', seat: 0, amount: e.callCap(e.seat) || 1 });
             if (e.phase === 'choose') e.handle({ type: 'pick', dir: 'higher' });
-            for (const c of e.gate.cards.concat([e.third])) {
+            for (const c of e.gate.cards.concat(e.third ? [e.third] : [])) {
                 check(!seen.has(c.id), `dragongate: card ${c.id} came out twice without a reshuffle`);
                 seen.add(c.id);
             }
@@ -652,45 +733,88 @@ function auditDragonGate() {
         console.log(`  ✓ 40 rounds, no card repeated between reshuffles (${reshuffles} of them)`);
     }
 
-    /* --- what the table is allowed to say out loud ---------------------- */
+    /* --- the pot carries, and a fresh ante is only taken on an empty one - */
 
     {
-        const e = rigged(5, 9, 7);
-        e.handle({ type: 'bet', amount: 10 });
-        const view = e.snapshotFor(0);
-        check(!view.rng, 'dragongate: the snapshot carries the RNG');
-        check(!('deck' in view), 'dragongate: the snapshot carries the pack');
-        check(view.shoeRemaining === e.deck.remaining, 'dragongate: the snapshot misreports the pack');
+        let shoe = null, antes = 0, carried = 0;
+        let coins = 1e6;
+        for (let g = 0; g < 60; g++) {
+            const potBefore = shoe ? shoe.pot : 0;
+            const e = new game.Engine({
+                rng: new CV.RNG(5100 + g),
+                seats: [0, 1, 2, 3, 4].map((i) => new CV.Seat(i, {
+                    kind: i ? 'ai' : 'human', isYou: i === 0, name: 'S' + i, coins: 1e5,
+                })),
+                config: { shoe },
+            });
+            const ai = new CV.DragonGateAI(e);
+            e.start();
+
+            if (potBefore > 0) {
+                carried++;
+                check(e.pot === potBefore,
+                    `dragongate: carried ${potBefore} into a hand that started at ${e.pot}`);
+                check(e.seats.every((s) => s.ante === 0),
+                    'dragongate: a carried pot was anted into a second time');
+            } else {
+                antes++;
+                check(e.pot === ANTE * 5, `dragongate: five seats anted to ${e.pot}`);
+            }
+
+            const potStart = e.pot;
+            // After the ante, not before it: the ante is already inside
+            // potStart, and counting it on both sides would look like a leak.
+            const startCoins = e.seats.map((s) => s.coins);
+            let guard = 0;
+            while (!e.isOver() && guard++ < 30) {
+                const move = ai.decide(e.turn);
+                check(!!move, `dragongate: seat ${e.turn} had nothing to play`);
+                e.handle(move);
+            }
+            check(e.isOver(), 'dragongate: a five-seat hand never finished');
+
+            // Nothing is created and nothing is destroyed: every coin that
+            // left a seat is in the middle, and every coin taken out of the
+            // middle is at a seat.
+            const moved = e.seats.reduce((a, s, i) => a + (s.coins - startCoins[i]), 0);
+            check(potStart - e.pot === moved,
+                `dragongate: the middle moved ${potStart - e.pot} but the seats moved ${moved}`);
+            check(e.pot >= 0, `dragongate: the middle went to ${e.pot}`);
+            check(e.cleared === (e.pot === 0), 'dragongate: cleared disagrees with the middle');
+
+            const rows = e.result().ranks;
+            const house = rows.find((r) => r.house);
+            const players = rows.filter((r) => !r.house);
+            check(players.length === 5, `dragongate: ${players.length} seats in a five-seat recap`);
+            check(house && house.coins === -players.reduce((a, r) => a + r.coins, 0),
+                'dragongate: the middle does not hold the other side of the table');
+
+            shoe = e.shoeState;
+            coins = e.seats[0].coins;
+        }
+        check(carried > 5, `dragongate: the pot carried only ${carried} times in 60 hands`);
+        check(antes > 1, `dragongate: the pot was cleared only ${antes - 1} times in 60 hands`);
+        console.log(`  ${antes} fresh antes, ${carried} hands riding a carried pot — coins reconcile every time`);
+        console.log('  ✓ the middle is conserved: what leaves a seat lands in it, and back');
+        void coins;
     }
 
-    // The rules card must have something to show a first-time player.
-    check(game.rules && game.rules.length >= 5, 'dragongate: too few rules to teach the game');
-    for (const key of game.rules) check(CV.t(key) !== key, `dragongate: rule key ${key} has no text`);
-    for (const key of ['dg.gate', 'dg.post', 'dg.outside', 'dg.higher', 'dg.lower', 'dg.shut'])
-        check(CV.t(key) !== key, `dragongate: ${key} has no text`);
     /* --- a table takes turns, off one pack ------------------------------ */
 
     /**
-     * Four seats, and the three things a table can get wrong that one chair
+     * Five seats, and the three things a table can get wrong that one chair
      * cannot: a seat shooting out of turn, two seats being dealt the same
-     * card, and a round ending before everybody has had their gate.
-     *
-     * The pack is the interesting one. Every gate is priced from what is
-     * actually left, so if the seats were not drawing from the same pack the
-     * later quotes would be wrong without anything else looking wrong.
+     * card, and a hand ending before everybody has had their gate — unless
+     * the middle was emptied, which ends it there and then by design.
      */
     {
-        let rounds = 0, shots = 0, shut = 0, passes = 0;
+        let rounds = 0, shots = 0, shut2 = 0, passes = 0, cleared = 0;
         for (let g = 0; g < 60; g++) {
-            const rng = new CV.RNG(9000 + g);
             const e = new game.Engine({
-                rng,
-                seats: [
-                    new CV.Seat(0, { kind: 'human', isYou: true, coins: 5000 }),
-                    new CV.Seat(1, { kind: 'ai', name: 'A', coins: 5000 }),
-                    new CV.Seat(2, { kind: 'ai', name: 'B', coins: 5000 }),
-                    new CV.Seat(3, { kind: 'ai', name: 'C', coins: 5000 }),
-                ],
+                rng: new CV.RNG(9000 + g),
+                seats: [0, 1, 2, 3, 4].map((i) => new CV.Seat(i, {
+                    kind: i ? 'ai' : 'human', isYou: i === 0, name: 'S' + i, coins: 5000,
+                })),
                 config: { shoe: null },
             });
             const ai = new CV.DragonGateAI(e);
@@ -704,12 +828,12 @@ function auditDragonGate() {
                 const turn = e.turn;
 
                 // Nobody but the seat whose shot it is may act.
-                for (let i = 0; i < 4; i++) {
+                for (let i = 0; i < 5; i++) {
                     if (i === turn) continue;
                     check(e.legalActions(i).length === 0,
                         `dragongate: seat ${i} had actions on seat ${turn}'s gate`);
                 }
-                check(e.handle({ type: 'bet', seat: (turn + 1) % 4, amount: 10 }) === false,
+                check(e.handle({ type: 'bet', seat: (turn + 1) % 5, amount: 10 }) === false,
                     'dragongate: a seat acted out of turn and the engine took it');
 
                 const move = ai.decide(turn);
@@ -723,48 +847,38 @@ function auditDragonGate() {
                 const s = e.seats[turn];
                 if (s.done) {
                     if (s.skipped) passes++; else shots++;
-                    if (s.odds && s.odds.winners === 0) shut++;
+                    if (s.quote && e.quoteWinners(s) === 0) shut2++;
                     // A passed gate still spent its posts; only the third card
                     // is missing, because it was never drawn.
                     for (const c of s.gate.cards.concat(s.third ? [s.third] : [])) {
                         check(!seen.has(c.id),
-                            `dragongate: ${c.id} was dealt to two seats in one round`);
+                            `dragongate: ${c.id} was dealt to two seats in one hand`);
                         seen.add(c.id);
                     }
-                    check(!s.skipped || (s.third === null && s.bet === 0 && s.net === 0),
+                    check(!s.skipped || (s.third === null && s.bet === 0 && s.net === -s.ante),
                         `dragongate: seat ${turn} passed but was charged for it`);
                 }
             }
 
-            check(e.isOver(), 'dragongate: a four-seat round never finished');
-            check(e.seats.every((x) => x.done || x.out),
-                'dragongate: the round ended with a seat that never shot');
-
-            // Every seat is in the recap, and the gates carry the other side.
-            const rows = e.result().ranks;
-            const house = rows.find((r) => r.house);
-            const players = rows.filter((r) => !r.house);
-            check(players.length === 4, `dragongate: ${players.length} seats in a four-seat recap`);
-            check(house && house.coins === -players.reduce((n, r) => n + r.coins, 0),
-                'dragongate: the gates do not hold the other side of the table');
+            check(e.isOver(), 'dragongate: a five-seat hand never finished');
+            if (e.cleared) cleared++;
+            else {
+                check(e.seats.every((x) => x.done || x.out),
+                    'dragongate: the hand ended with a seat that never shot');
+            }
             rounds++;
         }
-        console.log(`  ${rounds} four-seat rounds — ${shots} gates shot off a shared pack, `
-            + `${passes} passed, ${shut} shut`);
+        console.log(`  ${rounds} five-seat hands — ${shots} gates shot off a shared pack, `
+            + `${passes} passed, ${shut2} shut, ${cleared} cleared the middle out`);
         console.log('  ✓ seats shoot in turn, and no card reached two of them');
-        console.log('  ✓ nobody is left without a gate, and the recap balances');
     }
 
     /* --- the gate comes first, and passing is free ---------------------- */
 
     /**
      * The ordering is the game. A seat must be looking at its posts, and at
-     * what they pay, *before* it is asked for money — otherwise "pass" is not
-     * a decision and an adjacent gate is just a levy.
-     *
-     * Three things are checked: nothing is staked before the gate exists, the
-     * quote a seat is shown is the price it is actually settled at, and a
-     * pass costs nothing and draws no third card.
+     * what can still get through them, *before* it is asked for money —
+     * otherwise "pass" is not a decision and an adjacent gate is just a levy.
      */
     {
         let quoted = 0, passed = 0, equalQuotes = 0;
@@ -779,46 +893,67 @@ function auditDragonGate() {
             check(e.phase === 'offer', 'dragongate: the turn did not open on an offer');
             check(!!e.gate && e.gate.cards.length === 2, 'dragongate: no posts at the offer');
             check(e.third === null, 'dragongate: a third card was drawn before any stake');
-            check(e.seat.bet === 0 && e.seat.coins === e.seat.startCoins,
+            check(e.seat.bet === 0 && e.seat.coins === e.seat.startCoins - e.seat.ante,
                 'dragongate: the seat was charged before it agreed to play');
 
             const q = e.quote;
-            check(!!q, 'dragongate: the gate was offered without a price');
+            check(!!q, 'dragongate: the gate was offered without a quote');
             const opts = e.legalActions(0).map((o) => o.type);
             check(opts.includes('skip'), 'dragongate: a gate was offered with no way to pass it');
             quoted++;
 
             if (e.gate.equal) {
-                // Both calls priced, because the seat has to weigh them.
-                check(q.higher && q.lower, 'dragongate: an equal gate quoted only one price');
+                // Both calls quoted, because the seat has to weigh them.
+                check(q.higher && q.lower, 'dragongate: an equal gate quoted only one call');
                 equalQuotes++;
                 e.handle({ type: 'bet', seat: 0, amount: 10 });
-                const dir = q.higher.mult >= q.lower.mult ? 'higher' : 'lower';
-                const want = q[dir];
+                const dir = q.higher.winners >= q.lower.winners ? 'higher' : 'lower';
                 e.handle({ type: 'pick', seat: 0, dir });
-                check(e.odds.mult === want.mult && e.odds.winners === want.winners,
-                    `dragongate: quoted x${want.mult} on ${dir}, settled at x${e.odds.mult}`);
+                const r = rank(e.third);
+                const wantWin = dir === 'higher' ? r > e.gate.low : r < e.gate.low;
+                check((e.outcome === 'gate') === wantWin,
+                    `dragongate: called ${dir} on ${e.gate.low}, got ${r}, said ${e.outcome}`);
             } else if (g % 3 === 0) {
-                // Pass it, and check the pass cost nothing.
+                // Pass it, and check the pass cost nothing beyond the ante.
+                const before = e.seat.coins;
                 e.handle({ type: 'skip', seat: 0 });
                 check(e.seat.skipped && e.seat.done, 'dragongate: a pass did not end the turn');
                 check(e.seat.third === null, 'dragongate: a passed gate still drew a third card');
-                check(e.seat.coins === e.seat.startCoins && e.seat.net === 0,
-                    'dragongate: passing cost the seat money');
-                check(e.isOver(), 'dragongate: the solo round did not end on a pass');
+                check(e.seat.coins === before, 'dragongate: passing cost the seat money');
+                check(e.isOver(), 'dragongate: the solo hand did not end on a pass');
                 passed++;
             } else {
                 const want = q.one;
-                e.handle({ type: 'bet', seat: 0, amount: 10 });
-                check(e.odds.mult === want.mult && e.odds.winners === want.winners,
-                    `dragongate: quoted x${want.mult}, settled at x${e.odds.mult}`);
+                const cap = e.callCap(e.seat);
+                e.handle({ type: 'bet', seat: 0, amount: cap });
+                check(e.quote.one.winners === want.winners,
+                    'dragongate: the quote changed once the call was made');
             }
         }
         check(passed > 20, `dragongate: only ${passed} gates were passed in 300`);
         check(equalQuotes > 5, `dragongate: only ${equalQuotes} equal gates in 300`);
-        console.log(`  ${quoted} gates offered before a stake \u2014 ${equalQuotes} of them quoted both calls`);
-        console.log('  \u2713 the price quoted is the price settled, and passing is free');
+        console.log(`  ${quoted} gates offered before a stake — ${equalQuotes} of them quoted both calls`);
+        console.log('  ✓ the quote is fixed when the gate is dealt, and passing is free');
     }
+
+    /* --- what the table is allowed to say out loud ---------------------- */
+
+    {
+        const e = rigged(5, 9, 7);
+        e.handle({ type: 'bet', amount: 10 });
+        const view = e.snapshotFor(0);
+        check(!view.rng, 'dragongate: the snapshot carries the RNG');
+        check(!('deck' in view), 'dragongate: the snapshot carries the pack');
+        check(view.shoeRemaining === e.deck.remaining, 'dragongate: the snapshot misreports the pack');
+        check(view.pot === e.pot, 'dragongate: the snapshot misreports the middle');
+    }
+
+    // The rules card must have something to show a first-time player.
+    check(game.rules && game.rules.length >= 5, 'dragongate: too few rules to teach the game');
+    for (const key of game.rules) check(CV.t(key) !== key, `dragongate: rule key ${key} has no text`);
+    for (const key of ['dg.gate', 'dg.post', 'dg.outside', 'dg.higher', 'dg.lower', 'dg.shut',
+                       'dg.pot', 'dg.cleared', 'dg.potLeft', 'dg.callNote'])
+        check(CV.t(key) !== key, `dragongate: ${key} has no text`);
 
     /* --- the call is the caller's, at every seat ------------------------ */
 
@@ -826,7 +961,7 @@ function auditDragonGate() {
     // in. This is the one rule a turn loop could quietly drop.
     {
         let asked = 0;
-        for (let g = 0; g < 200 && asked < 12; g++) {
+        for (let g = 0; g < 400 && asked < 12; g++) {
             const e = new game.Engine({
                 rng: new CV.RNG(400 + g),
                 seats: [0, 1, 2].map((i) => new CV.Seat(i, {
@@ -841,7 +976,9 @@ function auditDragonGate() {
                 const turn = e.turn;
                 check(e.phase === 'offer', `dragongate: seat ${turn} was not offered its gate`);
                 check(!!e.seats[turn].gate, 'dragongate: asked for a stake with no gate on the table');
-                e.handle({ type: 'bet', seat: turn, amount: 10 });
+                const cap = e.callCap(e.seats[turn]);
+                if (cap < 1) { e.handle({ type: 'skip', seat: turn }); continue; }
+                e.handle({ type: 'bet', seat: turn, amount: cap });
                 if (e.phase === 'choose') {
                     asked++;
                     check(e.seats[turn].third === null,
@@ -852,7 +989,7 @@ function auditDragonGate() {
                 }
             }
         }
-        check(asked >= 12, `dragongate: only ${asked} equal gates came up in 200 tables`);
+        check(asked >= 12, `dragongate: only ${asked} equal gates came up in 400 tables`);
         console.log(`  ✓ ${asked} equal gates, every one put to the seat holding it`);
     }
 
@@ -2380,8 +2517,9 @@ function auditBullBull() {
 
     const read = (str) => H.evaluate(bbCards(str));
     const CASES = [
-        // A + 2 + 7 = 10, and 8 + 3 = 11 leaves a one.
-        ['AS 2H 7D 8C 3S',   'BULL_1',        1],
+        // A + 2 + 7 = 10 leaves 8 and 3 for a one — but the 3 counts as a 6,
+        // and 8 + 6 is a four. The hand is read the higher way.
+        ['AS 2H 7D 8C 3S',   'BULL_4',        4],
         // 10 + K + Q = 30, and the pair of threes makes it 宝宝.
         ['10D KH QC 3S 3H',  'BABY',          6],
         // Five picture cards.
@@ -2390,12 +2528,20 @@ function auditBullBull() {
         ['10D KH QC JS AS',  'PIC_BLACK_ACE', 1],
         // 5 + 5 + K = 20, leaving a queen and the ace of clubs.
         ['5S 5H KD QC AC',   'PIC_BLACK_ACE', 1],
-        // Nothing makes ten, twenty or thirty.
-        ['2S 2H 2D 2C 3S',   'NO_BULL',       null],
+        // Nothing makes ten, twenty or thirty — not even with the swap.
+        ['2S 2H 2D 2C 5S',   'NO_BULL',       null],
+        // The same four twos with a 3: counted as a 6 it makes 2 + 2 + 6 = 10,
+        // which leaves the other two twos as a pair — so a hand that is 无牛
+        // on its face is a 宝宝·牛四.
+        ['2S 2H 2D 2C 3S',   'BABY',          4],
+        // 6 counted as 3: 4 + 3 + 3 = 10 leaves two aces, which is a 宝宝.
+        ['4S 6H 3D AC AH',   'BABY',          2],
         // 2 + 3 + 5 = 10, and 4 + 6 = 10 is a round bull.
         ['2S 3H 5D 4C 6H',   'BULL_BULL',     0],
         ['2S 3H 5D 4C 5H',   'BULL_9',        9],
-        ['2S 3H 5D 9C 2H',   'BULL_1',        1],
+        // 2 + 8 + 10 = 20 leaves an ace and a ten. No 3 and no 6, so there is
+        // only the one reading.
+        ['2S 8H 10D AC 10H', 'BULL_1',        1],
     ];
     for (const [str, type, bull] of CASES) {
         const h = read(str);
@@ -2407,14 +2553,14 @@ function auditBullBull() {
     /* --- the order, top to bottom -------------------------------------------- */
 
     const CHAIN = [
-        ['JS QH KD JC QS',  '五个 Pic'],
-        ['10D KH QC JS AS', 'Pic + Black Ace'],
-        ['2S 3H 5D 4C 6H',  '牛牛'],
-        ['10D KH QC 3S 3H', '宝宝·牛六'],
-        ['10D KH QC AS AH', '宝宝·牛二'],
-        ['2S 3H 5D 4C 5H',  '牛九'],
-        ['2S 3H 5D 9C 2H',  '牛一'],
-        ['2S 2H 2D 2C 3S',  '无牛'],
+        ['JS QH KD JC QS',   '五个 Pic'],
+        ['10D KH QC JS AS',  'Pic + Black Ace'],
+        ['2S 3H 5D 4C 6H',   '牛牛'],
+        ['10D KH QC 3S 3H',  '宝宝·牛六'],
+        ['10D KH QC AS AH',  '宝宝·牛二'],
+        ['2S 3H 5D 4C 5H',   '牛九'],
+        ['2S 8H 10D AC 10H', '牛一'],
+        ['2S 2H 2D 2C 5S',   '无牛'],
     ];
     for (let i = 0; i + 1 < CHAIN.length; i++) {
         const a = read(CHAIN[i][0]), b = read(CHAIN[i + 1][0]);
@@ -2457,8 +2603,16 @@ function auditBullBull() {
             // The invariants, on every hand there is.
             if (h.mult !== MULT[h.type]) check(false, `bb: ${h.type} paid ×${h.mult}`);
             if (h.type !== 'NO_BULL' && h.type !== 'FIVE_PIC') {
-                const sum = five.reduce((n, x) => n + H.value(x), 0) % 10;
+                // The bull is the last digit of the hand *as counted*, so the
+                // swaps the reading used are added back before comparing —
+                // which is also a check that `swaps` reports them honestly.
+                const face = five.reduce((n, x) => n + H.value(x), 0);
+                const adj = h.swaps.reduce((n, w) => n + (w.to - w.from), 0);
+                const sum = (face + adj) % 10;
                 if (h.bull !== sum) check(false, `bb: bull ${h.bull} against a hand total of ${sum}`);
+                for (const w of h.swaps) {
+                    if (H.SWAP[w.from] !== w.to) check(false, `bb: counted a ${w.from} as a ${w.to}`);
+                }
             }
             if (h.type === 'BABY' && h.bull % 2 !== 0) {
                 check(false, `bb: a 宝宝 landed on an odd bull (${h.bull})`);
@@ -2479,13 +2633,52 @@ function auditBullBull() {
         console.log('  ✓ the bull is the hand\'s last digit on every one of them');
     }
 
-    // The 3 ↔ 6 rule cannot fire, and that is a fact about pairs rather than a
-    // gap: two cards of the same value always sum to an even number.
+    // A 宝宝 is two cards of the same value *as counted*, and two equal
+    // numbers always sum to an even one — so a 宝宝 can never land on an odd
+    // bull, swap or no swap. The exhaustive pass above asserts it on all
+    // 2.6 million hands; this says why.
     {
         let odd = 0;
-        for (let val = 1; val <= 10; val++) if ((val * 2) % 10 % 2 === 1) odd++;
+        for (let val = 1; val <= 10; val++) if (((val * 2) % 10) % 2 === 1) odd++;
         check(odd === 0, 'bb: a pair somehow summed to an odd last digit');
-        console.log('  ✓ 宝宝 can only land on an even bull, so 牛三 never comes up to convert');
+        console.log('  ✓ 3 counts as 6 and 6 as 3, and a 宝宝 still lands only on an even bull');
+    }
+
+    /* --- the 3 ↔ 6 rule, on its own -------------------------------------- */
+
+    {
+        // Only the 3 and the 6 have a second value, and they swap into each
+        // other. Everything else is worth exactly one thing.
+        for (let r = 2; r <= 14; r++) {
+            const card = { r, s: 'S', id: 'x' + r };
+            const vals = H.valuesOf(card);
+            const face = H.value(card);
+            const want = (face === 3 || face === 6) ? 2 : 1;
+            check(vals.length === want,
+                `bb: rank ${r} can be counted ${vals.length} ways, wanted ${want}`);
+            check(vals[0] === face, `bb: rank ${r} does not lead with its face value`);
+            if (want === 2) check(vals[1] === 9 - face, `bb: ${face} does not swap to ${9 - face}`);
+        }
+
+        // The rule may only ever help. Reading a hand with the swap turned off
+        // can never beat reading it with the swap on, because the reading with
+        // the swap on includes the one without it.
+        let helped = 0;
+        const rng = new CV.RNG(4242);
+        for (let g = 0; g < 4000; g++) {
+            const deck = new CV.Cards.Deck(rng, { decks: 1 });
+            deck.shuffle();
+            const five = [deck.draw(), deck.draw(), deck.draw(), deck.draw(), deck.draw()];
+            const withSwap = H.evaluate(five);
+            // The same five with every 3 and 6 removed from the hand's reach:
+            // swapped hands must rank at least as high as their own face.
+            check(withSwap.swaps.every((w) => H.SWAP[w.from] === w.to),
+                'bb: a swap that is not in the table');
+            if (withSwap.swaps.length) helped++;
+        }
+        check(helped > 0, 'bb: the swap never fired in 4,000 hands');
+        console.log(`  ✓ only 3 and 6 have a second value, and it was used in `
+            + `${(helped / 40).toFixed(0)}% of 4,000 dealt hands`);
     }
 
     /* --- settling against the dealer ------------------------------------------ */
@@ -2514,7 +2707,9 @@ function auditBullBull() {
     };
 
     // The worked example: 牛八 against 牛五, a hundred up, pays two hundred.
-    const eight = rig('AS 4H 5D 8C KH', '2S 3H 5D 4C AH', 100);
+    // Neither hand holds a 3 or a 6, so there is one reading of each and the
+    // comparison being tested is the settlement rather than the evaluator.
+    const eight = rig('AS 4H 5D 8C KH', '2S 8H 10D 4C AH', 100);
     check(eight.hand.type === 'BULL_8', `bb: the test hand read as ${eight.hand.type}`);
     check(eight.outcome === 'win' && eight.net === 200,
         `bb: 牛八 over 牛五 on 100 netted ${eight.net}, wanted 200`);
@@ -2524,7 +2719,7 @@ function auditBullBull() {
     check(pic.net === 500, `bb: 五个 Pic over 牛牛 on 100 netted ${pic.net}, wanted 500`);
 
     // And the same table the other way round.
-    const lost = rig('2S 3H 5D 9C 2H', 'JS QH KD JC QS', 100);
+    const lost = rig('2S 8H 10D AC 10H', 'JS QH KD JC QS', 100);
     check(lost.outcome === 'loss' && lost.net === -500,
         `bb: 牛一 under 五个 Pic on 100 netted ${lost.net}, wanted -500`);
 
@@ -2532,7 +2727,7 @@ function auditBullBull() {
     check(push.outcome === 'push' && push.net === 0, `bb: a push netted ${push.net}`);
 
     // A seat cannot be taken below zero by a big dealer hand.
-    const broke = rig('2S 3H 5D 9C 2H', 'JS QH KD JC QS', 100000);
+    const broke = rig('2S 8H 10D AC 10H', 'JS QH KD JC QS', 100000);
     check(broke.coins >= 0, 'bb: a seat was taken below zero');
     console.log('  ✓ the winner\'s multiplier sets the swing, a tie returns the bet');
 

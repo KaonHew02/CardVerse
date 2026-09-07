@@ -46,6 +46,18 @@
          * it — and the stake column is what makes two different "Win" payouts
          * make sense, since a win pays on the winner's own stake.
          */
+        /**
+         * The cards nobody owned. Hold'em's five are what every hand at the
+         * table was made from, so a showdown recap without them is a list of
+         * two-card fragments and no way to check the winner.
+         */
+        const shared = summary.result.board;
+        const sharedBlock = (shared && shared.length) ? `
+            <div class="rc-shared">
+                <span class="rc-label">${esc(summary.result.boardLabel || t('res.community'))}</span>
+                ${CV.CardView.hand(shared, { size: 'sm' })}
+            </div>` : '';
+
         const withCards = rows.filter((r) => r.hands && r.hands.length);
         const cardsBlock = withCards.length ? `
             <div class="rc-board">
@@ -101,6 +113,7 @@
                     <div class="stat"><span class="label">${esc(t('res.winRate'))}</span><span class="value small">${pct(summary.winRateBefore)} → ${pct(summary.winRateAfter)}</span></div>
                 </div>
 
+                ${sharedBlock}
                 ${cardsBlock}
                 ${levelUp}${streak}
                 ${unlocked}${missions}

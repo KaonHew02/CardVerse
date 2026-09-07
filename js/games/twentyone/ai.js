@@ -53,6 +53,12 @@
         book(cards, up, can) {
             const sc = CV.TwentyOneScore(cards);
 
+            // 跑 costs nothing and fifteen is worth less than nothing: hit and
+            // a six busts it, stand and every dealer hand that is not a bust
+            // beats it. A free exit from a negative hand is never wrong, so
+            // this is checked before anything else.
+            if (can('run')) return 'run';
+
             // One card from 五龙. Under 12 it cannot bust at all, and up to 13
             // the odds still favour the 2:1 hand that beats everything.
             if (cards.length === 4 && sc.total <= CHASE_UNDER) return 'hit';

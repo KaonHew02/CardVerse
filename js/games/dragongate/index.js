@@ -31,18 +31,19 @@
         icon: '🐉',
         blurb: 'Two cards open a gate. Bet whether the third lands inside it.',
         category: 'cards',
-        players: [1, 4],
+        players: [5, 8],
         wagers: true,
         Engine: CV.DragonGateEngine,
         AI:     CV.DragonGateAI,
         View:   CV.DragonGateView,
 
-        rules: ['dg.rule1', 'dg.rule2', 'dg.rule3', 'dg.rule4', 'dg.rule5', 'dg.rule6'],
+        rules: ['dg.rule7', 'dg.rule1', 'dg.rule2', 'dg.rule3', 'dg.rule4',
+                'dg.rule5', 'dg.rule8', 'dg.rule6'],
 
         extraLabels: {
             dgRounds: 'Gates opened', dgWins: '射中龙门', dgPosts: '压线',
             dgEqual: 'Equal gates', dgShut: 'Adjacent gates', dgSkips: 'Gates passed',
-            forfeits: 'Walked away',
+            dgCleared: 'Pots cleared out', forfeits: 'Walked away',
         },
 
         achievements: [

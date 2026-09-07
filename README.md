@@ -28,18 +28,18 @@ keeps it a game hub.
 | Daily missions, daily login calendar, win streaks | ✅ |
 | Cosmetics: avatars, card backs, tables, tile skins | ✅ |
 | Export / Import, Google Drive copy | ✅ `save.js`, `drive.js` |
-| 🃏 **21** | ✅ house rules — no natural, DOUBLE, and 五龙 pays 2:1 |
+| 🃏 **21** | ✅ house rules — no natural, DOUBLE, 五龙 pays 2:1, and 十五点可以跑 |
 | 🎴 **百家乐** | ✅ |
-| 🎰 **老虎机** | ✅ 3 reels, 1 payline, auto-spin |
-| 🐉 **射龙门** | ✅ ace low, 压线 loses, equal posts ask 大过/小过, price from the pack |
+| 🎰 **老虎机** | ✅ 3 reels, 1 payline, two-of-a-kind pays, ~95% RTP, auto-spin |
+| 🐉 **射龙门** | ✅ a pot everybody antes into and shoots at — 撞柱 pays it double, and it carries between hands |
 | 👑 **斗地主** | ✅ bidding, every combination, bombs, 春天 and 反春 |
 | 🂡 **锄大D** | ✅ 3♦ opens, suits decide, five-card categories |
 | ♠️ **Poker** | ✅ Hold'em — blinds, four betting rounds, all-in side pots |
-| 🀄 **Mahjong** | ✅ 136 tiles at four seats; dots, flowers and 飞 at three, with a 5番 floor and 爆番 |
-| 🐮 **斗牛** | ✅ 宝宝, Pic + Black Ace, 五个 Pic, and the multiplier table |
+| 🀄 **Mahjong** | ✅ 136 tiles at four seats; dots, flowers and 飞 at three, with a 5番 floor and 爆番. Seats around a felt, discards pooled in the middle |
+| 🐮 **斗牛** | ✅ three cards then two, a 3 counts as a 6, 宝宝, Pic + Black Ace, 五个 Pic |
 | 🧩 **Lami** | ✅ rummy on tiles — runs, sets, jokers, dice for the opener |
 | 🎲 **骰子** | ✅ three dice — 大 / 小 / 围骰, checked over all 216 throws |
-| 🎯 **Roulette Party** | ✅ abstract 6-slot spinner — hearts, events, final round |
+| 🎡 **轮盘 Roulette** | ✅ single-zero wheel, 37 pockets, numbers · dozens · columns · even money |
 | How-to-play card before a first hand | ✅ per game, in both languages |
 | Online multiplayer | ⏳ Phase 5 — see `js/core/transport.js` |
 
@@ -79,7 +79,7 @@ js/games/<game>/      engine.js · ai.js · view.js · index.js (registers itsel
   bullbull/           斗牛 — hands.js reads it, engine.js prices it
   lami/               Lami — rummy melds; shares nothing with mahjong/
   dice/               骰子 — dice.js reads the throw, engine.js prices it
-  roulette/           Roulette Party — an abstract spinner, not a weapon
+  roulette/           轮盘 — a single-zero wheel; wheel.js holds every price
 js/ui/                shell · lobby · play · result · profile · achievements ·
                       statistics · missions · settings · cardview
 js/save.js            Export / Import envelope

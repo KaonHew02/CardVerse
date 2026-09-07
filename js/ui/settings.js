@@ -18,10 +18,21 @@
 
     const DEFAULTS = {
         theme: 'auto',        // auto | dark | light
-        fastAnim: false,
+        pace: 'normal',       // relaxed | normal | fast — see PACE
+        fastAnim: false,      // legacy: the old two-state switch
         hints: true,          // show the basic-strategy hint at the table
         aiCount: 2,
     };
+
+    /**
+     * How long the table takes over itself, as a multiplier on every delay:
+     * AI thinking, cards turning, dice tumbling, the ball running.
+     *
+     * Bigger is slower. `normal` is above 1 on purpose — the original timings
+     * resolved a five-seat table faster than the middle of it could be read,
+     * which is the complaint this setting exists to answer.
+     */
+    const PACE = { relaxed: 1.9, normal: 1.35, fast: 0.6 };
 
     let state = null;
 
@@ -34,12 +45,27 @@
         return state;
     }
 
+    /**
+     * The multiplier every table's timers are scaled by.
+     *
+     * A save written before the pace setting existed carries `fastAnim`
+     * instead, so that is read as the old two-state switch rather than
+     * silently ignored.
+     */
+    function speed() {
+        const s = get();
+        if (PACE[s.pace]) return PACE[s.pace];
+        return s.fastAnim ? PACE.fast : PACE.normal;
+    }
+
     function apply() {
         const s = get();
         const root = document.documentElement;
         if (s.theme === 'auto') delete root.dataset.theme;
         else root.dataset.theme = s.theme;
-        root.dataset.fast = s.fastAnim ? '1' : '0';
+        // The CSS transition switch follows the pace: only the fastest step
+        // shortens the transitions the stylesheet owns.
+        root.dataset.fast = speed() < 1 ? '1' : '0';
     }
 
     /* ---- screen ---------------------------------------------------------- */
@@ -68,10 +94,13 @@
                         <option value="light" ${s.theme === 'light' ? 'selected' : ''}>${esc(t('set.themeLight'))}</option>
                     </select>
                 </label>
-                <label class="row-opt">
-                    <span>${esc(t('set.fast'))}<small class="muted"> — ${esc(t('set.fastNote'))}</small></span>
-                    <input type="checkbox" data-set="fastAnim" ${s.fastAnim ? 'checked' : ''}>
-                </label>
+                <div class="row-opt">
+                    <span>${esc(t('set.pace'))}<small class="muted"> — ${esc(t('set.paceNote'))}</small></span>
+                    <div class="seg" id="setPace">
+                        ${['relaxed', 'normal', 'fast'].map((k) =>
+                            `<button class="${s.pace === k ? 'is-on' : ''}" data-pace="${k}">${esc(t('set.pace.' + k))}</button>`).join('')}
+                    </div>
+                </div>
             </div>
 
             <div class="card-panel">
@@ -143,6 +172,14 @@
             });
         });
 
+        host.querySelectorAll('[data-pace]').forEach((el) => {
+            el.addEventListener('click', () => {
+                set('pace', el.dataset.pace);
+                CV.UI.go('settings');
+                CV.UI.toast(t('set.saved'), 'ok', 1200);
+            });
+        });
+
         $('setName').addEventListener('change', (e) => {
             if (CV.Profile.rename(e.target.value)) { CV.UI.header(); CV.UI.toast(t('set.nickSaved'), 'ok', 1200); }
             else e.target.value = p.name;
@@ -174,6 +211,6 @@
         if (typeof window.CVDriveRewire === 'function') window.CVDriveRewire();
     }
 
-    CV.Settings = { DEFAULTS, get, set, apply };
+    CV.Settings = { DEFAULTS, PACE, get, set, apply, speed };
     CV.UI.screen('settings', { render });
 })();

@@ -27,6 +27,9 @@
     /** One beat per half-hand: three cards, then two. */
     const BEAT_MS = 430;
 
+    /** Beats spent dealing before anything is turned over: three, then two. */
+    const DEAL_BEATS = 2;
+
     class BullBullView {
         constructor(root, table, session) {
             this.root    = root;
@@ -41,15 +44,31 @@
 
         get you() { return this.engine.youSeat; }
 
-        /** Two beats a hand — the dealer's first, then each seat's. */
+        /**
+         * The whole round, as beats.
+         *
+         * Two for the deal — three cards to everybody, then the other two —
+         * and then two per hand for the comparison, the dealer's first. The
+         * deal is beats rather than a single frame because that is how 斗牛 is
+         * played: you look at three, and then you find out.
+         */
         get toShow() {
             const e = this.engine;
-            return e.phase === 'betting' ? 0 : (1 + e.seats.filter((s) => !s.out).length) * 2;
+            if (e.phase === 'betting') return 0;
+            return DEAL_BEATS + (1 + e.seats.filter((s) => !s.out).length) * 2;
         }
         get revealing() { return this.shown < this.toShow; }
 
+        /** How many cards are physically on the table, per seat. */
+        get dealt() {
+            if (this.shown <= 0) return 0;
+            return this.shown === 1 ? CV.BullBullFirstPass : 5;
+        }
+
         /** 0 face down, 1 the three that make the ten, 2 the whole hand. */
-        stageOf(hand) { return Math.max(0, Math.min(2, this.shown - hand * 2)); }
+        stageOf(hand) {
+            return Math.max(0, Math.min(2, this.shown - DEAL_BEATS - hand * 2));
+        }
 
         mount() {
             this.root.innerHTML = `
@@ -99,13 +118,26 @@
          * A 无牛 hand has no such three, so it turns the first three and then
          * the rest, which is the same shape with nothing to show for it.
          */
-        handHtml(cards, hand, stage) {
-            if (stage <= 0) return CV.CardView.hand(cards.map(() => null), {});
+        handHtml(cards, hand, stage, mine) {
+            // Only what has physically been dealt so far. During the two deal
+            // beats this is three cards and then five, which is what makes the
+            // deal readable as a deal rather than as a finished hand.
+            const out = cards.slice(0, this.dealt);
+            if (!out.length) return '<div class="hand hand-empty"></div>';
+
+            // Your own cards are yours the moment they land. Everybody else's
+            // stay down until the comparison reaches them.
+            if (stage <= 0) {
+                return `<div class="hand">${out.map((c) => CV.CardView.html(c, {
+                    faceDown: !mine, fresh: mine && !this.known.has(c.id),
+                })).join('')}</div>`;
+            }
+
             const three = (hand && hand.three) ? hand.three : cards.slice(0, 3);
             const inCombo = new Set(three.map((c) => c.id));
             const marks = !!(hand && hand.three);
-            return `<div class="hand">${cards.map((c) => {
-                if (stage < 2 && !inCombo.has(c.id)) return CV.CardView.html(null, { faceDown: true });
+            return `<div class="hand">${out.map((c) => {
+                if (stage < 2 && !inCombo.has(c.id)) return CV.CardView.html(c, { faceDown: true });
                 return CV.CardView.html(c, {
                     fresh: !this.known.has(c.id),
                     cls: (marks && inCombo.has(c.id)) ? 'is-combo' : '',
@@ -113,15 +145,25 @@
             }).join('')}</div>`;
         }
 
+        /**
+         * "3 counted as 6" — the swaps a hand needed to read as high as it
+         * does. Without this the number looks arbitrary on exactly the hands
+         * where the house rule did the work.
+         */
+        swapNote(hand) {
+            if (!hand || !hand.swaps || !hand.swaps.length) return '';
+            const pairs = hand.swaps.map((s) => `${s.from}→${s.to}`).join(' ');
+            return `<span class="bb-swap" title="${esc(t('bb.swapNote'))}">${esc(pairs)}</span>`;
+        }
+
         paintDealer() {
             const e = this.engine;
             const stage = e.dealer.cards.length ? this.stageOf(0) : 0;
             this.$('bbDealer').innerHTML = `
                 <div class="bj-rule">${esc(t('table.dealer'))}</div>
-                ${e.dealer.cards.length
-                    ? this.handHtml(e.dealer.cards, e.dealer.hand, stage)
-                    : `<div class="hand hand-empty"></div>`}
-                <div class="bb-name">${stage >= 2 ? esc(e.handName(e.dealer.hand)) : ''}</div>`;
+                ${this.handHtml(e.dealer.cards, e.dealer.hand, stage, false)}
+                <div class="bb-name">${stage >= 2 ? esc(e.handName(e.dealer.hand)) : ''}
+                    ${stage >= 2 ? this.swapNote(e.dealer.hand) : ''}</div>`;
         }
 
         seatBox(s, order) {
@@ -141,11 +183,10 @@
                             <span class="coins">🪙 ${fmt(s.coins)}</span></span>
                         ${badge}
                     </div>
-                    ${s.cards.length
-                        ? this.handHtml(s.cards, s.hand, stage)
-                        : `<div class="hand hand-empty"></div>`}
+                    ${this.handHtml(s.cards, s.hand, stage, mine)}
                     <div class="hand-meta">
                         <span class="bb-name">${up ? esc(e.handName(s.hand)) : ''}</span>
+                        ${up ? this.swapNote(s.hand) : ''}
                         ${up && s.hand ? `<span class="bb-mult">×${s.hand.mult}</span>` : ''}
                         ${s.bet ? `<span class="bet">🪙 ${fmt(s.bet)}</span>` : ''}
                         ${up && s.outcome ? `<span class="${s.net > 0 ? 'good' : s.net < 0 ? 'bad' : ''}">${signed(s.net)}</span>` : ''}
@@ -166,6 +207,10 @@
                 host.innerHTML = e.turn === this.you
                     ? `<span class="you">${esc(t('table.yourBet'))}</span>`
                     : `<span class="muted">${esc(t('bb.waiting', { name: e.seats[e.turn].name }))}</span>`;
+                return;
+            }
+            if (this.shown < DEAL_BEATS) {
+                host.innerHTML = `<span class="muted">${esc(t(this.shown === 0 ? 'bb.dealing3' : 'bb.dealing2'))}</span>`;
                 return;
             }
             if (this.revealing) { host.innerHTML = `<span class="muted">${esc(t('bb.showing'))}</span>`; return; }

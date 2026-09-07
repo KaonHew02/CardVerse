@@ -22,8 +22,16 @@
 (() => {
     'use strict';
 
-    /** How long a seat appears to think. Long enough to be seen deciding. */
-    const THINK = [420, 1050];
+    /**
+     * How long a seat appears to think.
+     *
+     * Long enough to be *watched* deciding, not merely long enough to notice
+     * something happened. A table of five AI seats resolving in half a second
+     * each still reads as a flicker, so the floor is set where one seat's turn
+     * is a beat you can follow. `Table.speed` scales this, and the pace
+     * setting scales that — see settings.js.
+     */
+    const THINK = [700, 1500];
 
     /** Table personalities, so four AI seats are not four clones. */
     const PERSONAS = [

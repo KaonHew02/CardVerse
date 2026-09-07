@@ -24,6 +24,7 @@
         dragons: { key: 'out.dragons', cls: 'win' },
         win:     { key: 'out.win',     cls: 'win' },
         push:    { key: 'out.push',    cls: 'push' },
+        run:     { key: 'out.run',     cls: 'push' },
         loss:    { key: 'out.loss',    cls: 'loss' },
         bust:    { key: 'out.bust',    cls: 'loss' },
     };
@@ -190,7 +191,8 @@
             const badge = h.outcome && OUTCOME[h.outcome]
                 ? `<span class="badge ${OUTCOME[h.outcome].cls}">${esc(t(OUTCOME[h.outcome].key))} ${signed(h.payout - h.bet)}</span>`
                 : '';
-            const tags = h.doubled ? '<small>2×</small>' : '';
+            const tags = (h.doubled ? '<small>2×</small>' : '')
+                + (h.ran ? `<small class="tag-run">${esc(t('out.run'))}</small>` : '');
             return `
                 <div class="seat-hand${active ? ' is-active' : ''}${h.done && !h.outcome ? ' is-done' : ''}${sc.dragons ? ' is-dragons' : ''}">
                     ${this.cards(h.cards, false)}

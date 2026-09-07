@@ -1,14 +1,23 @@
 /**
  * CardVerse — the 麻将 table.
  *
- * Tiles are drawn in CSS, the same way the cards are: a face with a number
- * and a suit mark, or an honour's character. No sprite sheet, so a tile skin
- * is a CSS rule and the folder stays copyable.
+ * Laid out the way a table is laid out, because mahjong is a game about where
+ * things are: the seats sit around the felt in turn order, each one's melds
+ * next to it and its concealed tiles face down, and everything anybody has
+ * thrown goes into the pool in the middle — each seat's discards in front of
+ * that seat, which is the only arrangement that lets you read at a glance who
+ * threw the tile you want.
  *
- * Each opponent shows what is public about them — how many tiles they hold,
- * what they have melded, and everything they have thrown. The tile just
- * thrown is marked, because a claim has to be decided on it and it is
- * otherwise lost in a row of twenty.
+ * The wind, the wall count and the stake sit in the centre of the pool, where
+ * the dice and the wind indicator sit on a real table.
+ *
+ * Tiles are drawn in CSS and SVG, the same way the cards are — a face with a
+ * drawn suit or an honour's character. See faces.js: a tile that says "1筒"
+ * is readable, but it is not a mahjong tile.
+ *
+ * **Your flowers are shown as flowers.** A count told you how many you had
+ * and never which, and 花 is the one part of a three-player hand you cannot
+ * work out from anything else on the screen.
  *
  * You discard by tapping a tile. 碰 吃 杠 胡 appear only when they are
  * actually available, which the engine decides, not the screen.
@@ -25,7 +34,8 @@
 
     /** One tile face. `null` draws a back. */
     function tileHtml(tile, opts = {}) {
-        const extra = (opts.cls ? ' ' + opts.cls : '') + (opts.small ? ' tile-sm' : '');
+        const extra = (opts.cls ? ' ' + opts.cls : '') + (opts.small ? ' tile-sm' : '')
+            + (opts.tiny ? ' tile-xs' : '');
         if (!tile) return `<span class="tile tile-back${extra}"></span>`;
         // 飞 is a wild card and reads as one: no number, no suit, its own face.
         if (tile.suit === 'F') {
@@ -40,13 +50,25 @@
             return `<span class="tile tile-z z${tile.n}${extra}" data-id="${tile.id}"
                 aria-label="${esc(MJ.nameEn(tile))}"><b>${MJ.HONOURS[tile.n - 1]}</b></span>`;
         }
-        // The face is drawn, not written — see faces.js. A tile that says
-        // "1筒" is readable, but it is not a mahjong tile.
+        // The face is drawn, not written — see faces.js.
         return `<span class="tile tile-${tile.suit}${extra}" data-id="${tile.id}"
             aria-label="${esc(MJ.nameEn(tile))}">${CV.MJFaces.suitFace(tile.suit, tile.n)}</span>`;
     }
 
     const row = (tiles, opts) => tiles.map((x) => tileHtml(x, opts)).join('');
+
+    /**
+     * Where each opponent sits, by how far round the table they are.
+     *
+     * At four seats the next player is on your left, the one after that is
+     * across, and the last is on your right — turn order runs left, across,
+     * right, back to you. At three there is no chair across, so the two
+     * opponents take the sides.
+     */
+    const PLACES = {
+        4: ['left', 'top', 'right'],
+        3: ['left', 'right'],
+    };
 
     class MahjongView {
         constructor(root, table, session) {
@@ -59,11 +81,31 @@
         get you() { return this.engine.youSeat; }
         get revealing() { return false; }
 
+        /** `{ seat, place }` for every chair that is not yours, in turn order. */
+        places() {
+            const e = this.engine;
+            const you = this.you < 0 ? 0 : this.you;
+            const spots = PLACES[e.players] || PLACES[4];
+            const out = [];
+            for (let k = 1; k < e.players; k++) out.push({ seat: (you + k) % e.players, place: spots[k - 1] });
+            return out;
+        }
+
         mount() {
             this.root.innerHTML = `
                 <div class="mj">
-                    <div class="mj-seats" id="mjSeats"></div>
-                    <div class="mj-centre" id="mjCentre"></div>
+                    <div class="mj-table">
+                        <div class="mj-seat-slot at-top"    id="mjSeatTop"></div>
+                        <div class="mj-seat-slot at-left"   id="mjSeatLeft"></div>
+                        <div class="mj-seat-slot at-right"  id="mjSeatRight"></div>
+                        <div class="mj-pool">
+                            <div class="mj-pool-cell at-top"    id="mjPoolTop"></div>
+                            <div class="mj-pool-cell at-left"   id="mjPoolLeft"></div>
+                            <div class="mj-hub"                 id="mjHub"></div>
+                            <div class="mj-pool-cell at-right"  id="mjPoolRight"></div>
+                            <div class="mj-pool-cell at-bottom" id="mjPoolBottom"></div>
+                        </div>
+                    </div>
                     <div class="bj-status" id="mjStatus"></div>
                     <div class="mj-you" id="mjYou"></div>
                     <div class="bj-actions" id="mjActions"></div>
@@ -79,7 +121,8 @@
 
         paint() {
             this.paintSeats();
-            this.paintCentre();
+            this.paintPool();
+            this.paintHub();
             this.paintStatus();
             this.paintYou();
             this.paintActions();
@@ -93,36 +136,69 @@
             return MJ.HONOURS[(i - e.dealer + e.players) % e.players];
         }
 
-        meldHtml(meld) {
+        meldHtml(meld, opts) {
             const tiles = meld.concealed && meld.type === 'kong'
                 ? [null, meld.tiles[1], meld.tiles[2], null]     // a concealed kong shows its middle
                 : meld.tiles;
-            return `<span class="mj-meld">${row(tiles, { small: true })}</span>`;
+            return `<span class="mj-meld">${row(tiles, opts || { small: true })}</span>`;
         }
 
-        seatBox(i) {
+        /**
+         * The flowers a seat has turned, as flowers.
+         *
+         * They are set aside from the hand and pay on their own, so they are
+         * shown apart from it — and shown at all, which a count never did.
+         */
+        flowersHtml(s, opts) {
+            if (!s.flowers.length) return '';
+            return `<span class="mj-flower-strip">${row(s.flowers, opts || { tiny: true })}</span>`;
+        }
+
+        /* ---- the seats around the felt -------------------------------------- */
+
+        seatBox(i, place) {
             const e = this.engine;
             const s = e.seats[i];
             const turn = e.turn === i && !e.over;
             const open = e.over && i === e.winner;
-            const hand = (i === this.you || open) ? s.hand : s.hand.map(() => null);
+            const upright = place === 'top';
+            // A concealed hand is a wall of backs — the count is the
+            // information, and it is on the badge as well.
+            const hand = (open ? s.hand : s.hand.map(() => null));
 
             return `
-                <div class="seat mj-seat${turn ? ' is-turn' : ''}">
-                    <div class="seat-head">
+                <div class="mj-seat at-${place}${turn ? ' is-turn' : ''}${open ? ' is-winner' : ''}">
+                    <div class="mj-seat-head">
                         <span class="avatar">${s.avatar}</span>
-                        <span class="who"><span class="name">${esc(s.name)}</span>
-                            <span class="coins">🪙 ${fmt(s.coins)}</span></span>
-                        <span class="tag mj-count">${s.hand.length}</span>
-                        ${s.flowers.length ? `<span class="tag mj-flowers">花 ${s.flowers.length}</span>` : ''}
+                        <span class="who">
+                            <span class="name">${esc(s.name)}</span>
+                            <span class="coins">🪙 ${fmt(s.coins)}</span>
+                        </span>
                         <span class="tag mj-wind${i === e.dealer ? ' is-dealer' : ''}">${this.windOf(i)}</span>
+                        <span class="tag mj-count">${s.hand.length}</span>
                     </div>
-                    <div class="mj-hand-row">${row(hand, { small: true })}</div>
-                    <div class="mj-melds">${s.melds.map((m) => this.meldHtml(m)).join('')}</div>
-                    <div class="mj-discards">${this.discardRow(i)}</div>
+                    ${this.flowersHtml(s)}
+                    <div class="mj-wall-row${upright ? '' : ' is-side'}">${row(hand, { tiny: true })}</div>
+                    <div class="mj-melds">${s.melds.map((m) => this.meldHtml(m, { tiny: true })).join('')}</div>
                 </div>`;
         }
 
+        paintSeats() {
+            for (const id of ['mjSeatTop', 'mjSeatLeft', 'mjSeatRight']) this.$(id).innerHTML = '';
+            for (const { seat, place } of this.places()) {
+                const host = this.$('mjSeat' + place[0].toUpperCase() + place.slice(1));
+                if (host) host.innerHTML = this.seatBox(seat, place);
+            }
+        }
+
+        /* ---- the pool in the middle ------------------------------------------ */
+
+        /**
+         * Everything a seat has thrown, in the order it was thrown, sitting on
+         * that seat's side of the pool. The tile just discarded is marked,
+         * because a claim has to be decided on it and it is otherwise lost in
+         * a row of twenty.
+         */
         discardRow(i) {
             const e = this.engine;
             const s = e.seats[i];
@@ -133,21 +209,24 @@
             })).join('');
         }
 
-        paintSeats() {
-            const e = this.engine;
-            const you = this.you < 0 ? -1 : this.you;
-            const others = [];
-            for (let k = 1; k < e.players; k++) others.push((you + k) % e.players);
-            this.$('mjSeats').innerHTML = others.map((i) => this.seatBox(i)).join('');
+        paintPool() {
+            const cells = { top: 'mjPoolTop', left: 'mjPoolLeft', right: 'mjPoolRight', bottom: 'mjPoolBottom' };
+            for (const id of Object.values(cells)) this.$(id).innerHTML = '';
+            if (this.you >= 0) this.$(cells.bottom).innerHTML = this.discardRow(this.you);
+            for (const { seat, place } of this.places()) {
+                this.$(cells[place]).innerHTML = this.discardRow(seat);
+            }
         }
 
-        paintCentre() {
+        /** The wind, the wall and the stake — the centre of a real table. */
+        paintHub() {
             const e = this.engine;
-            this.$('mjCentre').innerHTML = `
-                <span class="pile-label">${esc(t('mj.wall', { n: e.wallLeft }))}</span>
-                <span class="mj-mode">${esc(t('mj.mode', { n: e.players }))}</span>
-                <span class="mj-mode">${esc(t('mj.unit', { n: e.unit }))}</span>
-                ${e.mode.flyEnabled ? `<span class="mj-mode">${esc(t('mj.flyOn'))}</span>` : ''}
+            this.$('mjHub').innerHTML = `
+                <span class="mj-hub-wind">${esc(this.windOf(this.you < 0 ? 0 : this.you))}</span>
+                <span class="mj-hub-wall">${esc(t('mj.wall', { n: e.wallLeft }))}</span>
+                <span class="mj-hub-line">${esc(t('mj.mode', { n: e.players }))}</span>
+                <span class="mj-hub-line">${esc(t('mj.unit', { n: e.unit }))}</span>
+                ${e.mode.flyEnabled ? `<span class="mj-hub-line">${esc(t('mj.flyOn'))}</span>` : ''}
                 ${e.minFan ? `<span class="mj-min">${esc(t('mj.min', { n: e.minFan }))}</span>` : ''}`;
         }
 
@@ -190,8 +269,12 @@
             host.innerHTML = `
                 <div class="hand-head">
                     <span class="tag mj-wind${this.you === e.dealer ? ' is-dealer' : ''}">${this.windOf(this.you)}</span>
-                    ${s.flowers.length ? `<span class="tag mj-flowers">花 ${s.flowers.length}</span>` : ''}
-                    <span class="seat-count">${esc(t('mj.wall', { n: e.wallLeft }))}</span>
+                    ${s.flowers.length
+                        ? `<span class="mj-flowers-mine">
+                             <span class="mj-flowers-label">${esc(t('mj.myFlowers', { n: s.flowers.length }))}</span>
+                             ${row(s.flowers, { small: true })}
+                           </span>`
+                        : `<span class="muted small">${esc(t('mj.noFlowers'))}</span>`}
                 </div>
                 <div class="mj-melds mine">${s.melds.map((m) => this.meldHtml(m)).join('')}</div>
                 <div class="mj-mine">

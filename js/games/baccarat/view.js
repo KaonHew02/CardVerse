@@ -207,6 +207,8 @@
                     <div class="btn-row chips">
                         ${chips.map((v) => `<button class="chip" data-act="chip" data-v="${v}">${fmt(v)}</button>`).join('')}
                     </div>
+                    <div class="pick-line">${esc(t('bac.backing'))}
+                        <b class="bac-pick side-${this.side}">${esc(t('bac.' + this.side))}</b></div>
                     <div class="btn-row">
                         <button class="btn primary big" data-act="wager">${esc(t('bac.place'))}</button>
                     </div>

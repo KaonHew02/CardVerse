@@ -79,6 +79,9 @@
                                         <td>${sym.icon} ${sym.icon} ${sym.icon}</td>
                                         <td class="num">×${sym.mult}</td>
                                     </tr>`).join('')}
+                                <tr class="slot-pay-split"><td>${esc(t('slots.payPairs'))}</td><td></td></tr>
+                                <tr><td>7️⃣ 7️⃣ · 💎 💎</td><td class="num">×2</td></tr>
+                                <tr><td>${esc(t('slots.payAnyTwo'))}</td><td class="num">×1</td></tr>
                             </tbody></table>
                             <p class="muted small">${esc(t('slots.payNote'))}</p>
                         </div>
@@ -206,6 +209,14 @@
             if (spin.jackpot) {
                 shout.textContent = t('slots.jackpot', { n: fmt(spin.payout) });
                 shout.className = 'slot-shout is-jackpot';
+            } else if (spin.kind === 'pair') {
+                // A pair that only returns the stake is not a win and must not
+                // be shouted as one — the meter would be telling the player
+                // they are up on a spin that moved nothing.
+                shout.textContent = spin.payout > spin.bet
+                    ? t('slots.won', { n: fmt(spin.payout), mult: spin.mult })
+                    : t('slots.pair', { n: fmt(spin.payout) });
+                shout.className = 'slot-shout ' + (spin.payout > spin.bet ? 'is-win' : 'is-pair');
             } else if (spin.payout > 0) {
                 shout.textContent = t('slots.won', { n: fmt(spin.payout), mult: spin.mult });
                 shout.className = 'slot-shout is-win';
@@ -304,6 +315,7 @@
                              ${AUTO_STEPS.map((n) => `<button class="btn tiny" data-act="auto" data-n="${n}" ${busy ? 'disabled' : ''}>${n}</button>`).join('')}
                            </div>`}
                     <button class="btn ghost" data-act="leave" ${busy ? 'disabled' : ''}>${esc(t('slots.leave'))}</button>
+                    <p class="muted small center">${esc(t('slots.leaveNote'))}</p>
                 </div>`;
         }
 

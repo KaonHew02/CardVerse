@@ -410,6 +410,11 @@
             const top = this.pots.length ? this.pots[this.pots.length - 1] : null;
             this.cached = new CV.GameResult({
                 ranks: rows,
+                // The five that everybody played off. Without them the recap
+                // shows a row of two-card fragments and no way to check why
+                // one of them won.
+                board: this.board.slice(),
+                boardLabel: t('pk.board'),
                 detail: this.showing && top
                     ? t('pk.detailShow', {
                         name: top.winners.map((i) => this.seats[i].name).join(', '),
