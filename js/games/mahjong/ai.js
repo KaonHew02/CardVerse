@@ -14,11 +14,15 @@
  * closer to ready than the hand without it. 胡 is never declined.
  *
  * **A table with a minimum changes the whole game, so it changes the whole
- * player.** Three-player needs 5番 to declare anything, and the fastest hand
- * on the table is usually worth one. So when there is a floor, this player
- * stops racing: it stays 门清 — every 吃 and 碰 throws away a 番 and buys
- * nothing — and it pushes its discards towards one suit, which is where 混一色
- * and 清一色 come from. Slower, and the only way to be allowed to win.
+ * player.** Three seats need 2番 to declare anything and the fastest hand on
+ * the table is worth one, so this player stops racing. It stays 门清 where it
+ * can — 门清 is a 番 and a claim throws it away — and it pushes its discards
+ * towards one suit, which is where 清一色 comes from.
+ *
+ * It will still claim, but only while the claim leads somewhere that clears
+ * the floor. Melded, a hand has two ways over it: every meld a triplet
+ * (碰碰胡) or every tile one suit (清一色). A 吃 gives up both at once, so it
+ * is never taken; a 碰 is taken while one of them is still alive.
  */
 
 (() => {
@@ -90,7 +94,8 @@
 
         /**
          * The suit this hand is drifting towards — the one it holds most of.
-         * Honours count for neither, since 混一色 keeps them either way.
+         * Honours belong to no suit and are counted for none: a hand full of
+         * them is heading for 字一色 or nothing, not for a flush.
          */
         targetSuit(seat) {
             const s = this.engine.seats[seat];
@@ -134,6 +139,26 @@
 
         /* ---- somebody else's discard --------------------------------------------- */
 
+        /**
+         * Would taking this tile leave a hand that is allowed to win?
+         *
+         * Without a floor, any claim that helps is worth making. With one,
+         * the claim costs 门清 and the hand has to find its 番 somewhere
+         * else: 碰碰胡 while every meld is a triplet, or 清一色 while every
+         * tile is the one suit. A 吃 ends both, so it is never worth it.
+         * A 杠 is always asked, because it draws a tile as well.
+         */
+        worthClaiming(seat, opt, key) {
+            if (!this.minFan || opt.type === 'kong') return true;
+            if (opt.type === 'chow') return false;
+            const s = this.engine.seats[seat];
+            if (s.melds.every((m) => m.type !== 'chow')) return true;   // 碰碰胡 is alive
+            const suit = this.targetSuit(seat);
+            return key[0] === suit
+                && s.melds.every((m) => m.key[0] === suit)
+                && s.hand.every((x) => !MJ.isPlaying(x) || x.suit === suit);
+        }
+
         claim(seat, options) {
             const e = this.engine;
             const s = e.seats[seat];
@@ -142,27 +167,35 @@
             const wilds = this.wilds(seat);
             const before = W.shanten(MJ.counts(s.hand), s.melds.length, wilds, this.pool);
 
-            // With a floor to clear, 吃 and 碰 cost a 番 and buy nothing.
-            // Only a kong is worth taking, and only when it is free.
-            const menzen = this.minFan > 0;
-
             let best = null, bestSt = before;
             for (const opt of options) {
                 if (opt.type === 'pass') continue;
-                if (menzen && (opt.type === 'chow' || opt.type === 'pung')) continue;
+                if (!this.worthClaiming(seat, opt, key)) continue;
                 const cnt = MJ.counts(s.hand);
-                let melds = s.melds.length + 1;
+                const melds = s.melds.length + 1;
 
-                if (opt.type === 'pung')      cnt.set(key, cnt.get(key) - 2);
-                else if (opt.type === 'kong') cnt.set(key, cnt.get(key) - 3);
+                // A claim may be short a tile and made up with a fly, so the
+                // tiles it costs are counted rather than assumed. A fly spent
+                // on a meld is gone from the hand that has to finish, which
+                // is why the search is asked with one fewer.
+                let spent = 0;
+                const put = (k, want) => {
+                    const have = cnt.get(k) || 0;
+                    const used = Math.min(have, want);
+                    cnt.set(k, have - used);
+                    spent += want - used;
+                };
+                if (opt.type === 'pung')      put(key, 2);
+                else if (opt.type === 'kong') put(key, 3);
                 else {
                     const suit = opt.low[0], lo = Number(opt.low.slice(1));
                     for (let x = lo; x <= lo + 2; x++) {
                         const k = suit + x;
-                        if (k !== key) cnt.set(k, (cnt.get(k) || 0) - 1);
+                        if (k !== key) put(k, 1);
                     }
                 }
-                const st = W.shanten(cnt, melds, wilds, this.pool);
+                if (spent > wilds) continue;
+                const st = W.shanten(cnt, melds, wilds - spent, this.pool);
                 if (st < bestSt) { bestSt = st; best = opt; }
             }
             if (!best) return { type: 'pass', seat };

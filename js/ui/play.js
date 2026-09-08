@@ -84,6 +84,7 @@
         });
 
         $('resultOverlay').hidden = true;
+        CV.ResultView.peekOff();
         paintBar();
         table.start();
     }
@@ -154,6 +155,7 @@
         const root = $('tableRoot');
         root.innerHTML = '';
         $('resultOverlay').hidden = true;
+        CV.ResultView.peekOff();
 
         const built = params.guest ? CV.Room.buildGuestTable(root) : CV.Room.buildHostTable(root);
         if (!built) {
@@ -169,6 +171,7 @@
     /** The host dealt another hand at the same online table. */
     function redealOnline() {
         $('resultOverlay').hidden = true;
+        CV.ResultView.peekOff();
         dealOnline({ online: true, guest: false });
     }
 
@@ -182,6 +185,7 @@
             // the host keeps the room open between hands. Only a solo table is
             // torn down here, and only a solo table can be forfeited, since a
             // guest's coins are settled by the host.
+            CV.ResultView.peekOff();
             if (CV.Room && CV.Room.active) { table = null; view = null; session = null; return; }
             if (table) {
                 if (!table.settled && !table.engine.isOver()) CV.Rewards.forfeit(table);

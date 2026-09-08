@@ -100,15 +100,19 @@
         if (suit !== 'z' && n <= 7) {
             const run = [k, suit + (n + 1), suit + (n + 2)];
             if (run.every((x) => inPool(keys, x))) {
-                const took = [];
-                let cost = 0;
+                const took = [], missing = [];
                 for (const x of run) {
-                    if (at(cnt, x) > 0) took.push(x); else cost++;
+                    if (at(cnt, x) > 0) took.push(x); else missing.push(x);
                 }
+                const cost = missing.length;
                 if (cost <= wilds) {
                     for (const x of took) add(cnt, x, -1);
+                    // `wildKeys` is which of the three the flies stood in for.
+                    // A pung's wilds are copies of its own key and need no
+                    // saying; a chow's do — the screen has to be able to point
+                    // at the tile the fly became.
                     const got = meldsFrom(cnt, need - 1, wilds - cost, keys, spare,
-                        acc.concat([{ type: 'chow', key: k, wild: cost }]));
+                        acc.concat([{ type: 'chow', key: k, wild: cost, wildKeys: missing }]));
                     for (const x of took) add(cnt, x, 1);
                     if (got) return got;
                 }
@@ -163,33 +167,42 @@
     /**
      * Seven pairs. Four of a kind counts as two pairs of it — that is the
      * hand the fan table calls 豪华七对子. Flies pair with whatever is odd.
+     *
+     * `groups` is the same seven pairs with the flies marked: how many of
+     * each pair was a fly rather than a tile. `pairs` is still the plain list
+     * of keys, which is what the scorer counts suits off.
      */
     function sevenPairs(cnt, exposed, wilds, keys) {
         if (exposed) return null;
-        let tiles = 0, pairs = 0, singles = 0, quad = false;
-        const pairKeys = [];
+        let tiles = 0, pairs = 0, quad = false;
+        const groups = [];      // { key, wild } — a pair, and how much of it was a fly
+        const odd = [];         // the keys sitting on their own, in order
         for (const k of keys) {
             const c = at(cnt, k);
             if (!c) continue;
             tiles += c;
             pairs += Math.floor(c / 2);
-            for (let i = 0; i < Math.floor(c / 2); i++) pairKeys.push(k);
-            if (c % 2) { singles++; pairKeys.push(k); }
+            for (let i = 0; i < Math.floor(c / 2); i++) groups.push({ key: k, wild: 0 });
+            if (c % 2) odd.push(k);
             if (c === 4) quad = true;
         }
         if (tiles + wilds !== 14) return null;
 
         let left = wilds;
         let made = pairs;
-        const withSingles = Math.min(left, singles);
+        const withSingles = Math.min(left, odd.length);
         made += withSingles;
         left -= withSingles;
         if (left % 2) return null;
         made += left / 2;
         if (made !== 7) return null;
+
+        // A fly apiece finishes the odd tiles; whatever is still spare pairs
+        // with itself, as the hand's own suit.
+        for (let i = 0; i < withSingles; i++) groups.push({ key: odd[i], wild: 1 });
         const spare = spareKey(cnt, keys);
-        for (let i = 0; i < left / 2; i++) pairKeys.push(spare);
-        return { shape: 'sevenPairs', quad, pairs: pairKeys };
+        for (let i = 0; i < left / 2; i++) groups.push({ key: spare, wild: 2 });
+        return { shape: 'sevenPairs', quad, pairs: groups.map((g) => g.key), groups };
     }
 
     /** The thirteen orphans, one of them twice. */

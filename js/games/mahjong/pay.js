@@ -7,12 +7,20 @@
  * **The two modes pay differently, so they are two profiles.** Nothing in the
  * three-player table can reach the four-player one by accident.
  *
- *     three seats   5番 minimum to 胡
+ *     three seats   2番 minimum to 胡
  *                   自摸 — both opponents pay double
  *                   放铳 — the thrower pays double, the other pays once
  *     four seats    no minimum
  *                   自摸 — all three pay once
  *                   放铳 — the thrower covers the table
+ *
+ * **The three-seat floor was 5番 and is 2番, and no hand changed hands over
+ * it.** That box is dots and honours only, so every mixed hand collected
+ * 混一色's 3番 whether it was aiming at anything or not — the floor was 5
+ * because 3 of it was free. `fan.js` stopped paying for the box; the floor
+ * gave back the same 3, so exactly the hands that could be declared before
+ * can be declared now. 爆番 stays at 10番, where it now means a hand that
+ * earned ten rather than one that was handed three.
  *
  * **爆番.** Ten 番 or more is not scored at ten. It is capped and doubled to
  * a flat twenty, so an 11番 hand and a 16番 hand pay the same.
@@ -30,7 +38,7 @@
      */
     const PROFILES = {
         3: {
-            minFan: 5,
+            minFan: 2,
             baoAt: 10, baoFan: 20,
             selfDraw: 2,          // each opponent pays this many base amounts
             thrower: 2,           // 放铳者

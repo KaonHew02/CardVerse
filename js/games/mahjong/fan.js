@@ -12,6 +12,10 @@
  * rule the table exists to enforce is that nothing is ever counted twice:
  * 清一色 and 碰碰胡 together are 清碰 and nothing else, 大三元 is not also
  * 小三元, and 豪华七对子 is not also 七对子.
+ *
+ * **There is one table per mode**, because the two modes are played out of
+ * different boxes. A pattern that describes the box rather than the hand is
+ * not a pattern: see `FAN3` and 混一色.
  */
 
 (() => {
@@ -19,7 +23,7 @@
 
     const CV = window.CV;
 
-    /** What each pattern pays. Edit here to re-tune the table. */
+    /** What each pattern pays at four seats. Edit here to re-tune the table. */
     const FAN = {
         '平胡': 1, '自摸': 1, '门清': 1,
         '碰碰胡': 2, '混一色': 3,
@@ -28,6 +32,33 @@
         '豪华七对子': 8, '清七对': 8, '清碰': 8, '字一色': 8, '大三元': 8, '小四喜': 8,
         '大四喜': 16, '四杠子': 16, '十三幺': 16,
     };
+
+    /**
+     * Three seats, where **混一色 is not a pattern**.
+     *
+     * That box holds dots and honours and nothing else, so "one suit plus
+     * honours" is not something a hand achieves — it is what every hand in
+     * the box already is. Paying 3番 for it meant three free 番 on almost
+     * every win, a 5番 floor that was really a 2番 floor wearing a disguise,
+     * and a 清一色 worth only two more than an ordinary hand.
+     *
+     * Taking it out changes no hand's legality: the floor came down by the
+     * same 3番 it was hiding (see `pay.js`), so the hands that could be
+     * declared before can still be declared now. What it changes is the
+     * shape of the table — a plain hand is 1番 again and going all-dots is
+     * worth six times that, which is the gap the pattern is supposed to pay
+     * for.
+     */
+    const FAN3 = (() => {
+        const out = Object.assign({}, FAN);
+        delete out['混一色'];
+        return out;
+    })();
+
+    const TABLES = { 3: FAN3, 4: FAN };
+
+    /** The fan table this many seats play by. */
+    const tableFor = (players) => TABLES[players] || FAN;
 
     /** Which patterns each one swallows. Applied until nothing changes. */
     const REPLACES = {
@@ -57,8 +88,10 @@
      * @param {boolean} hand.selfDraw drew the winning tile
      * @param {boolean} hand.menzen   nothing melded from a discard
      * @param {boolean} hand.quad     seven pairs holding a four of a kind
+     * @param {object} [table]        the mode's fan table; four seats by default
      */
-    function calculateFan(hand) {
+    function calculateFan(hand, table) {
+        const FAN = table || TABLES[4];
         const found = new Set();
         const melds = hand.melds || [];
         const keys = hand.keys || [];
@@ -108,6 +141,13 @@
         if (hand.selfDraw) found.add('自摸');
         if (hand.menzen) found.add('门清');
 
+        /* --- nothing this table does not pay for ------------------------------ */
+
+        // Dropped before the overlaps are resolved, not after. 混一色 swallows
+        // 平胡, so a table that does not price 混一色 would otherwise let it
+        // eat the base pattern on its way out and score the hand at nothing.
+        for (const name of [...found]) if (!(FAN[name] > 0)) found.delete(name);
+
         /* --- nothing counted twice ------------------------------------------- */
 
         for (;;) {
@@ -127,5 +167,5 @@
         return { totalFan: patterns.reduce((n, p) => n + p.fan, 0), patterns };
     }
 
-    CV.MJFan = { FAN, REPLACES, calculateFan };
+    CV.MJFan = { FAN, FAN3, TABLES, REPLACES, tableFor, calculateFan };
 })();

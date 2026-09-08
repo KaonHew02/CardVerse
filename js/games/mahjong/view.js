@@ -42,13 +42,18 @@
             return `<span class="tile tile-fly${extra}" data-id="${tile.id}"
                 aria-label="Fly"><b>飞</b></span>`;
         }
+        // A flower is 春 or 竹, drawn — "花8" is a slot in the box, and a
+        // player holding one could not find out what it was.
         if (tile.suit === 'f') {
             return `<span class="tile tile-flower${extra}" data-id="${tile.id}"
-                aria-label="Flower ${tile.n}"><b>花</b><i>${tile.n}</i></span>`;
+                aria-label="${esc(MJ.nameEn(tile))}">${CV.MJFaces.flowerFace(tile.n)}</span>`;
         }
         if (tile.suit === 'z') {
+            // 白板 is a blank face inside a frame, not the character 白.
+            const face = tile.n === 7 ? CV.MJFaces.whiteDragon()
+                : `<b>${MJ.HONOURS[tile.n - 1]}</b>`;
             return `<span class="tile tile-z z${tile.n}${extra}" data-id="${tile.id}"
-                aria-label="${esc(MJ.nameEn(tile))}"><b>${MJ.HONOURS[tile.n - 1]}</b></span>`;
+                aria-label="${esc(MJ.nameEn(tile))}">${face}</span>`;
         }
         // The face is drawn, not written — see faces.js.
         return `<span class="tile tile-${tile.suit}${extra}" data-id="${tile.id}"
@@ -56,6 +61,22 @@
     }
 
     const row = (tiles, opts) => tiles.map((x) => tileHtml(x, opts)).join('');
+
+    /**
+     * A tile drawn from a key rather than from a tile — what the hand *reads*
+     * as, which is not always what is lying in it. A fly played as 3筒 is
+     * drawn as a 3筒 with a ring round it, because "your fly became this" is
+     * the one thing a row of fourteen tiles cannot say by itself.
+     */
+    let keyUid = 0;
+    function keyTile(key, wild, opts) {
+        const { suit, n } = MJ.parse(key);
+        return tileHtml({ suit, n, id: 'k' + (keyUid++) },
+            Object.assign({ small: true }, opts, { cls: wild ? 'is-wild' : '' }));
+    }
+
+    /** The mark put on a tile an offered action would use. */
+    const MARK = { kong: '杠', pung: '碰', chow: '吃' };
 
     /**
      * Where each opponent sits, by how far round the table they are.
@@ -79,7 +100,22 @@
         }
 
         get you() { return this.engine.youSeat; }
-        get revealing() { return false; }
+
+        /**
+         * Guests do not hold an engine — they hold `CV.RemoteEngine`, which
+         * wears the host's snapshot and answers no questions of its own. The
+         * table paints from the snapshot either way; the two things that need
+         * the real rules to answer, "may I 胡" and "why", are simply not shown
+         * to a guest rather than throwing on the first paint.
+         */
+        get live() { return typeof this.engine.explain === 'function'; }
+        /** The wall, as a count — a getter at the host, a number on the wire. */
+        get wallLeft() {
+            const e = this.engine;
+            return e.wallLeft !== undefined ? e.wallLeft : (e.wall || 0);
+        }
+        /** The result waits for the felt — including the shuffle. */
+        get revealing() { return !!this.shuffling; }
 
         /** `{ seat, place }` for every chair that is not yours, in turn order. */
         places() {
@@ -94,6 +130,14 @@
         mount() {
             this.root.innerHTML = `
                 <div class="mj">
+                    <div class="mj-shuffle" id="mjShuffle" hidden>
+                        <div class="mj-shuffle-tiles">
+                            ${Array.from({ length: 14 }, (_, i) =>
+                                `<span class="tile tile-back mj-shuffle-tile"
+                                       style="animation-delay:${i * 55}ms"></span>`).join('')}
+                        </div>
+                        <div class="mj-shuffle-note">${esc(t('mj.shuffling'))}</div>
+                    </div>
                     <div class="mj-table">
                         <div class="mj-seat-slot at-top"    id="mjSeatTop"></div>
                         <div class="mj-seat-slot at-left"   id="mjSeatLeft"></div>
@@ -107,27 +151,89 @@
                         </div>
                     </div>
                     <div class="bj-status" id="mjStatus"></div>
+                    <div class="mj-why" id="mjWhy"></div>
                     <div class="mj-you" id="mjYou"></div>
                     <div class="bj-actions" id="mjActions"></div>
                 </div>`;
             this.$ = (id) => this.root.querySelector('#' + id);
             CV.UI.on(this.root, '[data-act]', (el) => this.act(el));
             CV.UI.on(this.root, '[data-tile]', (el) => this.discard(el.dataset.tile));
+            CV.UI.on(this.root, '[data-sort]', () => this.resort());
+            CV.UI.on(this.root, '[data-fantable]', () => this.showFanTable());
+
+            /**
+             * Your own order for your own tiles.
+             *
+             * The engine sorts a hand every time it draws, which is the right
+             * default and the wrong thing to be stuck with: half of playing
+             * mahjong is keeping the tiles you are working on next to each
+             * other. Ids, not indexes — the hand is rebuilt on every paint.
+             */
+            this.order = [];
+            this.onDown = (ev) => this.dragStart(ev);
+            this.onMove = (ev) => this.dragMove(ev);
+            this.onUp   = (ev) => this.dragEnd(ev);
+            this.root.addEventListener('pointerdown', this.onDown);
+            window.addEventListener('pointermove', this.onMove, { passive: false });
+            window.addEventListener('pointerup', this.onUp);
+            window.addEventListener('pointercancel', this.onUp);
+
             this.table.onChange(() => this.paint());
+            this.shuffle();
             this.paint();
         }
 
-        unmount() { this.root.innerHTML = ''; }
+        unmount() {
+            clearTimeout(this.timer);
+            window.removeEventListener('pointermove', this.onMove);
+            window.removeEventListener('pointerup', this.onUp);
+            window.removeEventListener('pointercancel', this.onUp);
+            this.root.innerHTML = '';
+        }
+
+        /**
+         * 洗牌, before the hand starts.
+         *
+         * Without it a sorted thirteen-tile hand simply exists, dealt by
+         * nobody — the round is under way before the player has registered
+         * that one began. The table is held while the wall is mixed, so the
+         * dealer's first throw is not spent behind the overlay, and your
+         * tiles are then dealt in one at a time rather than appearing.
+         *
+         * An online table is not held: the other seats are real people and
+         * their clock is not this browser's to stop.
+         */
+        shuffle() {
+            const host = this.$('mjShuffle');
+            const still = window.matchMedia
+                && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+            if (!host || still) return;
+
+            const online = !!(CV.Room && CV.Room.active);
+            this.shuffling = true;
+            host.hidden = false;
+            if (!online) this.table.pause();
+
+            this.timer = setTimeout(() => {
+                this.shuffling = false;
+                this.fresh = true;              // your hand deals in, one by one
+                host.hidden = true;
+                if (!online) this.table.resume();
+                this.paint();
+            }, 1150 * (this.table.speed || 1));
+        }
 
         paint() {
             this.paintSeats();
             this.paintPool();
             this.paintHub();
             this.paintStatus();
+            this.paintWhy();
             this.paintYou();
             this.paintActions();
             const coins = document.getElementById('tableCoins');
             if (coins && this.you >= 0) coins.textContent = fmt(this.engine.seats[this.you].coins);
+            this.fresh = false;      // the deal-in plays once, on the first paint
         }
 
         /** 东 南 西 北 by distance from the dealer. */
@@ -160,7 +266,10 @@
             const e = this.engine;
             const s = e.seats[i];
             const turn = e.turn === i && !e.over;
-            const open = e.over && i === e.winner;
+            // Every hand turns face up at the end, not just the winner's.
+            // What the losers were holding is half of why the hand went the
+            // way it did, and it is gone the moment the next one is dealt.
+            const open = e.over;
             const upright = place === 'top';
             // A concealed hand is a wall of backs — the count is the
             // information, and it is on the badge as well.
@@ -223,11 +332,12 @@
             const e = this.engine;
             this.$('mjHub').innerHTML = `
                 <span class="mj-hub-wind">${esc(this.windOf(this.you < 0 ? 0 : this.you))}</span>
-                <span class="mj-hub-wall">${esc(t('mj.wall', { n: e.wallLeft }))}</span>
+                <span class="mj-hub-wall">${esc(t('mj.wall', { n: this.wallLeft }))}</span>
                 <span class="mj-hub-line">${esc(t('mj.mode', { n: e.players }))}</span>
                 <span class="mj-hub-line">${esc(t('mj.unit', { n: e.unit }))}</span>
-                ${e.mode.flyEnabled ? `<span class="mj-hub-line">${esc(t('mj.flyOn'))}</span>` : ''}
-                ${e.minFan ? `<span class="mj-min">${esc(t('mj.min', { n: e.minFan }))}</span>` : ''}`;
+                ${e.flyOn ? `<span class="mj-hub-line">${esc(t('mj.flyOn'))}</span>` : ''}
+                ${e.minFan ? `<span class="mj-min">${esc(t('mj.min', { n: e.minFan }))}</span>` : ''}
+                <button class="mj-hub-btn" data-fantable>${esc(t('mj.fanTable'))}</button>`;
         }
 
         paintStatus() {
@@ -241,10 +351,13 @@
                 return;
             }
             if (e.phase === 'claim' && e.turn === this.you) {
-                host.innerHTML = `<span class="you">${esc(t('mj.yourClaim'))}</span>`;
+                // 抢杠 is not a discard, and the tile is not in the pool: it
+                // is on its way into somebody's kong. Saying so is the only
+                // way the moment reads as anything but a stray claim.
+                host.innerHTML = `<span class="you">${esc(t(e.robbing ? 'mj.yourRob' : 'mj.yourClaim'))}</span>`;
                 return;
             }
-            if (e.turn === this.you) {
+            if (e.turn === this.you && this.live) {
                 // A hand that wins but does not clear the floor is the one
                 // state a player will not work out on their own.
                 const mine = e.winFor(this.you, null);
@@ -259,12 +372,164 @@
             host.innerHTML = `<span class="muted">${esc(t('mj.waiting', { name: e.seats[e.turn].name }))}</span>`;
         }
 
+        /**
+         * **Why you may 胡.**
+         *
+         * A finished hand is fourteen tiles in a row and a lit button, and at
+         * three seats up to four of those tiles are flies that became
+         * something nobody chose. Pressing it and reading the score
+         * afterwards is not an explanation. So the hand is laid out here the
+         * way it was read — cut into its melds, every fly drawn as the tile
+         * it turned into and ringed — with the patterns it scores and what
+         * they add up to.
+         *
+         * It shows for a hand that is finished but too cheap to declare as
+         * well. That is the state nobody works out on their own, and it is
+         * the one where seeing the melds tells you what to build on.
+         */
+        paintWhy() {
+            const e = this.engine;
+            const host = this.$('mjWhy');
+            if (!host) return;
+            host.innerHTML = '';
+            if (this.you < 0 || e.over || e.turn !== this.you || !this.live) return;
+
+            const thrown = e.phase === 'claim' && e.lastDiscard ? e.lastDiscard.tile : null;
+            const why = e.explain(this.you, thrown);
+            if (!why) {
+                // A 碰 or a 吃 can finish a hand too, and the seat is then
+                // holding fourteen tiles that plainly read as a win with no
+                // 胡 button anywhere. Saying nothing here looks exactly like
+                // a bug — so it says what happened instead.
+                if (!thrown && e.claimed && e.winFor(this.you, null)) {
+                    host.innerHTML = `<div class="mj-why-card is-short">
+                        <div class="mj-why-head">
+                            <span class="mj-why-title">${esc(t('mj.afterClaim'))}</span>
+                        </div>
+                        <div class="mj-why-note">${esc(t('mj.afterClaimNote'))}</div>
+                    </div>`;
+                }
+                return;
+            }
+
+            const groups = why.groups.map((g) => `<span class="mj-meld${
+                g.open ? ' is-open' : ''}">${g.tiles.map((x) => keyTile(x.key, x.wild)).join('')}</span>`).join('');
+            const patterns = why.fan.patterns.map((p) =>
+                `<span class="mj-why-pat">${esc(p.name)} <b>${p.fan}</b></span>`).join('');
+            const wild = why.groups.some((g) => g.tiles.some((x) => x.wild));
+
+            host.innerHTML = `
+                <div class="mj-why-card${why.ok ? '' : ' is-short'}">
+                    <div class="mj-why-head">
+                        <span class="mj-why-title">${esc(why.ok ? t('mj.whyWin') : t('mj.whyShortTitle'))}</span>
+                        <span class="mj-why-total">${esc(t('mj.fanN', { n: why.fan.totalFan }))}</span>
+                        ${why.ok ? '' : `<span class="mj-why-need">${esc(t('mj.whyShort', {
+                            n: why.need - why.fan.totalFan }))}</span>`}
+                    </div>
+                    <div class="mj-why-groups">${groups}</div>
+                    <div class="mj-why-pats">${patterns}</div>
+                    ${wild ? `<div class="mj-why-note">${esc(t('mj.whyFly'))}</div>` : ''}
+                </div>`;
+        }
+
+        /**
+         * The 番 this table pays for, what the floor is, and what a fly does.
+         *
+         * The rules card is read once before the first hand and never again,
+         * and 番 are the whole game: a player who has just been told they are
+         * 2番 short has nowhere to look up what would have made up the
+         * difference. It is built from the table the engine is actually
+         * scoring by, so the three-player list is missing 混一色 because that
+         * mode genuinely does not pay for it.
+         */
+        showFanTable() {
+            const e = this.engine;
+            const table = e.fanTable || CV.MJFan.tableFor(e.players);
+            const rows = Object.keys(table)
+                .sort((a, b) => table[b] - table[a] || a.localeCompare(b))
+                .map((name) => {
+                    const key = 'mj.fan.' + name;
+                    const gloss = t(key);
+                    return `<li><b>${esc(name)}</b>
+                        <span class="mj-fan-n">${esc(t('mj.fanN', { n: table[name] }))}</span>
+                        <small>${gloss === key ? '' : esc(gloss)}</small></li>`;
+                }).join('');
+
+            CV.UI.dialog({
+                title: t('mj.fanTable'),
+                body: `
+                    <p class="muted small">${esc(t('mj.fanTableHead', {
+                        n: e.players, min: e.minFan, bao: e.baoAt || 10,
+                        paid: e.baoPay || 20, unit: e.unit }))}</p>
+                    <ul class="mj-fan-list">${rows}</ul>
+                    <p class="muted small">${esc(t(e.flyOn ? 'mj.fanTableFly' : 'mj.fanTableNoFly'))}</p>`,
+            });
+        }
+
+        /**
+         * Which of your tiles each offered action would actually use.
+         *
+         * The buttons say 杠 and 碰 and nothing about on what. With three
+         * melds on the table and a fly in hand, "which tile is the 杠" is a
+         * real question, and the tiles are the only place it can be answered
+         * — so the ones an action would spend are marked with it.
+         */
+        hints() {
+            const e = this.engine;
+            const out = new Map();
+            if (this.you < 0 || e.over || e.turn !== this.you) return out;
+            const s = e.seats[this.you];
+            // A tile can serve more than one offer at once — two 中 and a fly
+            // are a 碰 and a 杠 — so the marks add up rather than replace one
+            // another. Losing one would point at the wrong tiles.
+            const mark = (tiles, type) => {
+                for (const x of tiles) {
+                    if (!x) continue;
+                    const had = out.get(x.id) || '';
+                    if (!had.includes(MARK[type])) out.set(x.id, had + MARK[type]);
+                }
+            };
+
+            // Your own copies first, then a fly for each one short — the same
+            // order the engine takes them in when the claim is made.
+            const pick = (key, want) => {
+                const got = s.hand.filter((x) => MJ.key(x) === key).slice(0, want);
+                return got.concat(s.hand.filter(MJ.isFly).slice(0, want - got.length));
+            };
+
+            const thrown = e.lastDiscard && e.lastDiscard.tile;
+            const claim = e.phase === 'claim' && thrown;
+            for (const o of e.legalActions(this.you)) {
+                // On your own turn a 杠 is your own four, or the single tile
+                // that joins a pung already down. Never a fly: a fly is not
+                // offered a kong of its own.
+                if (o.type === 'kong' && o.key) {
+                    mark(s.hand.filter((x) => MJ.key(x) === o.key), 'kong');
+                } else if (!claim) continue;
+                else if (o.type === 'pung') mark(pick(MJ.key(thrown), 2), 'pung');
+                else if (o.type === 'kong') mark(pick(MJ.key(thrown), 3), 'kong');
+                else if (o.type === 'chow') {
+                    const suit = o.low[0], lo = Number(o.low.slice(1));
+                    for (let x = lo; x <= lo + 2; x++) {
+                        if (suit + x !== MJ.key(thrown)) mark(pick(suit + x, 1), 'chow');
+                    }
+                }
+            }
+            return out;
+        }
+
         paintYou() {
             const e = this.engine;
             const host = this.$('mjYou');
             if (this.you < 0) { host.innerHTML = ''; return; }
             const s = e.seats[this.you];
             const mine = e.turn === this.you && e.phase === 'discard' && !e.over;
+            const deal = this.fresh;
+            const hint = this.hints();
+            // The tile you have just drawn, marked rather than moved: with a
+            // hand you have arranged yourself, sorting it into place would
+            // hide the one tile the decision is about.
+            const drew = mine ? e.drew : null;
 
             host.innerHTML = `
                 <div class="hand-head">
@@ -275,12 +540,102 @@
                              ${row(s.flowers, { small: true })}
                            </span>`
                         : `<span class="muted small">${esc(t('mj.noFlowers'))}</span>`}
+                    <button class="btn tiny" data-sort>${esc(t('mj.sort'))}</button>
                 </div>
                 <div class="mj-melds mine">${s.melds.map((m) => this.meldHtml(m)).join('')}</div>
                 <div class="mj-mine">
-                    ${s.hand.map((tile) => `<button class="mj-pick" ${mine ? '' : 'disabled'}
-                        data-tile="${tile.id}">${tileHtml(tile)}</button>`).join('')}
-                </div>`;
+                    ${this.mine(s).map((tile, i) => `<button class="mj-pick${deal ? ' is-fresh' : ''}${
+                            hint.has(tile.id) ? ' can-act' : ''}${mine ? '' : ' is-locked'}${
+                            drew && drew.id === tile.id ? ' is-drawn' : ''}"
+                        ${deal ? `style="animation-delay:${i * 40}ms"` : ''}
+                        data-tile="${tile.id}">${tileHtml(tile)}${
+                            hint.has(tile.id) ? `<span class="mj-hint">${hint.get(tile.id)}</span>` : ''
+                        }</button>`).join('')}
+                </div>
+                <div class="muted small mj-drag-hint">${esc(t('mj.dragHint'))}</div>`;
+        }
+
+        /* ---- your tiles, in your order ---------------------------------------- */
+
+        /**
+         * Your hand in the order you put it in.
+         *
+         * Anything you have not moved keeps the engine's sorted order, and a
+         * tile that was not there last time goes on the right — which is
+         * where a tile you have just drawn belongs, rather than sorted
+         * silently into the middle of a hand you had arranged.
+         */
+        mine(seat) {
+            const byId = new Map(seat.hand.map((x) => [x.id, x]));
+            const out = [];
+            for (const id of this.order) {
+                const tile = byId.get(id);
+                if (tile) { out.push(tile); byId.delete(id); }
+            }
+            for (const tile of seat.hand) if (byId.has(tile.id)) out.push(tile);
+            this.order = out.map((x) => x.id);
+            return out;
+        }
+
+        /** Give the hand back to the engine's sort. */
+        resort() { this.order = []; this.paint(); }
+
+        /**
+         * Dragging a tile along the hand moves it; tapping one throws it.
+         *
+         * The two have to live on the same tile, so they are told apart by
+         * distance: nothing happens until the pointer has moved far enough
+         * that it cannot have been a tap, and once it has, the tap that
+         * would follow on release is swallowed. A locked hand still drags —
+         * waiting for the other seats is exactly when you tidy your tiles.
+         */
+        dragStart(ev) {
+            if (ev.button > 0 || this.engine.over) return;
+            const el = ev.target.closest && ev.target.closest('.mj-pick');
+            if (!el) return;
+            this.drag = { id: el.dataset.tile, el, x: ev.clientX, y: ev.clientY, moved: false };
+        }
+
+        dragMove(ev) {
+            const d = this.drag;
+            if (!d) return;
+            const dx = ev.clientX - d.x, dy = ev.clientY - d.y;
+            if (!d.moved && Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
+            d.moved = true;
+            d.el.classList.add('is-dragging');
+            d.el.style.transform = `translate(${dx}px, ${dy}px)`;
+            // The page must not scroll under a tile that is being carried.
+            if (ev.cancelable) ev.preventDefault();
+        }
+
+        dragEnd(ev) {
+            const d = this.drag;
+            this.drag = null;
+            if (!d) return;
+            d.el.style.transform = '';
+            d.el.classList.remove('is-dragging');
+            if (!d.moved) return;                 // a tap: let the click throw it
+            this.dropped = true;                  // …but a drag must not
+            setTimeout(() => { this.dropped = false; }, 0);
+            this.dropAt(d.id, ev.clientX, ev.clientY);
+        }
+
+        /** Put the dragged tile where the pointer let go of it. */
+        dropAt(id, x, y) {
+            const host = this.root.querySelector('.mj-mine');
+            if (!host) return;
+            const picks = [...host.querySelectorAll('.mj-pick')].filter((p) => p.dataset.tile !== id);
+            const ids = picks.map((p) => p.dataset.tile);
+            // Reading order, because the hand wraps on a narrow screen: a
+            // tile on a row below the pointer comes after it whatever the x.
+            let insert = ids.length;
+            for (let i = 0; i < picks.length; i++) {
+                const r = picks[i].getBoundingClientRect();
+                if (y < r.top || (y <= r.bottom && x < r.left + r.width / 2)) { insert = i; break; }
+            }
+            ids.splice(insert, 0, id);
+            this.order = ids;
+            this.paint();
         }
 
         paintActions() {
@@ -308,6 +663,7 @@
 
         discard(id) {
             const e = this.engine;
+            if (this.dropped) return;             // that was a drag, not a throw
             if (e.over || e.turn !== this.you || e.phase !== 'discard') return;
             this.table.dispatch({ type: 'discard', seat: this.you, tile: id });
         }

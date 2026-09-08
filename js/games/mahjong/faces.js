@@ -135,6 +135,138 @@
         return `<span class="tile-wan"><b>${NUMERAL[n - 1]}</b><i>萬</i></span>`;
     }
 
+    /* ---- 字牌 ---------------------------------------------------------------
+     *
+     * 中 and 发 are characters and stay characters. 白 is not one: on a real
+     * set the white dragon carries no character at all — it is a blank face
+     * inside a drawn blue frame, which is where the name 白板, the white
+     * board, comes from. Printing 白 on it captions the tile instead of being
+     * it, and at a glance it then reads as just another honour.
+     */
+    function whiteDragon() {
+        return svg(`
+            <rect x="13" y="9" width="74" height="82" rx="7"
+                  fill="none" stroke="${BLUE}" stroke-width="7"/>
+            <rect x="25" y="21" width="50" height="58" rx="4"
+                  fill="none" stroke="${BLUE}" stroke-width="2.4" opacity=".7"/>`);
+    }
+
+    /* ---- 花牌 ---------------------------------------------------------------
+     *
+     * "花8" is a label, not a tile. A set's eight flowers are two suits of
+     * four — the seasons 春夏秋冬 and the four gentlemen 梅兰菊竹, plum,
+     * orchid, chrysanthemum and bamboo — each numbered 1 to 4 in red with the
+     * plant drawn underneath. That numbering is why the eighth flower reads
+     * as 竹 4 and not as an eight: nobody at a table calls it the eighth
+     * flower, and a player holding one had no way to find out what it was.
+     */
+    const FLOWER_GLYPH = ['春', '夏', '秋', '冬', '梅', '兰', '菊', '竹'];
+    const INK = '#1f2a35';
+
+    const f = (n) => Math.round(n * 10) / 10;
+
+    /**
+     * A bloom: petals set round a pale centre.
+     *
+     * `petals` and `thin` are what tell one flower from another at this size
+     * — five fat petals read as plum, fourteen narrow ones as chrysanthemum.
+     * Nothing else about the two drawings differs.
+     */
+    function bloom(cx, cy, r, ink, petals = 5, thin = 0.44) {
+        const out = [];
+        for (let i = 0; i < petals; i++) {
+            const deg = -90 + (i * 360) / petals;
+            const a = (deg * Math.PI) / 180;
+            const px = cx + Math.cos(a) * r * 0.6;
+            const py = cy + Math.sin(a) * r * 0.6;
+            out.push(`<ellipse cx="${f(px)}" cy="${f(py)}" rx="${f(r * 0.5)}" ry="${f(r * thin)}"
+                        fill="${ink}" transform="rotate(${f(deg)} ${f(px)} ${f(py)})"/>`);
+        }
+        return out.join('')
+            + `<circle cx="${cx}" cy="${cy}" r="${f(r * 0.28)}" fill="#fffdf3"/>`
+            + `<circle cx="${cx}" cy="${cy}" r="${f(r * 0.13)}" fill="${ink}"/>`;
+    }
+
+    /** One curved blade, anchored where it joins the stem. */
+    function leaf(x, y, len, deg, ink = GREEN, curve = 0.3) {
+        const w = f(len * curve);
+        return `<path d="M0 0 C ${f(len * 0.34)} ${-w}, ${f(len * 0.7)} ${f(-w * 0.85)}, ${len} 0
+                         C ${f(len * 0.7)} ${f(w * 0.5)}, ${f(len * 0.34)} ${f(w * 0.55)}, 0 0 Z"
+                 fill="${ink}" transform="translate(${x} ${y}) rotate(${deg})"/>`;
+    }
+
+    const stem = (x1, y1, x2, y2, w = 3.2, ink = GREEN) =>
+        `<path d="M${x1} ${y1} Q ${f((x1 + x2) / 2 - 7)} ${f((y1 + y2) / 2)} ${x2} ${y2}"
+               stroke="${ink}" stroke-width="${w}" fill="none" stroke-linecap="round"/>`;
+
+    /** Winter grass — three blades off the floor of the tile. */
+    const grass = () =>
+        stem(20, 98, 40, 44, 2.6) + stem(50, 98, 66, 40, 2.6) + stem(74, 98, 84, 52, 2.6);
+
+    /** A bamboo stalk: a rod banded at its nodes, the way 索子 is drawn. */
+    function stalk(x, top, bottom, w) {
+        const h = bottom - top;
+        return `<rect x="${f(x - w / 2)}" y="${top}" width="${w}" height="${f(h)}" rx="${f(w / 2)}"
+                      fill="${GREEN}"/>`
+             + [0.32, 0.64].map((k) =>
+                 `<rect x="${f(x - w * 0.62)}" y="${f(top + h * k)}" width="${f(w * 1.24)}"
+                        height="3" rx="1.5" fill="#fffdf3" opacity=".9"/>`).join('');
+    }
+
+    /**
+     * The eight plants, one composition each.
+     *
+     * They sit below the corner marks — roughly y 32 down — and they are the
+     * whole point of the tile: the two suits share their numbers, so 春 1 and
+     * 梅 1 can only be told apart by what is drawn under them.
+     */
+    const FLOWER_ART = {
+        /* 春 — a peony, open and heavy, with a bud beside it. */
+        1: () => stem(50, 98, 50, 64) + leaf(46, 86, 26, 205) + leaf(54, 80, 24, -25)
+               + bloom(50, 58, 24, RED, 6) + bloom(28, 76, 11, RED, 5),
+        /* 夏 — a lotus on its pad. */
+        2: () => leaf(48, 88, 36, 176) + leaf(52, 88, 34, -4) + stem(50, 90, 50, 62, 2.8)
+               + bloom(50, 56, 25, RED, 8, 0.32),
+        /* 秋 — two blooms on one stalk, the way an autumn spray is drawn. */
+        3: () => stem(50, 98, 44, 56) + leaf(48, 84, 24, 208) + leaf(52, 72, 22, -28)
+               + bloom(42, 50, 19, RED, 6) + bloom(70, 70, 15, RED, 6),
+        /* 冬 — a bloom standing over winter grass. */
+        4: () => grass() + bloom(52, 52, 21, RED, 5) + bloom(28, 72, 11, RED, 5),
+        /* 梅 — plum: blossoms along a bare branch. */
+        5: () => `<path d="M8 98 C 24 84, 32 68, 42 44 M30 70 C 46 68, 60 62, 76 52"
+                        stroke="${INK}" stroke-width="3.2" fill="none" stroke-linecap="round"/>`
+               + bloom(44, 40, 15, RED, 5) + bloom(78, 48, 12, RED, 5) + bloom(22, 80, 11, RED, 5),
+        /* 兰 — orchid: long leaves thrown wide, one slim bloom. */
+        6: () => leaf(50, 96, 46, 194, GREEN, 0.12) + leaf(50, 96, 44, -14, GREEN, 0.12)
+               + leaf(50, 96, 34, -56, GREEN, 0.14) + leaf(50, 96, 32, 234, GREEN, 0.14)
+               + bloom(52, 44, 14, RED, 5, 0.34),
+        /* 菊 — chrysanthemum: a dense head, two rings of narrow petals. */
+        7: () => stem(50, 98, 50, 60) + leaf(46, 82, 26, 210) + leaf(54, 74, 24, -30)
+               + bloom(50, 54, 26, RED, 14, 0.22) + bloom(50, 54, 16, RED, 10, 0.26),
+        /* 竹 — bamboo: two stalks and a spray of leaves. */
+        8: () => stalk(38, 36, 98, 12) + stalk(64, 48, 98, 10)
+               + leaf(44, 40, 30, -34) + leaf(34, 44, 28, 214) + leaf(70, 52, 24, -22),
+    };
+
+    /**
+     * A flower's face: its number, its character, and the plant.
+     *
+     * The seasons carry the number first and the gentlemen carry it second,
+     * which is how the two suits are told apart on a real set before either
+     * character has been read.
+     */
+    function flowerFace(n) {
+        const i = Math.min(7, Math.max(0, n - 1));
+        const seasons = i < 4;
+        const num = (i % 4) + 1;
+        const head =
+            `<text x="${seasons ? 21 : 79}" y="24" text-anchor="middle" font-size="25"
+                   font-weight="700" fill="${RED}">${num}</text>`
+          + `<text x="${seasons ? 63 : 23}" y="25" text-anchor="middle" font-size="26"
+                   font-weight="700" fill="${seasons ? RED : INK}">${FLOWER_GLYPH[i]}</text>`;
+        return svg(head + FLOWER_ART[i + 1]());
+    }
+
     /** The face for a numbered tile, drawn. */
     function suitFace(suit, n) {
         if (suit === 'p') return dots(n);
@@ -142,5 +274,6 @@
         return characters(n);
     }
 
-    CV.MJFaces = { suitFace, dots, bamboo, characters, NUMERAL };
+    CV.MJFaces = { suitFace, whiteDragon, flowerFace, dots, bamboo, characters,
+                   NUMERAL, FLOWER_GLYPH };
 })();

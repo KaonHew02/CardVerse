@@ -21,6 +21,21 @@
 
     const CV = window.CV;
 
+    /**
+     * The fields every game's snapshot carries, and which this class owns.
+     *
+     * Anything else a game puts in its own `snapshot()` is copied straight
+     * onto the object, because a view reads that state off the engine and a
+     * guest's engine is this. Mahjong's wall count, 番 floor and table stake
+     * arrived nowhere at all before that, so a guest's tile table threw on
+     * its first paint. Owned names are written afterwards, so no game can
+     * quietly redefine `phase` or `seats` from across the wire.
+     */
+    const SHARED = new Set([
+        'phase', 'turn', 'round', 'over', 'viewer', 'seats', 'log', 'options',
+        'rules', 'shoeRemaining', 'dealer', 'game',
+    ]);
+
     /** The engine surface a view actually touches, rebuilt from a snapshot. */
     class RemoteEngine {
         constructor(view, game) {
@@ -31,6 +46,7 @@
 
         /** Take a new snapshot from the host. */
         absorb(view) {
+            for (const k of Object.keys(view)) if (!SHARED.has(k)) this[k] = view[k];
             this.view    = view;
             this.phase   = view.phase;
             this.turn    = view.turn;
@@ -38,7 +54,12 @@
             this.over    = view.over;
             this.viewer  = view.viewer;
             this.config  = Object.assign({}, view.rules || {});
-            this.dealer  = view.dealer || { cards: [], revealed: false };
+            // `dealer` is two different things: the house's own hand at a card
+            // table, and the seat holding East at a tile one. A number is a
+            // seat — and seat 0 is falsy, which is how East kept turning into
+            // an empty card hand.
+            this.dealer  = typeof view.dealer === 'number'
+                ? view.dealer : (view.dealer || { cards: [], revealed: false });
             this.shoe    = { remaining: view.shoeRemaining || 0, cards: [] };
             this.options = view.options || [];
             this.log     = view.log || [];

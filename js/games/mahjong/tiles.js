@@ -37,6 +37,17 @@
     const SUIT_MARK = { m: '万', s: '条', p: '筒' };
 
     /**
+     * The eight flowers, by name.
+     *
+     * They are two suits of four, not a run of eight: the seasons 春夏秋冬
+     * and the gentlemen 梅兰菊竹. A flower called "花8" is a slot number and
+     * tells a player nothing — the tile in their hand says 竹.
+     */
+    const FLOWERS = ['春', '夏', '秋', '冬', '梅', '兰', '菊', '竹'];
+    const FLOWER_EN = ['Spring', 'Summer', 'Autumn', 'Winter',
+                       'Plum', 'Orchid', 'Chrysanthemum', 'Bamboo flower'];
+
+    /**
      * How many fly tiles a three-player set holds.
      *
      * **Not settled.** The rules say "72 base tiles plus fly" and leave the
@@ -137,14 +148,16 @@
     /** "3筒", "东", "飞" — what the tile is called. */
     function name(tile) {
         if (isFly(tile)) return '飞';
-        if (isFlower(tile)) return '花' + tile.n;
+        if (isFlower(tile)) return FLOWERS[tile.n - 1] || '花' + tile.n;
         if (isHonour(tile)) return HONOURS[tile.n - 1];
         return tile.n + SUIT_MARK[tile.suit];
     }
 
     function nameEn(tile) {
         if (isFly(tile)) return 'Fly';
-        if (isFlower(tile)) return 'Flower ' + tile.n;
+        // 花 tiles come in two suits of four, so the number on the tile is
+        // 1-4 within its suit — not its index in the box.
+        if (isFlower(tile)) return `${FLOWER_EN[tile.n - 1]} ${((tile.n - 1) % 4) + 1}`;
         if (isHonour(tile)) return HONOUR_EN[tile.n - 1];
         return `${tile.n} ${{ m: 'Characters', s: 'Bamboo', p: 'Dots' }[tile.suit]}`;
     }
@@ -154,7 +167,8 @@
 
     window.CV = window.CV || {};
     window.CV.MJ = {
-        HONOURS, HONOUR_EN, SUIT_MARK, ORPHAN_KEYS, FLY_COUNT, FLOWER_COUNT,
+        HONOURS, HONOUR_EN, SUIT_MARK, FLOWERS, FLOWER_EN, ORPHAN_KEYS,
+        FLY_COUNT, FLOWER_COUNT,
         key, parse, isHonour, isWind, isDragon, isTerminal, isOrphan,
         isFlower, isFly, isPlaying, isDun,
         keysFor, build, sort, counts, split, name, nameEn,

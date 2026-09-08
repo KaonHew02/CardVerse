@@ -58,6 +58,64 @@
                 ${CV.CardView.hand(shared, { size: 'sm' })}
             </div>` : '';
 
+        /**
+         * The tiles, for the games that are played with them.
+         *
+         * A tile is not a card and will not go through `CardView`, so a row
+         * that has them carries `tiles` instead of `hands` and is drawn with
+         * the table's own tile face. Every seat is in it, not just the
+         * winner: the overlay covers the felt, and the losers' hands are
+         * half of why the hand ended the way it did.
+         */
+        const tileFace = CV.MahjongTile;
+        const withTiles = tileFace ? rows.filter((r) => r.tiles) : [];
+
+        /** One seat's tiles: what it melded, what it held, what it turned. */
+        const tileHand = (r) => {
+            const winId = r.tiles.win && r.tiles.win.id;
+            const face = (tile) => tileFace(tile, {
+                small: true, cls: winId && tile.id === winId ? 'is-win' : '',
+            });
+            const melds = r.tiles.melds
+                .map((m) => `<span class="mj-meld">${m.tiles.map(face).join('')}</span>`).join('');
+            const flowers = r.tiles.flowers.length
+                ? `<span class="rc-flowers">${r.tiles.flowers.map((x) => tileFace(x, { small: true })).join('')}</span>`
+                : '';
+            return melds + `<span class="mj-meld">${r.tiles.hand.map(face).join('')}</span>` + flowers;
+        };
+
+        /**
+         * What the 番 were, one line each.
+         *
+         * 门清 and 混一色 are names, not explanations, and a player who has
+         * just been paid or charged for one has no way to find out what it
+         * meant — the note on the row lists them and stops there.
+         */
+        const fanList = (r) => {
+            if (!r.fan || !r.fan.length) return '';
+            return `<div class="rc-fan">${r.fan.map((p) => {
+                const key = 'mj.fan.' + p.name;
+                const gloss = t(key);
+                return `<div class="rc-fan-row"><b>${esc(p.name)}</b>
+                    <span class="rc-fan-n">${esc(t('res.fanN', { n: p.fan }))}</span>
+                    <small>${gloss === key ? '' : esc(gloss)}</small></div>`;
+            }).join('')}</div>`;
+        };
+
+        const tilesBlock = withTiles.length ? `
+            <div class="rc-board">
+                <span class="rc-label">${esc(t('res.tiles'))}</span>
+                ${withTiles.map((r) => `
+                    <div class="rc-seat${r.seat === you ? ' is-you' : ''}${r.rank === 1 && !summary.result.draw ? ' is-win' : ''}">
+                        <div class="rc-seat-head">
+                            <b>${esc(r.name)}</b>${r.seat === you ? ` <em>(${esc(t('you'))})</em>` : ''}
+                            <span class="num ${r.coins > 0 ? 'good' : r.coins < 0 ? 'bad' : ''}">${signed(r.coins)}</span>
+                        </div>
+                        <div class="rc-tiles">${tileHand(r)}</div>
+                        ${fanList(r)}
+                    </div>`).join('')}
+            </div>` : '';
+
         const withCards = rows.filter((r) => r.hands && r.hands.length);
         const cardsBlock = withCards.length ? `
             <div class="rc-board">
@@ -115,6 +173,7 @@
 
                 ${sharedBlock}
                 ${cardsBlock}
+                ${tilesBlock}
                 ${levelUp}${streak}
                 ${unlocked}${missions}
 
@@ -122,14 +181,17 @@
 
                 <div class="btn-row">
                     <button class="btn primary big" id="resultAgain">${esc(t('res.again'))}</button>
+                    <button class="btn" id="resultPeek">${esc(t('res.peek'))}</button>
                     <button class="btn" id="resultLobby">${esc(t('res.lobby'))}</button>
                 </div>
             </div>`;
 
         host.hidden = false;
         host.scrollTop = 0;
-        $('resultAgain').addEventListener('click', () => { host.hidden = true; onAgain(); });
-        $('resultLobby').addEventListener('click', () => { host.hidden = true; onLobby(); });
+        peekOff();
+        $('resultAgain').addEventListener('click', () => { host.hidden = true; peekOff(); onAgain(); });
+        $('resultLobby').addEventListener('click', () => { host.hidden = true; peekOff(); onLobby(); });
+        $('resultPeek').addEventListener('click', () => peek(host));
 
         // preventScroll matters. Focusing a button at the bottom of a card
         // taller than the screen scrolls it into view, which drags the
@@ -138,5 +200,33 @@
         setTimeout(() => $('resultAgain').focus({ preventScroll: true }), 50);
     }
 
-    CV.ResultView = { show };
+    /**
+     * Step off the result and look at the table underneath.
+     *
+     * The overlay covers the board the moment the hand ends, and at mahjong
+     * that board is thirteen tiles a seat — the one thing a player wants to
+     * look at again. Hiding the overlay is enough, as long as there is an
+     * obvious way back to it, so the way back follows the player down.
+     */
+    function peek(host) {
+        host.hidden = true;
+        let back = document.getElementById('resultBack');
+        if (!back) {
+            back = document.createElement('button');
+            back.id = 'resultBack';
+            back.className = 'btn primary result-back';
+            document.body.appendChild(back);
+        }
+        back.textContent = t('res.backToResult');
+        back.hidden = false;
+        back.onclick = () => { back.hidden = true; host.hidden = false; };
+    }
+
+    /** Put the peek away — a new hand must not leave the chip behind. */
+    function peekOff() {
+        const back = document.getElementById('resultBack');
+        if (back) back.hidden = true;
+    }
+
+    CV.ResultView = { show, peekOff };
 })();

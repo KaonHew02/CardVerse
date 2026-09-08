@@ -7,7 +7,7 @@
  *                              no flowers, no fly, no minimum
  *     three seats  72 + fly    东 南 西 — dots, winds, dragons and eight
  *                              flowers. No characters and no bamboo at all.
- *                              5番 to declare, and 爆番 over ten.
+ *                              2番 to declare, and 爆番 over ten.
  *
  * `MODES` below is the whole difference, in the shape the rules give it, and
  * nothing outside it branches on the seat count. That is deliberate: the
@@ -58,7 +58,13 @@
             mode: '3P', players: 3,
             flyEnabled: true, dunFlyEnabled: true,
             flowers: 8,
-            minimumFan: 5, baoFanThreshold: 10, baoFanPayment: 20,
+            // The floor, and it is the pay profile's floor: `minFan` is what
+            // the screen prints and `MJPay.canWin` is what actually refuses a
+            // declaration, so the two disagreeing would show a player a
+            // number the table does not go by. The smoke test holds them
+            // together. It reads 2 rather than 5 because 混一色 no longer
+            // hands every hand in this box 3番 — see fan.js and pay.js.
+            minimumFan: 2, baoFanThreshold: 10, baoFanPayment: 20,
             flyUnit: 5,        // coins, the shape of RM0.50 — not yet settled
         },
         4: {
@@ -88,6 +94,10 @@
             this.mode = Object.assign({}, MODES[this.players] || MODES[4], this.config.mode || {});
             this.pool = MJ.keysFor(this.players);
             this.profile = CV.MJPay.profileFor(this.players);
+            // One fan table per mode, because the two modes are played out of
+            // different boxes: 混一色 describes the three-player box rather
+            // than a hand, so that table does not hold it. See fan.js.
+            this.fanTable = CV.MJFan.tableFor(this.players);
             /** Coins one fan is worth at this table. */
             this.unit = CV.MJPay.unitFor(this.players, room.bet[0], this.config.unitStep);
             this.stake = this.unit;
@@ -96,8 +106,13 @@
 
             this.wall = [];
             this.lastDiscard = null;     // { tile, from }
+            this.drew = null;            // the tile the seat in play just drew
+            this.winTile = null;         // the tile the hand went out on
             this.pending = [];           // claimants still to be asked
             this.claimAt = 0;
+            this.claimed = false;        // this seat took the tile, it did not draw
+            this.robbing = null;         // 抢杠 in progress: { seat, key }
+            this.robbed = false;         // the hand was won off somebody's 加杠
             this.winner = -1;
             this.winFrom = -1;
             this.winHand = null;
@@ -122,6 +137,18 @@
 
         /** The floor a hand has to clear before it may be declared at all. */
         get minFan() { return this.mode.minimumFan; }
+
+        /**
+         * The three numbers a screen needs off the mode, as flat values.
+         *
+         * A guest's engine is a snapshot wearing the engine's read surface,
+         * and a snapshot carries values, not the mode object. Reading them
+         * through a getter here and sending the same names on the wire means
+         * the table screen asks the same question of both.
+         */
+        get flyOn()  { return !!this.mode.flyEnabled; }
+        get baoAt()  { return this.mode.baoFanThreshold; }
+        get baoPay() { return this.mode.baoFanPayment; }
 
         /** Flies in a seat's hand — wild at three seats, absent at four. */
         wildsIn(seat) { return this.mode.flyEnabled ? MJ.split(this.seats[seat].hand).wilds : 0; }
@@ -152,6 +179,12 @@
             // East takes one more and throws first.
             this.seats[this.dealer].hand.push(this.wall.pop());
             for (let i = 0; i < this.players; i++) this.clearFlowers(i);
+            // East's fourteenth tile — or whatever replaced it, if it turned
+            // out to be a flower. A dealt hand can already be a win, and with
+            // flies in the box that is not even rare; without this the tile
+            // the hand went out on was recorded as nothing at all.
+            const east = this.seats[this.dealer].hand;
+            this.drew = east[east.length - 1] || null;
             for (const s of this.seats) s.hand = MJ.sort(s.hand);
 
             this.phase = 'discard';
@@ -192,7 +225,18 @@
             if (this.phase === 'discard') {
                 const out = [];
                 // 自摸 — the hand is complete AND worth enough to declare.
-                const mine = this.winFor(seat, null);
+                //
+                // Only off a tile this seat drew. A 碰 or a 吃 can finish a
+                // hand too, and the seat is then sitting on fourteen tiles
+                // that read as a win — but it is not a self draw, it is a
+                // hand that should have said 胡 to the discard instead of
+                // 碰. Scoring it as 自摸 paid the wrong 番 out of the wrong
+                // pockets, and at a table with a floor it laundered a hand
+                // that had just been refused: 胡 denied at 1番, take the 碰,
+                // declare the same tiles as 自摸 for 2番. A kong is not a
+                // claim in this sense — it draws a replacement, and going
+                // out on that is 杠上开花.
+                const mine = this.claimed ? null : this.winFor(seat, null);
                 if (mine && mine.ok) out.push({ type: 'win', label: t('mj.win') });
                 for (const key of this.kongKeys(seat)) out.push({ type: 'kong', key, label: t('mj.kong') });
                 // Every tile is a legal throw, so every tile is listed.
@@ -208,8 +252,16 @@
             return [];
         }
 
-        /** Kongs this seat could declare on its own turn. */
+        /**
+         * Kongs this seat could declare on its own turn.
+         *
+         * None at all once the wall is dry: a kong takes four tiles off the
+         * table and draws one back, and there is nothing to draw. Offering it
+         * anyway made 杠 a button that ended the hand in 流局 on the spot,
+         * which is a way out for a seat about to lose rather than a move.
+         */
         kongKeys(seat) {
+            if (!this.wall.length) return [];
             const s = this.seats[seat];
             const cnt = this.counts(seat);
             const out = [];
@@ -245,6 +297,10 @@
             s.discards.push(tile);
             s.lastAction = 'discard';
             this.lastDiscard = { tile, from: seat };
+            // The turn this seat took off a claim is over. Left standing, the
+            // flag would describe a seat that is no longer in play, and the
+            // next reader of it would be reading the wrong seat's history.
+            this.claimed = false;
             this.emit('discard', { seat, tile });
 
             this.pending = this.findClaims(tile, seat);
@@ -272,18 +328,26 @@
                 const s = this.seats[i];
                 const cnt = MJ.counts(s.hand);
                 const held = cnt.get(key) || 0;
+                // 飞 stands in for any tile the set holds, and a claim is no
+                // exception: 中 and a fly take a thrown 中. It counted in a
+                // finished hand and nowhere else, so a player holding the
+                // pair the tile completed was told the claim was not there.
+                const wilds = this.wildsIn(i);
                 const options = [];
 
                 const hu = this.winFor(i, tile);
                 if (hu && hu.ok) options.push({ type: 'win', label: t('mj.win') });
-                if (held >= 3) options.push({ type: 'kong', label: t('mj.kong') });
-                if (held >= 2) options.push({ type: 'pung', label: t('mj.pung') });
+                // A kong needs a replacement tile to come back, so the last
+                // few throws of a hand cannot be konged either.
+                if (held + wilds >= 3 && this.wall.length) options.push({ type: 'kong', label: t('mj.kong') });
+                if (held + wilds >= 2) options.push({ type: 'pung', label: t('mj.pung') });
 
                 if (step === 1 && suit !== 'z') {
                     for (const lo of [n - 2, n - 1, n]) {
                         if (lo < 1 || lo + 2 > 9) continue;
                         const need = [lo, lo + 1, lo + 2].filter((x) => x !== n);
-                        if (need.every((x) => (cnt.get(suit + x) || 0) > 0)) {
+                        const short = need.filter((x) => !(cnt.get(suit + x) || 0)).length;
+                        if (short <= wilds) {
                             options.push({ type: 'chow', low: suit + lo, label: t('mj.chow') });
                         }
                     }
@@ -303,11 +367,20 @@
             this.claimAt++;
             if (this.claimAt < this.pending.length) {
                 this.turn = this.pending[this.claimAt].seat;
-                this.emit('claimable', { seat: this.turn, tile: this.lastDiscard.tile });
+                this.emit('claimable', {
+                    seat: this.turn, tile: this.lastDiscard.tile, rob: !!this.robbing,
+                });
                 return true;
             }
             const from = this.lastDiscard.from;
             this.pending = [];
+            // Nobody robbed it, so the kong stands and the seat carries on.
+            if (this.robbing) {
+                const { seat, key } = this.robbing;
+                this.robbing = null;
+                this.lastDiscard = null;
+                return this.addKong(seat, key);
+            }
             return this.drawFor((from + 1) % this.players);
         }
 
@@ -316,29 +389,38 @@
             if (action.type === 'win') return this.declareWin(seat, from);
 
             const s = this.seats[seat];
+            /**
+             * The tiles this seat puts down for the claim: its own copies
+             * first, then a fly for each one it is short — which is what the
+             * claim was offered on in the first place.
+             */
             const take = (key, howMany) => {
                 const got = [];
                 for (let i = s.hand.length - 1; i >= 0 && got.length < howMany; i--) {
                     if (MJ.key(s.hand[i]) === key) got.push(s.hand.splice(i, 1)[0]);
                 }
-                return got;
+                for (let i = s.hand.length - 1; i >= 0 && got.length < howMany; i--) {
+                    if (MJ.isFly(s.hand[i])) got.push(s.hand.splice(i, 1)[0]);
+                }
+                return got.length === howMany ? got : null;
             };
 
             // The tile leaves the thrower's pile — it is on the table now.
             this.seats[from].discards.pop();
 
             let meld;
-            if (action.type === 'pung') {
-                meld = { type: 'pung', key: MJ.key(tile), tiles: take(MJ.key(tile), 2).concat([tile]), concealed: false, from };
-            } else if (action.type === 'kong') {
-                meld = { type: 'kong', key: MJ.key(tile), tiles: take(MJ.key(tile), 3).concat([tile]), concealed: false, from };
+            if (action.type === 'pung' || action.type === 'kong') {
+                const mine = take(MJ.key(tile), action.type === 'pung' ? 2 : 3);
+                if (!mine) return false;
+                meld = { type: action.type, key: MJ.key(tile), tiles: mine.concat([tile]),
+                         concealed: false, from };
             } else if (action.type === 'chow') {
                 const suit = action.low[0], lo = Number(action.low.slice(1));
                 const tiles = [];
                 for (let x = lo; x <= lo + 2; x++) {
                     const k = suit + x;
                     if (k === MJ.key(tile)) tiles.push(tile);
-                    else tiles.push(take(k, 1)[0]);
+                    else tiles.push((take(k, 1) || [])[0]);
                 }
                 if (tiles.some((x) => !x)) return false;
                 meld = { type: 'chow', key: action.low, tiles, concealed: false, from };
@@ -347,6 +429,11 @@
             s.melds.push(meld);
             s.lastAction = action.type;
             this.pending = [];
+            // A claim ends with this seat on discard without having drawn:
+            // it throws next, and it may not go out until it has drawn.
+            // `replacement` clears this again for a kong.
+            this.claimed = true;
+            this.drew = null;
             this.emit('meld', { seat, meld });
 
             if (meld.type === 'kong') return this.replacement(seat);
@@ -364,6 +451,8 @@
             this.seats[seat].hand.push(tile);
             if (!this.clearFlowers(seat)) return this.exhausted();
             this.seats[seat].hand = MJ.sort(this.seats[seat].hand);
+            this.drew = tile;
+            this.claimed = false;
             this.phase = 'discard';
             this.turn = seat;
             this.emit('turn', { seat, drew: tile, wall: this.wall.length });
@@ -377,10 +466,37 @@
             this.seats[seat].hand.push(tile);
             if (!this.clearFlowers(seat)) return this.exhausted();
             this.seats[seat].hand = MJ.sort(this.seats[seat].hand);
+            this.drew = tile;
+            // The replacement is a draw like any other, so a hand that goes
+            // out on it is 自摸 — 杠上开花.
+            this.claimed = false;
             this.phase = 'discard';
             this.turn = seat;
             this.emit('replace', { seat, tile, wall: this.wall.length });
             return true;
+        }
+
+        /**
+         * 抢杠 — the seats that may take the fourth tile off a 加杠.
+         *
+         * Adding a tile to a pung already on the table puts it in the open
+         * for a moment, and anyone whose hand that tile finishes may take it
+         * as a discard would be taken. Without this a player waiting on the
+         * one tile is simply never asked, and the hand they were owed is
+         * swallowed by somebody else's kong. It applies to the added kong
+         * only: a concealed kong is never robbed.
+         */
+        robbers(tile, from) {
+            const out = [];
+            for (let step = 1; step < this.players; step++) {
+                const i = (from + step) % this.players;
+                const hu = this.winFor(i, tile);
+                if (hu && hu.ok) {
+                    out.push({ seat: i, step, rank: PRIORITY.win,
+                               options: [{ type: 'win', label: t('mj.win') }] });
+                }
+            }
+            return out.sort((a, b) => a.step - b.step);
         }
 
         doKong(seat, key) {
@@ -389,11 +505,21 @@
             const pung = s.melds.find((m) => m.type === 'pung' && m.key === key);
 
             if (pung && (cnt.get(key) || 0) >= 1) {
-                // 加杠 — the fourth tile joins a pung already on the table.
+                // 加杠, and it is offered around before it is made.
                 const idx = s.hand.findIndex((x) => MJ.key(x) === key);
-                pung.tiles.push(s.hand.splice(idx, 1)[0]);
-                pung.type = 'kong';
-                this.emit('meld', { seat, meld: pung, added: true });
+                const tile = s.hand[idx];
+                const rob = this.robbers(tile, seat);
+                if (rob.length) {
+                    this.robbing = { seat, key };
+                    this.lastDiscard = { tile, from: seat };
+                    this.pending = rob;
+                    this.claimAt = 0;
+                    this.phase = 'claim';
+                    this.turn = rob[0].seat;
+                    this.emit('claimable', { seat: this.turn, tile, rob: true });
+                    return true;
+                }
+                return this.addKong(seat, key);
             } else if ((cnt.get(key) || 0) === 4) {
                 const tiles = [];
                 for (let i = s.hand.length - 1; i >= 0; i--) {
@@ -405,6 +531,19 @@
             } else return false;
 
             s.lastAction = 'kong';
+            return this.replacement(seat);
+        }
+
+        /** The fourth tile joins a pung already on the table. */
+        addKong(seat, key) {
+            const s = this.seats[seat];
+            const pung = s.melds.find((m) => m.type === 'pung' && m.key === key);
+            const idx = s.hand.findIndex((x) => MJ.key(x) === key);
+            if (!pung || idx < 0) return false;
+            pung.tiles.push(s.hand.splice(idx, 1)[0]);
+            pung.type = 'kong';
+            s.lastAction = 'kong';
+            this.emit('meld', { seat, meld: pung, added: true });
             return this.replacement(seat);
         }
 
@@ -453,13 +592,93 @@
                 wilds,
                 dun: this.mode.dunFlyEnabled ? parts.dun : 0,
             };
-            const fan = CV.MJFan.calculateFan(hand);
+            const fan = CV.MJFan.calculateFan(hand, this.fanTable);
             return { shape, hand, fan, tiles, wilds, ok: CV.MJPay.canWin(this.players, fan.totalFan) };
+        }
+
+        /**
+         * The hand `seat` would go out on, group by group — or null if it is
+         * not a winning hand at all.
+         *
+         * **This is the answer to "why can I 胡?".** The button appears and
+         * the tiles sit in a row of fourteen, and at three seats up to four
+         * of them are flies standing in for something the player never chose.
+         * Told nothing, they press it and find out afterwards from the score.
+         * So the melds are handed back already cut apart, each fly marked
+         * with the tile it turned into, and the screen lays them out.
+         *
+         * `ok` is the same `ok` as `winFor`: the shape is finished, but the
+         * table may still not allow it to be declared.
+         *
+         * @param {number} seat
+         * @param {object|null} [tile] the tile on offer, or null for a self draw
+         */
+        explain(seat, tile) {
+            // The panel answers "why may I 胡" and must never answer it for
+            // a hand the table will not accept a declaration on.
+            if (!tile && this.claimed && seat === this.turn) return null;
+            const got = this.winFor(seat, tile || null);
+            if (!got) return null;
+            const s = this.seats[seat];
+            const groups = [];
+            /** `n` copies of one key, the last `wild` of them played by a fly. */
+            const copies = (key, n, wild) =>
+                Array.from({ length: n }, (_, i) => ({ key, wild: i >= n - (wild || 0) }));
+
+            // What is already on the table, in the order it was laid down.
+            for (const m of s.melds) {
+                if (m.type === 'chow') {
+                    const suit = m.key[0], lo = Number(m.key.slice(1));
+                    groups.push({ type: 'chow', open: !m.concealed,
+                        tiles: m.tiles.map((x, i) => ({ key: suit + (lo + i), wild: MJ.isFly(x) })) });
+                } else {
+                    groups.push({ type: m.type, open: !m.concealed,
+                        tiles: m.tiles.map((x) => ({ key: m.key, wild: MJ.isFly(x) })) });
+                }
+            }
+
+            const shape = got.shape;
+            if (shape.shape === 'sevenPairs') {
+                for (const g of (shape.groups || [])) {
+                    groups.push({ type: 'pair', tiles: copies(g.key, 2, g.wild) });
+                }
+            } else if (shape.shape === 'thirteenOrphans') {
+                groups.push({ type: 'orphans',
+                    tiles: MJ.ORPHAN_KEYS.concat([shape.pair]).map((k) => ({ key: k, wild: false })) });
+            } else {
+                for (const m of (shape.melds || [])) {
+                    if (m.type === 'chow') {
+                        const suit = m.key[0], lo = Number(m.key.slice(1));
+                        const missing = new Set(m.wildKeys || []);
+                        groups.push({ type: 'chow', tiles: [0, 1, 2].map((i) => ({
+                            key: suit + (lo + i), wild: missing.has(suit + (lo + i)) })) });
+                    } else {
+                        groups.push({ type: 'pung', tiles: copies(m.key, 3, m.wild) });
+                    }
+                }
+                groups.push({ type: 'pair', tiles: copies(shape.pair, 2, shape.pairWild) });
+            }
+
+            return {
+                ok: got.ok, fan: got.fan, shape: shape.shape, groups,
+                need: this.minFan, selfDraw: !tile,
+            };
         }
 
         /** Every tile the finished hand is made of, wilds resolved. */
         handKeys(shape, exposed, melds) {
-            const out = exposed.flatMap((m) => m.tiles.filter(MJ.isPlaying).map(MJ.key));
+            // A meld is read as what it is, not as the tiles in it: a 碰
+            // completed with a fly is still three 中, and dropping the fly
+            // would leave the suit count a tile short.
+            const out = [];
+            for (const m of exposed) {
+                if (m.type === 'chow') {
+                    const suit = m.key[0], lo = Number(m.key.slice(1));
+                    out.push(suit + lo, suit + (lo + 1), suit + (lo + 2));
+                } else {
+                    for (let i = 0; i < m.tiles.length; i++) out.push(m.key);
+                }
+            }
             if (shape.shape === 'sevenPairs') {
                 for (const k of shape.pairs) out.push(k, k);
                 return out;
@@ -481,12 +700,30 @@
             const selfDraw = from === null;
             const got = this.winFor(seat, selfDraw ? null : this.lastDiscard.tile);
             if (!got || !got.ok) return false;
+            // A hand may only be declared off a tile this seat drew, or off
+            // one somebody put in the open. Not off a 碰 — see legalActions.
+            if (selfDraw && this.claimed) return false;
 
-            if (!selfDraw) this.seats[from].discards.pop();
+            if (!selfDraw) {
+                if (this.robbing) {
+                    // 抢杠: the tile never reached a discard pile, it was on
+                    // its way into a kong. It leaves the hand it was in.
+                    const owner = this.seats[from];
+                    const at = owner.hand.findIndex((x) => x.id === this.lastDiscard.tile.id);
+                    if (at >= 0) owner.hand.splice(at, 1);
+                    this.robbed = true;
+                    this.robbing = null;
+                } else this.seats[from].discards.pop();
+            }
 
             this.winner = seat;
             this.winFrom = selfDraw ? -1 : from;
             this.winTiles = got.tiles;
+            // The tile the hand went out on, kept for the recap. It cannot be
+            // read back off the table afterwards: a claimed discard has been
+            // taken out of the pool, and a drawn one has been sorted into the
+            // hand like any other.
+            this.winTile = selfDraw ? this.drew : this.lastDiscard.tile;
             this.winHand = got.hand;
             this.fan = got.fan;
 
@@ -521,11 +758,32 @@
                 outcome: s.net > 0 ? 'win' : s.net < 0 ? 'loss' : 'draw',
                 note: this.drawn ? t('mj.drawn')
                     : i === this.winner ? this.fan.patterns.map((p) => p.name).join(' · ')
-                    : i === this.winFrom ? t('mj.dealtIn') : t('mj.lost'),
+                    // A seat that was robbed did not throw the tile — it was
+                    // taken off the kong it was making, which is not the same
+                    // mistake and should not be reported as one.
+                    : i === this.winFrom ? t(this.robbed ? 'mj.robbedOff' : 'mj.dealtIn')
+                    : t('mj.lost'),
                 // The shared recap draws playing cards, and a tile is not
-                // one. The winning hand is named in `note` and stays on the
-                // table behind the overlay.
+                // one — so tiles travel in their own field and result.js
+                // draws them with the same tile face the table uses.
+                //
+                // Every seat's hand is in it, not just the winner's: the
+                // overlay covers the table, and "what were the others
+                // holding" is most of why a hand ended the way it did.
                 hands: [],
+                tiles: {
+                    melds: s.melds.map((m) => ({ type: m.type, concealed: !!m.concealed, tiles: m.tiles })),
+                    hand: MJ.sort(i === this.winner && this.winTiles ? this.winTiles : s.hand),
+                    flowers: s.flowers.slice(),
+                    win: i === this.winner ? this.winTile || null : null,
+                },
+                // What the 番 were, pattern by pattern. The names are the
+                // ones the table uses and half of them explain nothing on
+                // their own — 门清 is a word, not a description — so the
+                // screen glosses each one.
+                fan: i === this.winner && this.fan
+                    ? this.fan.patterns.map((p) => ({ name: p.name, fan: p.fan }))
+                    : null,
                 extra: {
                     mjRounds: 1,
                     mjWins: i === this.winner ? 1 : 0,
@@ -552,7 +810,8 @@
                     ? t('mj.detailDraw')
                     : t('mj.detailWin', {
                         name: this.seats[this.winner].name,
-                        how: t(this.winFrom < 0 ? 'mj.selfDraw' : 'mj.byDiscard'),
+                        how: t(this.winFrom < 0 ? 'mj.selfDraw'
+                            : this.robbed ? 'mj.robWin' : 'mj.byDiscard'),
                         n: this.fan.totalFan,
                     }) + (this.bao ? ' · ' + t('mj.bao', { n: this.payFan }) : ''),
             });
@@ -566,19 +825,23 @@
                 dealer: this.dealer,
                 players: this.players,
                 mode: this.mode.mode,
-                wall: this.wall.length,
+                flyOn: this.flyOn, baoAt: this.baoAt, baoPay: this.baoPay,
+                wall: this.wall.length, wallLeft: this.wall.length,
                 lastDiscard: this.lastDiscard && {
                     tile: this.lastDiscard.tile, from: this.lastDiscard.from,
                 },
                 winner: this.winner, winFrom: this.winFrom, drawn: this.drawn,
                 fan: this.fan, bao: this.bao, unit: this.unit, minFan: this.minFan,
+                // A guest's screen says "this is a 抢杠" from this, and its
+                // table view reads `claimed` the same way the host's does.
+                robbing: !!this.robbing, robbed: this.robbed, claimed: this.claimed,
             });
         }
 
-        /** Concealed tiles are concealed. Melds and discards are on the table. */
+        /** Concealed tiles are concealed — until the hand is over. */
         redactSeat(seat, index, viewer) {
             if (index === viewer) return seat;
-            const open = this.over && index === this.winner;
+            const open = this.over;
             return Object.assign({}, seat, {
                 hand: open ? seat.hand.slice() : seat.hand.map(() => null),
             });

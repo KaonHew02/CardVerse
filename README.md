@@ -35,7 +35,7 @@ keeps it a game hub.
 | 👑 **斗地主** | ✅ bidding, every combination, bombs, 春天 and 反春 |
 | 🂡 **锄大D** | ✅ 3♦ opens, suits decide, five-card categories |
 | ♠️ **Poker** | ✅ Hold'em — blinds, four betting rounds, all-in side pots |
-| 🀄 **Mahjong** | ✅ 136 tiles at four seats; dots, flowers and 飞 at three, with a 5番 floor and 爆番. Seats around a felt, discards pooled in the middle |
+| 🀄 **Mahjong** | ✅ 136 tiles at four seats; dots, flowers and 飞 at three, with a 2番 floor and 爆番. Seats around a felt, discards pooled in the middle |
 | 🐮 **斗牛** | ✅ three cards then two, a 3 counts as a 6, 宝宝, Pic + Black Ace, 五个 Pic |
 | 🧩 **Lami** | ✅ rummy on tiles — runs, sets, jokers, dice for the opener |
 | 🎲 **骰子** | ✅ three dice — 大 / 小 / 围骰, checked over all 216 throws |

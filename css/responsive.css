@@ -84,6 +84,7 @@
 @media (prefers-reduced-motion: reduce) {
     :root { --anim: 1ms; }
     .card-fresh, .screen, .dialog, .result { animation: none; }
+    .mj-shuffle-tile, .mj-pick.is-fresh { animation: none; }
 }
 
 @media (max-width: 900px) {

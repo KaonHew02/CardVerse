@@ -614,10 +614,14 @@
 .tile-m { color: #1b2430; }
 .tile-s { color: #1d7a45; }
 .tile-p { color: #1d4f9c; }
+/* The honours' inks, as a printed set carries them: the four winds blue,
+ * 中 red, 发 green. Winds in the body colour read as a wall of grey text —
+ * on a set they are the one group you pick out without reading. 白 has no
+ * character at all, so no colour: it is drawn, see faces.js. */
 .tile-z b { font-size: 1.15rem; }
+.tile-z.z1, .tile-z.z2, .tile-z.z3, .tile-z.z4 { color: #1d4f9c; }
 .tile-z.z5 { color: #c62828; }
 .tile-z.z6 { color: #1d7a45; }
-.tile-z.z7 { color: #2b4a72; }
 /* A face-down tile has to read as a tile on green felt, so it carries an
  * edge of its own — without one, a concealed kong looks like two tiles. */
 .tile-back {
@@ -641,7 +645,41 @@
 .tile-xs .tile-wan b { font-size: .5rem; }
 .tile-xs .tile-wan i { font-size: .42rem; margin-top: 0; }
 
-.mj { display: flex; flex-direction: column; gap: 10px; min-height: 60vh; }
+.mj { display: flex; flex-direction: column; gap: 10px; min-height: 60vh; position: relative; }
+
+/* ---- 洗牌 ---------------------------------------------------------------
+ *
+ * The wall is mixed on screen before the hand starts. A sorted thirteen-tile
+ * hand that simply exists was dealt by nobody, and the round is under way
+ * before the player has registered that one began. It covers the felt
+ * completely — the tiles behind it are already dealt. */
+.mj-shuffle {
+    position: absolute; inset: 0; z-index: 6;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px;
+    border-radius: 18px;
+    background:
+        radial-gradient(120% 90% at 50% 40%, rgba(255,255,255,.08), transparent 62%),
+        linear-gradient(160deg, #1c6a4c, #12472f);
+    box-shadow: inset 0 0 0 2px rgba(0,0,0,.28), inset 0 0 40px rgba(0,0,0,.35);
+}
+.mj-shuffle-tiles { display: flex; }
+.mj-shuffle-tile { margin-left: -12px; animation: mjShuffle 900ms ease-in-out infinite; }
+.mj-shuffle-tile:first-child { margin-left: 0; }
+@keyframes mjShuffle {
+    0%, 100% { transform: none; }
+    25%  { transform: translate(-9px, -12px) rotate(-11deg); }
+    50%  { transform: translate(7px, 9px) rotate(8deg); }
+    75%  { transform: translate(-4px, 5px) rotate(-4deg); }
+}
+.mj-shuffle-note { font-weight: 700; letter-spacing: .1em; color: rgba(255,255,255,.86); }
+/* Your tiles land one at a time when the shuffle lifts. `backwards` and not
+ * `both`: a filled end state would sit on top of the hover lift for as long
+ * as the hand went unpainted. */
+.mj-pick.is-fresh { animation: mjDealIn 300ms cubic-bezier(.2, .8, .2, 1) backwards; }
+@keyframes mjDealIn {
+    from { transform: translateY(30px) scale(.86); opacity: 0; }
+    to   { transform: none; opacity: 1; }
+}
 
 /* ---- the felt ------------------------------------------------------------
  *
@@ -734,12 +772,79 @@
  * thing on the felt. A drawn 9筒 needs the room. */
 .mj-mine { display: flex; gap: 2px; flex-wrap: wrap; justify-content: center; }
 .mj-mine .tile { width: 44px; height: 59px; }
-.mj-pick { background: none; border: 0; padding: 0; line-height: 0; cursor: pointer; transition: transform 120ms; }
-.mj-pick:not(:disabled):hover { transform: translateY(-6px); }
-.mj-pick:disabled { cursor: default; }
+/* A tile an offered action would actually use, marked with the action.
+ * "杠" on a button says nothing about which tile it is a kong of, and with
+ * melds on the table and a fly in hand that is a real question. */
+.mj-pick.can-act .tile {
+    box-shadow: inset 0 -3px 0 rgba(0,0,0,.14), 0 0 0 2px var(--accent), 0 3px 8px rgba(0,0,0,.5);
+}
+.mj-hint {
+    position: absolute; top: -7px; right: -5px; z-index: 2;
+    background: var(--accent); color: var(--accent-ink); pointer-events: none;
+    font-size: .62rem; font-weight: 900; line-height: 1.5; border-radius: 999px; padding: 0 5px;
+}
+/* A tile still drags when it is not yours to throw — waiting for the other
+ * seats is exactly when a player tidies their hand — so `is-locked` is a
+ * class and not the `disabled` attribute, which would eat the pointer. */
+.mj-pick { position: relative; background: none; border: 0; padding: 0; line-height: 0;
+    cursor: grab; transition: transform 120ms; touch-action: pan-y; }
+.mj-pick:not(.is-locked):hover { transform: translateY(-6px); }
+.mj-pick.is-locked { cursor: grab; }
 .mj-pick:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* The tile being carried follows the pointer and stops animating under it. */
+.mj-pick.is-dragging { z-index: 5; cursor: grabbing; transition: none; opacity: .92; }
+.mj-pick.is-dragging .tile { box-shadow: 0 8px 18px rgba(0,0,0,.55); }
+/* The tile you just drew, marked where it lies. Sorting it into place would
+ * hide the one tile the decision is actually about. */
+.mj-pick.is-drawn .tile { box-shadow: inset 0 -3px 0 rgba(0,0,0,.14), 0 0 0 2px var(--good); }
+.mj-drag-hint { opacity: .75; }
 .mj-min { color: var(--warn); font-size: .8rem; font-weight: 700; }
 .mj-short { color: var(--warn); font-weight: 700; }
+.mj-hub-btn {
+    margin-top: 3px; padding: 1px 8px; font-size: .66rem; font-weight: 700;
+    color: rgba(255,255,255,.82); background: rgba(255,255,255,.12);
+    border: 0; border-radius: 999px; cursor: pointer; white-space: nowrap;
+}
+.mj-hub-btn:hover { background: rgba(255,255,255,.22); }
+
+/* ---- why you may 胡 ------------------------------------------------------
+ *
+ * The hand as it was read, not as it lies: cut into its melds, with every
+ * fly drawn as the tile it turned into and ringed. A lit 胡 button over a
+ * row of fourteen tiles explains nothing, and at three seats up to four of
+ * those tiles are wild. */
+.mj-why { display: flex; justify-content: center; }
+.mj-why-card {
+    display: flex; flex-direction: column; gap: 6px; align-items: center;
+    padding: 8px 14px; border-radius: 12px; max-width: 100%;
+    background: rgba(70,200,120,.12); box-shadow: inset 0 0 0 1px rgba(70,200,120,.45);
+}
+.mj-why-card.is-short { background: rgba(245,185,66,.1); box-shadow: inset 0 0 0 1px rgba(245,185,66,.4); }
+.mj-why-head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; justify-content: center; }
+.mj-why-title { font-weight: 800; }
+.mj-why-total { color: var(--accent); font-weight: 800; }
+.mj-why-need { color: var(--warn); font-weight: 700; font-size: .82rem; }
+.mj-why-groups { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+.mj-why-pats { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; font-size: .76rem; }
+.mj-why-pat { padding: 1px 7px; border-radius: 999px; background: rgba(0,0,0,.28); }
+.mj-why-pat b { color: var(--accent); }
+.mj-why-note { font-size: .72rem; color: var(--muted); }
+/* A meld that is already on the table, so the hand is not 门清. */
+.mj-meld.is-open { opacity: .82; }
+/* The tile a fly is standing in for. It is drawn as that tile, because that
+ * is what the hand counts as — the ring says the tile itself is a 飞. */
+.tile.is-wild { position: relative; box-shadow: inset 0 -3px 0 rgba(0,0,0,.14), 0 0 0 2px var(--accent); }
+.tile.is-wild::after {
+    content: '飞'; position: absolute; top: -6px; right: -5px; z-index: 2;
+    background: var(--accent); color: var(--accent-ink);
+    font-size: .54rem; font-weight: 900; line-height: 1.5; border-radius: 999px; padding: 0 4px;
+}
+
+/* The fan table, in a dialog, built from the table the engine is scoring by. */
+.mj-fan-list { list-style: none; margin: 8px 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.mj-fan-list li { display: grid; grid-template-columns: 5.6em 3.4em 1fr; gap: 8px; align-items: baseline; font-size: .84rem; }
+.mj-fan-list small { color: var(--muted); }
+.mj-fan-n { color: var(--accent); font-weight: 700; }
 
 /* ---- 斗牛 --------------------------------------------------------------- */
 
@@ -753,8 +858,12 @@
 .bb-name { font-weight: 800; color: var(--accent); min-height: 1.4em; }
 .bb-mult { background: rgba(0,0,0,.35); border-radius: 999px; padding: 1px 8px; font-weight: 800; }
 /* 飞 is a wild card and reads as one — its own face, not a suit. */
+/* 飞 is a wild card and reads as one — its own face, not a suit. */
 .tile-fly { background: linear-gradient(150deg, #ffd88a, #e0a63c); color: #4a2c00; }
-.tile-flower { background: linear-gradient(150deg, #ffe9f2, #f6c9dc); color: #8a2a53; }
+/* A flower is an ordinary ivory tile with a plant on it. The pink slab it
+ * used to be said "set aside" and nothing else — which is the one thing the
+ * player could already see, since flowers only ever sit in their own strip. */
+.tile-flower { background: linear-gradient(#fffdf3, #efe7d0); }
 
 /* ---- Lami --------------------------------------------------------------- */
 
@@ -925,6 +1034,37 @@
 /* Hold'em's five, above the per-seat hands on the result card. They sit on
  * their own strip because they belong to nobody: put them in the table and
  * they read as one more player's hand. */
+/* ---- the tiles, on the result screen ------------------------------------
+ *
+ * One block a seat, every seat, because the overlay is sitting on top of the
+ * table it is describing. The winning tile is marked and the 番 are spelled
+ * out: 门清 is a name, and a player who has just been charged for one has
+ * nowhere else to find out what it meant. */
+.rc-seat { padding: 8px 0; border-top: 1px solid var(--border); }
+.rc-seat:first-of-type { border-top: 0; }
+.rc-seat.is-you { background: color-mix(in srgb, var(--accent) 10%, transparent);
+    border-radius: var(--radius-sm); padding-left: 8px; padding-right: 8px; }
+.rc-seat.is-win .rc-seat-head b { color: var(--good); }
+.rc-seat-head { display: flex; align-items: center; gap: 8px; font-size: .84rem; margin-bottom: 5px; }
+.rc-seat-head em { font-style: normal; color: var(--accent); font-weight: 500; font-size: .9em; }
+.rc-seat-head .num { margin-left: auto; font-weight: 800; }
+.rc-tiles { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.rc-tiles .mj-meld { display: inline-flex; gap: 1px; }
+.rc-flowers { display: inline-flex; gap: 1px; margin-left: auto; opacity: .95; }
+/* The tile the hand went out on. Without it the recap is fourteen tiles and
+ * no answer to "on what?". */
+.tile.is-win { box-shadow: 0 0 0 2px var(--good), 0 3px 8px rgba(0,0,0,.5); }
+.rc-fan { margin-top: 7px; display: flex; flex-direction: column; gap: 3px; }
+.rc-fan-row { display: flex; align-items: baseline; gap: 8px; font-size: .8rem; }
+.rc-fan-row b { min-width: 5.4em; }
+.rc-fan-n { color: var(--accent); font-weight: 700; }
+.rc-fan-row small { color: var(--muted); }
+/* Step off the result and look at the felt. The way back follows you down. */
+.result-back {
+    position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%);
+    z-index: 45; box-shadow: var(--shadow);
+}
+
 .rc-shared { display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
     margin: 12px 0 4px; padding: 10px 12px; border-radius: 12px;
     background: rgba(0, 0, 0, .22); border: 1px solid var(--border); }
