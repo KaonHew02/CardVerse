@@ -69,22 +69,32 @@
      *   dots and honours only, so one suit plus honours is what every hand
      *   in it already is, and a pattern every hand has is not a pattern.
      *
-     * The big hands are all over the 爆番 line on purpose — 大三元, 小四喜
-     * and up settle at the cap however they are reached.
+     *   **无花 is 爆番, and 自摸 and 门清 are not paid at all.** Nothing on
+     *   this table is worth 1番 for how the hand *arrived* — drawing your own
+     *   tile and keeping your hand closed are how you were going to play
+     *   anyway, and paying for them put a 番 on the board that nobody built.
+     *   What is paid for is the one thing you cannot decide: going a whole
+     *   hand without turning a flower, which is a limit hand and settles at
+     *   the cap.
+     *
+     * The big hands are all over the 爆番 line on purpose — 无花, 大三元,
+     * 小四喜 and up settle at the cap however they are reached.
      */
     const FAN3 = {
-        '鸡胡': 1, '自摸': 1, '门清': 1, '无花': 1,
+        // Counted rows: these pay *per tile* or *per triplet*, not per hand,
+        // so the number here is the rate. See `countedInto`.
+        '鸡胡': 1, '花': 1, '箭刻': 1, '风刻': 1,
         '碰碰胡': 3, '清一色': 3, '字一色': 3, '小三元': 3,
         '平胡': 4,
-        '大三元': 12, '小四喜': 12,
+        '无花': 10, '大三元': 12, '小四喜': 12,
         '大四喜': 16, '四杠子': 16, '十三幺': 16, '天胡': 16, '地胡': 16,
     };
 
     /**
      * 花 pays per tile, not per hand, so it cannot live in a name→番 table.
-     * One 番 a flower, and 无花 above pays the same 1番 for holding none —
-     * without it, drawing no flower all round is the one thing at this table
-     * that is worse than drawing one.
+     * One 番 a flower — and 无花 above is not the same thing scaled to zero.
+     * A flower is a small bonus you collect; turning none at all over a whole
+     * hand is a limit hand, and it is priced at the 爆番 line to say so.
      */
     const FLOWER_FAN = { 3: 1, 4: 0 };
 
@@ -93,7 +103,31 @@
     /** The fan table this many seats play by. */
     const tableFor = (players) => TABLES[players] || FAN;
     /** What one flower is worth at this many seats. */
-    const flowerFan = (players) => FLOWER_FAN[players] || 0;
+    const flowerFan = (players) => tableFor(players)['花'] || 0;
+    /** What one 中/发/白 triplet is worth, and one triplet of your own wind. */
+    const honourFan = (players) => tableFor(players)['箭刻'] || 0;
+
+    /**
+     * **Which winds a seat is paid for.**
+     *
+     * A triplet of honours is not one thing. 中, 发 and 白 pay everybody —
+     * they belong to nobody, so there is no seat they could belong to. A
+     * wind pays the seat sitting on it and nobody else: a 南 triplet in
+     * East's hand is three tiles that happen to match.
+     *
+     * And a wind **no seat is sitting on** pays whoever collects it, for the
+     * same reason the flowers do: at three seats there is no North, and a
+     * North triplet that could never be worth anything to anybody is four
+     * tiles the box carries for nothing.
+     *
+     * @param {string} key       the meld's key, e.g. 'z4'
+     * @param {number} seatWind  0=东 1=南 2=西 3=北, or -1 when unknown
+     * @param {number} players   how many seats, so how many winds are sat on
+     */
+    function windPays(key, seatWind, players) {
+        const owner = Number(key.slice(1)) - 1;
+        return owner >= (players || 4) || owner === seatWind;
+    }
 
     /**
      * Which patterns each one swallows, per table. Applied until nothing
@@ -153,7 +187,12 @@
      * @param {boolean} hand.selfDraw drew the winning tile
      * @param {boolean} hand.menzen   nothing melded from a discard
      * @param {boolean} hand.quad     seven pairs holding a four of a kind
-     * @param {number} [hand.flowers] flowers turned — paid per tile, and
+     * @param {number} [hand.flowers] flowers that pay this seat — see
+     *                                `MahjongEngine.flowerFanFor`: a flower
+     *                                belongs to the wind it is numbered for
+     * @param {number} [hand.flowersHeld] flowers turned at all, whoever they
+     *                                belong to — 无花 is about an empty
+     *                                flower box, not an unprofitable one
      *                                paid as 无花 when there are none
      * @param {boolean} [hand.heaven] the dealer went out on the dealt hand
      * @param {boolean} [hand.earth]  won on the dealer's very first discard
@@ -221,7 +260,11 @@
         // anybody else going out on the dealer's very first throw.
         if (hand.heaven) found.add('天胡');
         if (hand.earth) found.add('地胡');
-        if (!hand.flowers) found.add('无花');
+        // 无花 is "turned none", not "was paid for none": a seat sitting on
+        // flowers that belong to other winds has drawn flowers, and the limit
+        // hand is for the seat that drew nothing at all.
+        const held = hand.flowersHeld === undefined ? (hand.flowers || 0) : hand.flowersHeld;
+        if (!held) found.add('无花');
 
         /* --- nothing this table does not pay for ------------------------------ */
 
@@ -246,15 +289,34 @@
             .map((name) => ({ name, fan: FAN[name] || 0 }))
             .sort((a, b) => b.fan - a.fan || a.name.localeCompare(b.name));
 
-        // 花 is the one thing on this table that pays by the tile, so it is
-        // appended rather than found above: three flowers is 3番, and no
-        // name→番 table can say that.
-        const rate = FAN === FAN3 ? FLOWER_FAN[3] : 0;
-        if (rate && hand.flowers) {
-            patterns.push({ name: '花', fan: hand.flowers * rate, n: hand.flowers });
-        }
-
+        countedInto(patterns, FAN, hand);
         return { totalFan: patterns.reduce((n, p) => n + p.fan, 0), patterns };
+    }
+
+    /**
+     * The rows that are **counted rather than named**.
+     *
+     * 花 pays by the tile and the two honour rows pay by the triplet, so a
+     * name→番 table cannot hold what they are worth: three flowers is 3番,
+     * and "花: 3" would be a lie about a hand holding one. The table carries
+     * the rate; the count comes from the hand.
+     *
+     * Appended after the overlap pass because they overlap with nothing. A
+     * hand does not stop holding three flowers because it is also 清一色,
+     * and a 中 triplet is a 中 triplet inside 碰碰胡 as much as outside it.
+     */
+    function countedInto(patterns, FAN, hand) {
+        const add = (name, n) => {
+            const rate = FAN[name] || 0;
+            if (rate && n) patterns.push({ name, fan: n * rate, n });
+        };
+        add('花', hand.flowers || 0);
+
+        const sets = (hand.melds || []).filter((m) => m.type === 'pung' || m.type === 'kong');
+        const wind = hand.seatWind === undefined ? -1 : hand.seatWind;
+        add('箭刻', sets.filter((m) => isDragonKey(m.key)).length);
+        add('风刻', sets.filter((m) => isWindKey(m.key)
+            && windPays(m.key, wind, hand.players)).length);
     }
 
     /**
@@ -300,12 +362,16 @@
         }
         if (hand.menzen) found.add('门清');
         // 无花 is a fact about the hand as it stands, and the only one here
-        // that can go backwards — the next draw can take it away. It is
-        // still worth showing: at a 5番 floor, holding no flower against
-        // holding one is the difference between a hand that can be declared
-        // and one that cannot, and a player who cannot see it cannot plan
-        // around it.
-        if (!hand.flowers) found.add('无花');
+        // that can go backwards — the next draw can take it away. It is the
+        // single most worth showing: every hand starts on 无花, which is
+        // 爆番, and holds it until the first flower turns. A counter that
+        // did not show it would be hiding the largest number on the table
+        // and the exact moment it goes.
+        // 无花 is "turned none", not "was paid for none": a seat sitting on
+        // flowers that belong to other winds has drawn flowers, and the limit
+        // hand is for the seat that drew nothing at all.
+        const held = hand.flowersHeld === undefined ? (hand.flowers || 0) : hand.flowersHeld;
+        if (!held) found.add('无花');
 
         // Dropped before the overlaps, exactly as `calculateFan` does it: a
         // pattern this table does not pay for must not eat 鸡胡 on its way
@@ -326,17 +392,11 @@
             .map((name) => ({ name, fan: FAN[name] || 0 }))
             .sort((a, b) => b.fan - a.fan || a.name.localeCompare(b.name));
 
-        // 花 is the one thing on this table that pays by the tile, so it is
-        // appended rather than found above: three flowers is 3番, and no
-        // name→番 table can say that.
-        const rate = FAN === FAN3 ? FLOWER_FAN[3] : 0;
-        if (rate && hand.flowers) {
-            patterns.push({ name: '花', fan: hand.flowers * rate, n: hand.flowers });
-        }
-
+        countedInto(patterns, FAN, hand);
         return { totalFan: patterns.reduce((n, p) => n + p.fan, 0), patterns };
     }
 
     CV.MJFan = { FAN, FAN3, TABLES, REPLACES, REPLACES3, FLOWER_FAN,
-        tableFor, flowerFan, overlapsFor, calculateFan, progress };
+        tableFor, flowerFan, honourFan, windPays, overlapsFor,
+        calculateFan, progress, countedInto };
 })();

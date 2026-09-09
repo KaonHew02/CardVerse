@@ -95,15 +95,19 @@
                 const s = e.seats[i];
                 const turn = e.turn === i && !e.over;
                 const did = s.lastAction ? t('lami.did.' + s.lastAction) : '';
+                // A folded seat is still at the table and its rack still
+                // counts at the end, so it stays on screen — dimmed, and
+                // said out loud, because a seat being skipped in turn order
+                // with no explanation looks like the game losing track.
                 return `
-                    <div class="seat lami-seat${turn ? ' is-turn' : ''}">
+                    <div class="seat lami-seat${turn ? ' is-turn' : ''}${s.folded ? ' is-folded' : ''}">
                         <div class="seat-head">
                             <span class="avatar">${s.avatar}</span>
                             <span class="who"><span class="name">${esc(s.name)}</span>
                                 <span class="coins">🪙 ${fmt(s.coins)}</span></span>
                             <span class="tag lami-count">${s.rack.length}</span>
                         </div>
-                        <div class="play-pass">${esc(did)}</div>
+                        <div class="play-pass">${esc(s.folded ? t('lami.fold') : did)}</div>
                     </div>`;
             }).join('');
         }
@@ -159,7 +163,9 @@
             host.innerHTML = `
                 <div class="hand-head">
                     <span class="seat-count">${esc(t('lami.yours', { n: s.rack.length, p: L.handPoints(s.rack) }))}</span>
-                    <span class="seat-count">${esc(t('lami.pool', { n: e.poolLeft }))}</span>
+                    <span class="seat-count">${esc(L.pieces(s.rack)
+                        ? t('lami.pieces', { n: L.pieces(s.rack) })
+                        : t('lami.piecesNone'))}</span>
                 </div>
                 <div class="lami-tiles">
                     ${s.rack.map((tile) => `<button class="lami-pick${this.picked.has(tile.id) ? ' is-on' : ''}"
@@ -176,20 +182,24 @@
             const sel = this.selection;
             const asMeld = sel.length ? L.meld(sel, e.rules) : null;
             const canAdd = this.target >= 0 && this.fits(this.target);
-            const draw = options.find((o) => o.type === 'draw');
-            const pass = options.find((o) => o.type === 'pass');
+            const joker = options.find((o) => o.type === 'joker');
+            const fold = options.find((o) => o.type === 'fold');
             const done = options.find((o) => o.type === 'done');
+            // Until a seat has opened, a set it could otherwise lay is not a
+            // legal move — so the button says why rather than just refusing.
+            const shut = asMeld && !e.seats[this.you].opened && asMeld.type !== 'run';
 
             host.innerHTML = `
                 <div class="btn-row">
-                    <button class="btn primary big" data-act="play" ${asMeld ? '' : 'disabled'}>
+                    <button class="btn primary big" data-act="play" ${asMeld && !shut ? '' : 'disabled'}>
                         ${esc(t('lami.play'))}${asMeld ? ` · ${esc(t('lami.' + asMeld.type))}` : ''}</button>
                     <button class="btn" data-act="add" ${canAdd ? '' : 'disabled'}>${esc(t('lami.add'))}</button>
-                    ${draw ? `<button class="btn ghost" data-act="draw">${esc(t('lami.draw'))}</button>` : ''}
-                    ${pass ? `<button class="btn ghost" data-act="pass">${esc(t('lami.pass'))}</button>` : ''}
+                    ${joker ? `<button class="btn ghost" data-act="joker">${esc(t('lami.jokerOut'))}</button>` : ''}
+                    ${fold ? `<button class="btn ghost" data-act="fold">${esc(t('lami.fold'))}</button>` : ''}
                     ${done ? `<button class="btn ghost" data-act="done">${esc(t('lami.done'))}</button>` : ''}
                 </div>
-                <div class="muted small">${esc(sel.length && !asMeld && this.target < 0
+                <div class="muted small">${esc(shut ? t('lami.mustRun')
+                    : sel.length && !asMeld && this.target < 0
                     ? t('lami.notAMeld') : t('lami.hint'))}</div>`;
         }
 

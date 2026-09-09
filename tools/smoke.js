@@ -2400,22 +2400,30 @@ function auditMahjong() {
             'mj: three seats should pay 4番 for 全顺子 and 1番 for a plain hand');
 
         const noShapes = { pairs: false };
-        const mixed = mjFanOf('123456789p111z22z', { table: three, menzen: true, shapes: noShapes });
+        // One flower on every hand below: with none they would all be 无花,
+        // which is 爆番 and would drown the number being measured.
+        const mixed = mjFanOf('123456789p111z22z',
+            { table: three, menzen: true, shapes: noShapes, flowers: 1 });
         check(!mixed.patterns.some((p) => p.name === '混一色'), 'mj: a three-seat hand scored 混一色');
         // 混一色 swallows the base pattern. Dropping it after the overlaps
         // were resolved would take 鸡胡 with it and score the hand at nothing
         // — which is why fan.js drops it before.
         check(mixed.patterns.some((p) => p.name === '鸡胡'),
             `mj: dropping 混一色 took 鸡胡 with it — got ${names(mixed)}`);
-        check(mixed.totalFan === 3, `mj: a concealed plain hand is ${mixed.totalFan}番 at three seats, wanted 3`);
+        check(!mixed.patterns.some((p) => p.name === '门清'), 'mj: three seats paid for 门清');
+        check(mixed.totalFan === 2, `mj: a plain hand with a flower is ${mixed.totalFan}番, wanted 2`);
 
         // 全顺子 in one suit is 平胡 and 清一色, stacked, plus 无花.
-        const runs = mjFanOf('112233456789p55p', { table: three, shapes: noShapes });
+        const runs = mjFanOf('112233456789p55p', { table: three, shapes: noShapes, flowers: 1 });
         check(runs && runs.patterns.some((p) => p.name === '平胡' && p.fan === 4),
             `mj: an all-runs hand should be 平胡 4番 — got ${runs && names(runs)}`);
         check(runs.patterns.some((p) => p.name === '清一色' && p.fan === 3),
             'mj: 清一色 should stack on 平胡 rather than replace it');
-        check(runs.totalFan === 8, `mj: 平胡 清一色 无花 is ${runs.totalFan}番, wanted 8`);
+        check(runs.totalFan === 8, `mj: 平胡 清一色 花 is ${runs.totalFan}番, wanted 8`);
+        // Nothing on this table is paid for how the hand arrived.
+        check(three['自摸'] === undefined && three['门清'] === undefined,
+            'mj: three seats should pay for neither 自摸 nor 门清');
+        check(three['无花'] === 10, 'mj: 无花 should be priced at the 爆番 line');
         console.log('  ✓ three seats play their own table, not the four-seat one less a row');
     }
 
@@ -2440,17 +2448,22 @@ function auditMahjong() {
         const bare = (seat) => { e.seats[seat].flowers = []; };
 
         // A hand with a triplet in it and nothing else going on is 鸡胡: one
-        // 番, plus 无花 for the empty flower box, and two is not five. That is
+        // 番, plus one for the flower it turned, and two is not five. That is
         // the floor's whole job — it is what stops an ordinary claimed hand
-        // racing everybody home.
+        // racing everybody home. The flower matters: without one the hand
+        // would be 无花 instead, which is 爆番 and clears anything.
         bare(B);
+        // B sits one seat past the dealer, so B is 南 — and 南's flowers are
+        // the second of each suit, 夏 (2) and 兰 (6). A 春 would be East's and
+        // would pay B nothing, which is the whole point of the rule.
+        e.seats[B].flowers = [{ suit: 'f', n: 2, id: 'fl0' }];
         e.seats[B].melds = [{ type: 'chow', key: 'p1', tiles: mjTiles('123p'),
                               concealed: false, from: e.dealer }];
         e.seats[B].hand = mjTiles('45678p111z22z');         // ten, waiting on 9筒
         const tile = mjTiles('9p')[0];
         const got = e.winFor(B, tile);
         check(!!got, 'mj: that hand plus 9筒 should be a winning shape');
-        check(got.fan.totalFan === 2, `mj: 鸡胡 with no flowers is ${got && got.fan.totalFan}番, wanted 2`);
+        check(got.fan.totalFan === 2, `mj: 鸡胡 with one flower is ${got && got.fan.totalFan}番, wanted 2`);
         check(got.ok === false, 'mj: a hand under the minimum was declarable');
 
         e.seats[e.dealer].discards.push(tile);
@@ -2492,14 +2505,27 @@ function auditMahjong() {
         // one. Neither is ever part of the hand.
         bare(B);
         const none = e.winFor(B, null).fan;
-        // `mjTiles` reads suits, and a flower is not in one.
-        e.seats[B].flowers = [1, 2, 3].map((n) => ({ suit: 'f', n, id: 'fl' + n }));
+        // `mjTiles` reads suits, and a flower is not in one. Three that pay
+        // this seat: 夏 and 兰 are 南's own, and 冬 is North's — a wind nobody
+        // is sitting on at three seats, so it pays whoever turns it.
+        e.seats[B].flowers = [2, 6, 4].map((n) => ({ suit: 'f', n, id: 'fl' + n }));
         const three = e.winFor(B, null).fan;
         check(none.patterns.some((x) => x.name === '无花'), 'mj: an empty flower box should pay 无花');
         check(three.patterns.some((x) => x.name === '花' && x.fan === 3),
-            'mj: three flowers should pay 3番');
+            'mj: three flowers of this seat own wind should pay 3番');
+        // …and a flower belonging to a seat that is at the table pays nobody
+        // else. 春 is East's; B is 南.
+        e.seats[B].flowers = [{ suit: 'f', n: 1, id: 'flE' }];
+        const theirs = e.winFor(B, null).fan;
+        check(!theirs.patterns.some((x) => x.name === '花'),
+            'mj: another wind flower paid this seat');
+        check(!theirs.patterns.some((x) => x.name === '无花'),
+            'mj: a seat holding a flower was paid 无花');
         check(!three.patterns.some((x) => x.name === '无花'), 'mj: 无花 was paid to a seat holding three');
-        check(three.totalFan === none.totalFan + 2, 'mj: three flowers should be two more than none');
+        // 无花 is not "zero flowers scaled to zero" — it is a limit hand, and
+        // it is priced ten against a flower's one to say so.
+        check(none.totalFan - three.totalFan === 7, 'mj: 无花 is 10 where three flowers are 3');
+        check(CV.MJPay.payFan(3, none.totalFan).bao, 'mj: 无花 should settle at 爆番');
         bare(B);
 
         // 七对子 is not a cheap hand at three seats — it is not a hand.
@@ -2601,8 +2627,8 @@ function auditMahjong() {
             e.seats[A].hand = mjTiles('5p1122334455z');               // 11 with the fourth 5筒
             // B is waiting on that 5筒 to close 3-4-5 — and the hand behind
             // it has to be worth declaring, or the robbery is never offered
-            // and this tests nothing. All dots, nothing claimed, no flower:
-            // 清一色 3, 门清 1, 无花 1, which is the floor exactly.
+            // and this tests nothing. All dots and no flower: 清一色 3 and
+            // 无花 10, well clear of the floor.
             e.seats[B].hand = mjTiles('34p111p999p777p22p');          // 13
             e.seats[B].melds = [];
             e.seats[B].flowers = [];
@@ -2777,11 +2803,15 @@ function auditMahjong() {
                         `${where}: a ${e.fan.totalFan}番 hand cleared a ${e.minFan}番 floor`);
                     check(!!e.winTile, `${where}: the tile the hand went out on was not recorded`);
                     // 自摸 is scored exactly when nobody threw it, and 门清
-                    // exactly when nothing was taken from anybody.
-                    check(e.fan.patterns.some((p) => p.name === '自摸') === (e.winFrom < 0),
+                    // exactly when nothing was taken from anybody — at a table
+                    // that pays for either. Three seats pay for neither: a 番
+                    // for how the hand arrived is a 番 nobody built.
+                    const pays = (n) => (e.fanTable[n] || 0) > 0;
+                    check(e.fan.patterns.some((p) => p.name === '自摸')
+                        === (pays('自摸') && e.winFrom < 0),
                         `${where}: 自摸 and winFrom disagree`);
                     check(e.fan.patterns.some((p) => p.name === '门清')
-                        === !e.seats[e.winner].melds.some((m) => !m.concealed),
+                        === (pays('门清') && !e.seats[e.winner].melds.some((m) => !m.concealed)),
                         `${where}: 门清 and the melds on the table disagree`);
                     // What was paid is what the hand contains, priced again.
                     check(CV.MJFan.calculateFan(e.winHand, e.fanTable).totalFan === e.fan.totalFan,
@@ -3298,7 +3328,7 @@ function lamiTiles(str) {
     return str.split(/\s+/).filter(Boolean).map((tok) => {
         if (tok === 'X') return { joker: true, id: 'x' + (lamiUid++) };
         const s = tok[0], r = Number(tok.slice(1));
-        if (!'CDHS'.includes(s) || !(r >= 1 && r <= 13)) throw new Error('bad tile ' + tok);
+        if (!'CDHS'.includes(s) || !(r >= CV.Lami.LOW && r <= CV.Lami.TOP)) throw new Error('bad tile ' + tok);
         return { r, s, id: 'l' + (lamiUid++) };
     });
 }
@@ -3315,14 +3345,20 @@ function auditLami() {
         const jokers = box.filter(L.isJoker);
         const real = box.filter((x) => !L.isJoker(x));
         check(real.length === 104, `lami: ${real.length} numbered tiles, wanted 2 × 52`);
-        check(jokers.length === 2, `lami: ${jokers.length} jokers, wanted 2`);
+        check(jokers.length === L.RULES.jokers, `lami: ${jokers.length} jokers, wanted ${L.RULES.jokers}`);
         check(new Set(box.map((x) => x.id)).size === box.length, 'lami: the box holds a duplicate id');
+        // The ace is high and there is no 1: a rank worth 15 points cannot
+        // also be the bottom of every run. See `melds.js`.
+        check(L.LOW === 2 && L.TOP === 14, `lami: the box runs ${L.LOW} to ${L.TOP}, wanted 2 to A`);
+        check(!real.some((x) => x.r === 1), 'lami: a rank 1 got into a box that starts at 2');
         for (const s of L.SUITS) {
             const suit = real.filter((x) => x.s === s);
             check(suit.length === 26, `lami: ${suit.length} tiles in ${s}, wanted 2 × 13`);
-            check(new Set(suit.map((x) => x.r)).size === 13, `lami: ${s} is not 1 to 13`);
+            check(new Set(suit.map((x) => x.r)).size === 13, `lami: ${s} is not 2 to A`);
         }
-        console.log(`  ${box.length} tiles — four suits of 1 to 13, two of each, and two jokers`);
+        check(L.RULES.hand === 20, `lami: ${L.RULES.hand} tiles dealt, wanted 20`);
+        check(L.RULES.hand * 4 < box.length, 'lami: four hands of 20 do not fit in the box');
+        console.log(`  ${box.length} tiles — four suits of 2 to A, two of each, and ${L.RULES.jokers} jokers`);
     }
 
     /* --- what is a meld ------------------------------------------------------ */
@@ -3347,8 +3383,8 @@ function auditLami() {
         ['C7 D7',           null],       // two is not enough for a set either
         ['C7 C7 D7',        null],       // and a suit cannot appear twice
         ['C7 D7 H7 S7 X',   null],       // five is past the four suits
-        ['S12 S13 S1',      null],       // a run does not wrap past the king
-        ['C1 X X',          'run'],      // two jokers still need a real tile
+        ['S13 S14 S2',      null],       // a run does not wrap past the ace
+        ['C2 X X',          'run'],      // two jokers still need a real tile
         ['X X X',           null],       // and three jokers are nothing at all
     ];
     for (const [str, want] of MELDS) {
@@ -3375,13 +3411,30 @@ function auditLami() {
     /* --- what a tile costs when it is left over ------------------------------ */
 
     {
-        for (let r = 1; r <= 13; r++) {
+        // Face value to the ten, ten for each court card, fifteen for an ace.
+        for (let r = 2; r <= 10; r++) {
             check(L.points(lamiTiles('C' + r)[0]) === r, `lami: a ${r} should cost ${r}`);
         }
+        for (const r of [11, 12, 13]) {
+            check(L.points(lamiTiles('C' + r)[0]) === 10, `lami: a ${r} should cost 10`);
+        }
+        check(L.points(lamiTiles('C14')[0]) === 15, 'lami: an ace should cost 15');
         check(L.points(lamiTiles('X')[0]) === L.RULES.jokerPoints,
             'lami: a joker should cost what the table says it costs');
-        check(L.handPoints(lamiTiles('C1 D13 X')) === 1 + 13 + L.RULES.jokerPoints,
+        check(L.handPoints(lamiTiles('C2 D13 X')) === 2 + 10 + L.RULES.jokerPoints,
             'lami: a hand adds up to the sum of its tiles');
+
+        /* --- the side count: jokers and aces, in pieces --------------------- */
+        check(L.pieces(lamiTiles('C2 D3 H4')) === 0, 'lami: plain tiles counted as pieces');
+        check(L.pieces(lamiTiles('C14')) === 1, 'lami: an ace should be one piece');
+        check(L.pieces(lamiTiles('X X')) === 2, 'lami: two jokers should be two pieces');
+        // Both copies of one ace: two tiles, and one more for the pair.
+        const pair = L.build().filter((x) => x.r === L.TOP && x.s === 'C');
+        check(pair.length === 2, 'lami: the box should hold two of each ace');
+        check(L.pieces(pair) === 3, `lami: two of the same ace should be 3 pieces, got ${L.pieces(pair)}`);
+        // One of every suit: four tiles, and four more for the four of a kind.
+        check(L.pieces(lamiTiles('C14 D14 H14 S14')) === 8,
+            `lami: four aces of a kind should be 8 pieces, got ${L.pieces(lamiTiles('C14 D14 H14 S14'))}`);
     }
 
     /* --- findMelds only offers real melds ------------------------------------ */
@@ -3555,6 +3608,82 @@ function auditLami() {
         }
     }
     console.log('  ✓ no rack but your own, and nothing still in the pool');
+
+    /* --- two settlements, and they are not the same game --------------------- */
+
+    {
+        const seats = () => [0, 1, 2, 3].map((i) => new CV.Seat(i, { kind: 'ai', name: 'S' + i, coins: 5000 }));
+        const table = (fn) => {
+            const e = new game.Engine({ rng: new CV.RNG(9), config: { room: 'beginner' }, seats: seats() });
+            e.start();
+            if (e.over) return null;         // a 天胡 off the deal — try another seed
+            fn(e);
+            e.finishRound();
+            return e;
+        };
+
+        // Points decide the ranking; the ranking decides the ratio. The seat
+        // one place behind the winner is 小哥 and pays 1, then 二哥 2, and
+        // 大哥 — the one holding the most — pays 3.
+        const plain = table((e) => {
+            e.seats.forEach((x) => { x.rack = []; });
+            e.seats[0].rack = lamiTiles('C2 D3');          // 5  — winner
+            e.seats[1].rack = lamiTiles('C9 D9');          // 18 — 小哥
+            e.seats[2].rack = lamiTiles('C13 D13 H13');    // 30 — 二哥
+            e.seats[3].rack = lamiTiles('C10 D10 H10 S9'); // 39 — 大哥
+        });
+        check(!!plain, 'lami: the settlement table dealt a 天胡 and could not be set up');
+        const st = plain.stake;
+        check(plain.winner === 0, `lami: seat ${plain.winner} won on points, wanted 0`);
+        check(plain.seats[1].net === -1 * st, `lami: 小哥 paid ${plain.seats[1].net}, wanted ${-st}`);
+        check(plain.seats[2].net === -2 * st, `lami: 二哥 paid ${plain.seats[2].net}, wanted ${-2 * st}`);
+        check(plain.seats[3].net === -3 * st, `lami: 大哥 paid ${plain.seats[3].net}, wanted ${-3 * st}`);
+        check(plain.seats[0].net === 6 * st, `lami: the winner took ${plain.seats[0].net}, wanted ${6 * st}`);
+        check(plain.seats.reduce((n, x) => n + x.net, 0) === 0, 'lami: the plain settlement is not zero-sum');
+
+        // Going out is flat: five stakes from everybody, whatever anybody is
+        // holding. The hand ended before the table had a say in it.
+        const out = table((e) => {
+            e.seats.forEach((x) => { x.rack = lamiTiles('C13 D13'); });
+            e.seats[2].rack = [];
+            e.winner = 2;
+        });
+        check(out.seats[2].net === 15 * out.stake,
+            `lami: going out collected ${out.seats[2].net}, wanted ${15 * out.stake}`);
+        check(out.seats[0].net === -5 * out.stake, 'lami: going out should cost 5 stakes each');
+
+        // The side count runs whatever the hand did: half a stake for each
+        // piece of difference, head to head with everybody.
+        const side = table((e) => {
+            e.seats.forEach((x) => { x.rack = lamiTiles('C2'); });   // 2 points, 0 pieces
+            e.seats[0].rack = lamiTiles('C2 X');                     // one joker — 1 piece
+        });
+        // Seat 0 is holding a joker: one piece against three seats holding
+        // none, so it collects half a stake three times over. It also has the
+        // most points, so it is 大哥 on the hand and pays three.
+        const sideNet = side.seats[0].net;
+        check(side.seats[0].pieces === 1 && side.seats[1].pieces === 0,
+            'lami: the side count did not see the joker');
+        check(sideNet === -3 * side.stake + Math.round(1.5 * side.stake),
+            `lami: the side count paid ${sideNet}, wanted 3 stakes out and 1.5 in`);
+        check(side.seats.reduce((n, x) => n + x.net, 0) === 0, 'lami: the side count is not zero-sum');
+    }
+    console.log('  ✓ 3:2:1 on the hand, flat on a win, and the joker/ace count settles apart from both');
+
+    /* --- 天胡: twenty tiles that already lie in melds ------------------------- */
+
+    {
+        // Two runs and a set, no remainder — the shape the deal is tested for.
+        check(!!L.partition(lamiTiles('C2 C3 C4 H9 H10 H11 D7 H7 S7')),
+            'lami: a hand that is entirely melds should partition');
+        check(!L.partition(lamiTiles('C2 C3 C4 H9 H10 H11 D7 H7 S13')),
+            'lami: a hand with a tile left over should not partition');
+        // A joker fills a hole, but three jokers on their own are not a meld.
+        check(!!L.partition(lamiTiles('C2 C3 X D5 D6 D7')),
+            'lami: a joker should be able to complete a partition');
+        check(!L.partition(lamiTiles('X X X')), 'lami: three jokers are not a meld');
+    }
+    console.log('  ✓ 天胡 is read off the deal, and only a real partition counts');
 
     for (const key of game.rules) check(CV.t(key) !== key, `lami: rule key ${key} has no text`);
     console.log('  ✓ rules card resolves');

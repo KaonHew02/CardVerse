@@ -32,28 +32,60 @@
      */
     const RULES = {
         copies: 2,        // how many of each tile in the box
-        jokers: 2,        // how many jokers
-        hand: 14,         // tiles dealt to each player
+        jokers: 12,       // how many jokers
+        hand: 20,         // tiles dealt to each player
         minRun: 3,        // shortest run
         minSet: 3,        // shortest set
         maxSet: 4,        // a set cannot outgrow the four suits
-        wrap: false,      // may a run pass K and come back to 1
-        jokerPoints: 30,  // what a joker left in hand costs
+        wrap: false,      // may a run pass A and come back to 2
+        jokerPoints: 15,  // what a joker left in hand costs — an ace's worth
         openWith: 0,      // points needed for a first meld; 0 turns it off
+        // What the hand pays, in order of finish behind the winner: the seat
+        // closest to them is 小哥 and pays the first of these, and the seat
+        // holding the most is 大哥 and pays the last.
+        rankRatio: [1, 2, 3],   // 小哥 : 二哥 : 大哥
+        outRatio: 5,            // going out — everybody pays this, flat
+        heavenRatio: 10,        // 天胡 — twenty tiles dealt in melds
+        pieceRatio: 0.5,        // stakes per piece of difference, head to head
+        partitionBudget: 20000, // how hard to look for a 天胡 before giving up
     };
 
     const SUITS = ['C', 'D', 'H', 'S'];
     const SUIT_SYMBOL = { C: '♣', D: '♦', H: '♥', S: '♠' };
-    const RANK_LABEL = { 11: 'J', 12: 'Q', 13: 'K' };
+    const RANK_LABEL = { 11: 'J', 12: 'Q', 13: 'K', 14: 'A' };
 
-    const TOP = 13;
+    /**
+     * **The ace is high, and there is no 1.**
+     *
+     * The house table scores an ace at 15 against a king's 10, which only
+     * makes sense at the top of the ladder — and it settles a side count of
+     * its own (see `pieces`), which a rank that also doubled as the bottom of
+     * every run would make a mess of. So the box runs 2 to A, thirteen ranks,
+     * and Q-K-A is a run while A-2-3 is not.
+     */
+    const LOW = 2;
+    const TOP = 14;
+    const RANKS = TOP - LOW + 1;
 
     const isJoker = (tile) => !!tile.joker;
+    const isAce = (tile) => !isJoker(tile) && tile.r === TOP;
     const rankLabel = (r) => RANK_LABEL[r] || String(r);
     const name = (tile) => (isJoker(tile) ? '🃏' : rankLabel(tile.r) + SUIT_SYMBOL[tile.s]);
 
-    /** Face value, and a joker costs whatever the table says it costs. */
-    const points = (tile) => (isJoker(tile) ? RULES.jokerPoints : tile.r);
+    /**
+     * What a tile left in your hand costs you.
+     *
+     * Face value up to the ten, ten for each of the court cards, fifteen for
+     * an ace — and the same fifteen for a joker, which is the one number the
+     * rules did not name. A joker is the most useful tile in the box, so
+     * being caught with one should not be cheap.
+     */
+    function points(tile) {
+        if (isJoker(tile)) return RULES.jokerPoints;
+        if (tile.r === TOP) return 15;              // A
+        if (tile.r >= 11) return 10;                // J Q K
+        return tile.r;
+    }
 
     /** The whole box: `copies` of every tile, plus the jokers. */
     function build(opts) {
@@ -61,11 +93,44 @@
         const out = [];
         for (let c = 0; c < cfg.copies; c++) {
             for (const s of SUITS) {
-                for (let r = 1; r <= TOP; r++) out.push({ r, s, id: `${s}${r}-${c}` });
+                for (let r = LOW; r <= TOP; r++) out.push({ r, s, id: `${s}${r}-${c}` });
             }
         }
         for (let j = 0; j < cfg.jokers; j++) out.push({ joker: true, id: 'J' + j });
         return out;
+    }
+
+    /**
+     * **The side count: jokers and aces, in pieces.**
+     *
+     * Settled apart from the hand and apart from the ranking, head to head
+     * with every other player — whoever is holding more collects the
+     * difference from whoever is holding fewer, at half a stake a piece. It
+     * is its own little game running underneath the round, and it is why an
+     * ace is worth hanging on to even when the points say throw it.
+     *
+     *     a joker or an ace          1 piece each
+     *     both copies of one ace     1 piece on top, per pair
+     *     all four suits of the ace  4 pieces on top
+     *
+     * The two bonuses stack: a hand holding all eight aces is 8 for the
+     * tiles, 4 for the four pairs and 8 for the two four-of-a-kinds.
+     */
+    function pieces(tiles) {
+        let n = 0;
+        const bySuit = new Map();
+        for (const x of tiles) {
+            if (isJoker(x)) { n++; continue; }
+            if (!isAce(x)) continue;
+            n++;
+            bySuit.set(x.s, (bySuit.get(x.s) || 0) + 1);
+        }
+        // Both copies of the same ace, once per pair.
+        for (const [, count] of bySuit) n += Math.floor(count / 2);
+        // Four of a kind — one ace of every suit, as many times over as the
+        // thinnest suit allows.
+        if (bySuit.size === SUITS.length) n += 4 * Math.min(...bySuit.values());
+        return n;
     }
 
     /** Suit order, then rank — the way a rack is arranged before you look at it. */
@@ -82,8 +147,8 @@
      * A run: one suit, consecutive, jokers filling the holes.
      *
      * The test is a window. `n` tiles have to sit in `n` consecutive ranks
-     * that contain every real tile, and that window has to fit between 1 and
-     * 13 — which is what stops `♠Q ♠K 🃏` from running off the end.
+     * that contain every real tile, and that window has to fit between the
+     * two and the ace — which is what stops `♠K ♠A 🃏` running off the end.
      */
     function asRun(tiles, cfg) {
         const real = tiles.filter((x) => !isJoker(x));
@@ -101,8 +166,8 @@
         if (span > n) return null;
         const outside = n - span;
         // Room to place the leftover jokers on one end or the other.
-        if (!cfg.wrap && outside > (lo - 1) + (TOP - hi)) return null;
-        if (n > TOP) return null;
+        if (!cfg.wrap && outside > (lo - LOW) + (TOP - hi)) return null;
+        if (n > RANKS) return null;
         return { type: 'run', suit, lo, hi, size: n, jokers };
     }
 
@@ -162,7 +227,7 @@
         }
 
         // Sets: one rank at a time, one tile per suit.
-        for (let r = 1; r <= TOP; r++) {
+        for (let r = LOW; r <= TOP; r++) {
             const bySuit = new Map();
             for (const x of real) if (x.r === r && !bySuit.has(x.s)) bySuit.set(x.s, x);
             const picked = [...bySuit.values()];
@@ -177,6 +242,44 @@
             || a.filter(isJoker).length - b.filter(isJoker).length);
     }
 
+    /**
+     * **Do these tiles lie entirely in melds, with nothing left over?**
+     *
+     * This is the 天胡 test, and it is a set-cover: twenty tiles have to be
+     * cut into runs and sets with no remainder. Backtracking over the melds
+     * `findMelds` can see, always placing the lowest tile still uncovered —
+     * every partition has to account for that tile somehow, so branching on
+     * it and nothing else is complete without being exhaustive.
+     *
+     * `budget` caps the search. A hand that cannot be shown to partition
+     * within it is reported as not partitioning, which is the safe way to be
+     * wrong: the worst case is a 天胡 that pays as an ordinary hand, never a
+     * hand that pays ten times over because a search ran long.
+     *
+     * @returns {Array[]|null} the melds, or null
+     */
+    function partition(tiles, opts) {
+        const cfg = Object.assign({}, RULES, opts || {});
+        let budget = cfg.partitionBudget || 20000;
+
+        const walk = (left) => {
+            if (!left.length) return [];
+            if (budget-- <= 0) return null;
+            // The first tile has to be covered by something, so only melds
+            // containing it are worth trying.
+            const first = left[0];
+            for (const cards of findMelds(left, cfg)) {
+                if (!cards.includes(first)) continue;
+                const ids = new Set(cards.map((x) => x.id));
+                const rest = walk(left.filter((x) => !ids.has(x.id)));
+                if (rest) return [cards].concat(rest);
+                if (budget <= 0) return null;
+            }
+            return null;
+        };
+        return walk(sort(tiles));
+    }
+
     /** Could `tiles` be added to `existing` and still be a meld? */
     function extends_(existing, tiles, opts) {
         return meld(existing.concat(tiles), opts);
@@ -184,8 +287,8 @@
 
     window.CV = window.CV || {};
     window.CV.Lami = {
-        RULES, SUITS, SUIT_SYMBOL, TOP,
-        isJoker, rankLabel, name, points, handPoints,
-        build, sort, meld, asRun, asSet, findMelds, extend: extends_,
+        RULES, SUITS, SUIT_SYMBOL, LOW, TOP, RANKS,
+        isJoker, isAce, rankLabel, name, points, handPoints, pieces,
+        build, sort, meld, asRun, asSet, findMelds, partition, extend: extends_,
     };
 })();

@@ -239,8 +239,10 @@
 
         paint() {
             this.paintSeats();
-            this.paintPool();
+            // Before the pool: `paintSpot` decides which tile is out in the
+            // middle, and the pool has to leave that one blank in the row.
             this.paintSpot();
+            this.paintPool();
             this.paintHub();
             this.paintStatus();
             this.paintWhy();
@@ -255,6 +257,23 @@
         windOf(i) {
             const e = this.engine;
             return MJ.HONOURS[(i - e.dealer + e.players) % e.players];
+        }
+
+        /**
+         * **连庄**, on the seat holding it.
+         *
+         * A dealer who keeps winning keeps the seat, and at three seats that
+         * is the difference between a quiet round and one player running
+         * away with it — but nothing on the table said so, because the deal
+         * passing or not passing is invisible unless you were counting. It
+         * shows from the second hand of a run, since 连 1 庄 is just "the
+         * dealer".
+         */
+        runHtml(i) {
+            const e = this.engine;
+            const run = e.dealerRun || 1;
+            if (i !== e.dealer || run < 2) return '';
+            return `<span class="tag mj-run">${esc(t('mj.dealerRun', { n: run }))}</span>`;
         }
 
         meldHtml(meld, opts) {
@@ -299,6 +318,7 @@
                             <span class="coins">🪙 ${fmt(s.coins)}</span>
                         </span>
                         <span class="tag mj-wind${i === e.dealer ? ' is-dealer' : ''}">${this.windOf(i)}</span>
+                        ${this.runHtml(i)}
                         <span class="tag mj-count">${s.hand.length}</span>
                     </div>
                     ${this.flowersHtml(s)}
@@ -368,10 +388,19 @@
             const e = this.engine;
             const s = e.seats[i];
             const last = e.lastDiscard;
-            return s.discards.map((tile, idx) => tileHtml(tile, {
-                small: true,
-                cls: (last && last.from === i && idx === s.discards.length - 1 && !e.over) ? 'is-last' : '',
-            })).join('');
+            return s.discards.map((tile, idx) => {
+                const isLast = last && last.from === i && idx === s.discards.length - 1 && !e.over;
+                // A tile that is being held up in the middle is in one place,
+                // not two. It keeps its slot in the row rather than being
+                // left out of it, so the row does not jump when the tile
+                // lands — and the slot is what the flight aims at, which is
+                // why this is `visibility` and not a missing element.
+                const staged = this.staged === tile.id;
+                return tileHtml(tile, {
+                    small: true,
+                    cls: (isLast ? 'is-last' : '') + (staged ? ' is-staged' : ''),
+                });
+            }).join('');
         }
 
         paintPool() {
@@ -430,7 +459,10 @@
             this.spotHeld = held;
             clearTimeout(this.spotTimer);
 
-            if (!sig || d.from === this.you) { host.innerHTML = ''; host.className = 'mj-spot'; return; }
+            if (!sig || d.from === this.you) {
+                host.innerHTML = ''; host.className = 'mj-spot'; this.staged = null; return;
+            }
+            this.staged = d.tile.id;
 
             if (fresh) {
                 // A throw that lands while the one before it is still flying
@@ -459,9 +491,13 @@
             if (!host || !host.firstChild) return;
             const place = (this.places().find((x) => x.seat === from) || {}).place;
             const cell = place ? this.$(POOL_CELL[place]) : null;
+            // The blank slot the tile is about to fill, not the middle of the
+            // row: a row of twenty is wide, and landing on its centre would
+            // put the tile down somewhere it is not.
+            const slot = cell && cell.querySelector('.is-staged');
             if (cell) {
                 const a = host.getBoundingClientRect();
-                const b = cell.getBoundingClientRect();
+                const b = (slot || cell).getBoundingClientRect();
                 host.style.transform = `translate(${Math.round(b.left + b.width / 2 - a.left - a.width / 2)}px,`
                     + ` ${Math.round(b.top + b.height / 2 - a.top - a.height / 2)}px) scale(.42)`;
             }
@@ -470,6 +506,10 @@
                 host.innerHTML = '';
                 host.className = 'mj-spot';
                 host.style.transform = '';
+                // It has landed, so the row shows it again — and the spot is
+                // empty, so nothing is in two places at any point.
+                this.staged = null;
+                this.paintPool();
             }, SPOT_FLY);
         }
 
@@ -478,6 +518,10 @@
             const e = this.engine;
             this.$('mjHub').innerHTML = `
                 <span class="mj-hub-wind">${esc(this.windOf(this.you < 0 ? 0 : this.you))}</span>
+                ${(e.dealerRun || 1) >= 2
+                    ? `<span class="mj-hub-run">${esc(t('mj.dealerRunAt', {
+                        n: e.dealerRun, name: e.seats[e.dealer].name }))}</span>`
+                    : ''}
                 <span class="mj-hub-wall">${esc(t('mj.wall', { n: this.wallLeft }))}</span>
                 <span class="mj-hub-line">${esc(t('mj.mode', { n: e.players }))}</span>
                 <span class="mj-hub-line">${esc(t('mj.unit', { n: e.unit }))}</span>
@@ -644,27 +688,38 @@
             };
 
             // Your own copies first, then a fly for each one short — the same
-            // order the engine takes them in when the claim is made.
-            const pick = (key, want) => {
+            // order the engine takes them in when the claim is made. `wild`
+            // is false for a 杠, which is four real tiles: marking a fly with
+            // 杠 would point at a tile the claim cannot spend.
+            const pick = (key, want, wild) => {
+                if (!key) return [];
                 const got = s.hand.filter((x) => MJ.key(x) === key).slice(0, want);
+                if (wild === false) return got;
                 return got.concat(s.hand.filter(MJ.isFly).slice(0, want - got.length));
             };
 
             const thrown = e.lastDiscard && e.lastDiscard.tile;
             const claim = e.phase === 'claim' && thrown;
+            // A thrown 飞 has no key of its own, so the claim carries the key
+            // of the meld it is being taken for and the tiles it would spend
+            // are read off that instead. Nothing is padded out with your own
+            // flies while a wild is the tile on offer — that meld wants real
+            // tiles, and marking a fly would point at one it cannot spend.
+            const wild = !!thrown && MJ.isFly(thrown);
+            const key = wild ? null : (thrown && MJ.key(thrown));
             for (const o of e.legalActions(this.you)) {
                 // On your own turn a 杠 is your own four, or the single tile
                 // that joins a pung already down. Never a fly: a fly is not
                 // offered a kong of its own.
-                if (o.type === 'kong' && o.key) {
+                if (!claim && o.type === 'kong' && o.key) {
                     mark(s.hand.filter((x) => MJ.key(x) === o.key), 'kong');
                 } else if (!claim) continue;
-                else if (o.type === 'pung') mark(pick(MJ.key(thrown), 2), 'pung');
-                else if (o.type === 'kong') mark(pick(MJ.key(thrown), 3), 'kong');
+                else if (o.type === 'pung') mark(pick(o.key || key, 2, !wild), 'pung');
+                else if (o.type === 'kong') mark(pick(key, 3, false), 'kong');
                 else if (o.type === 'chow') {
                     const suit = o.low[0], lo = Number(o.low.slice(1));
                     for (let x = lo; x <= lo + 2; x++) {
-                        if (suit + x !== MJ.key(thrown)) mark(pick(suit + x, 1), 'chow');
+                        if (suit + x !== key) mark(pick(suit + x, 1, !wild), 'chow');
                     }
                 }
             }
@@ -717,7 +772,13 @@
 
             const fan = CV.MJFan.progress({
                 keys, menzen: (s.melds || []).every((m) => m.concealed),
-                flowers: (s.flowers || []).length,
+                flowers: this.myFlowerFan(), flowersHeld: (s.flowers || []).length,
+                // Only what is already on the table: a triplet still in hand
+                // is not a triplet until it is one, and this counter never
+                // pays for a hand you have not made yet.
+                melds: s.melds || [],
+                seatWind: (this.you - e.dealer + e.players) % e.players,
+                players: e.players,
             }, e.fanTable || CV.MJFan.tableFor(e.players));
             return { fan, done: false, ok: fan.totalFan >= (e.minFan || 0) };
         }
@@ -737,21 +798,51 @@
             return n ? t('mj.flowerFan', { n: n * rate }) : t('mj.flowerNone');
         }
 
+        /**
+         * Does this flower pay *you*?
+         *
+         * Each flower is numbered for a wind — 春 and 梅 are East's, 夏 and
+         * 兰 South's, and so on — and it pays the seat sitting on that wind.
+         * A wind nobody is sitting on pays whoever turns it. The engine is
+         * the authority; this mirrors it so the strip can ring the ones that
+         * count, which is the only way "two flowers, one 番" stops looking
+         * like a bug.
+         */
+        flowerMine(tile) {
+            const e = this.engine;
+            if (this.you < 0 || !CV.MJFan.flowerFan(e.players)) return false;
+            const owner = (tile.n - 1) % 4;
+            return owner >= e.players
+                || owner === (this.you - e.dealer + e.players) % e.players;
+        }
+
+        /** The 番 your flower box is actually worth to you. */
+        myFlowerFan() {
+            const s = this.engine.seats[this.you];
+            if (!s || !s.flowers) return 0;
+            return s.flowers.filter((x) => this.flowerMine(x)).length;
+        }
+
         /** The running 番 count, with what it is counting written on it. */
         fanChipHtml() {
             const e = this.engine;
             const now = this.fanNow();
             if (!now) return '';
-            const pats = now.fan.patterns
-                .map((p) => p.name + (p.n > 1 ? '×' + p.n : '') + ' ' + p.fan).join(' · ');
+            // Written out, not tucked into a `title`. "2番" on its own is a
+            // number a player cannot check, and the whole point of a running
+            // counter is that they should not have to take it on trust.
+            const pats = now.fan.patterns.map((p) =>
+                `<span class="mj-fan-bit">${esc(p.name + (p.n > 1 ? '×' + p.n : ''))
+                 } <b>${p.fan}</b></span>`).join('');
             const cls = now.done ? (now.ok ? ' is-win' : ' is-short') : (now.ok ? ' is-ok' : ' is-short');
-            return `<span class="mj-fan-now${cls}" title="${esc(pats || t('mj.fanNowNone'))}">
+            return `<span class="mj-fan-now${cls}">
                 <span class="mj-fan-now-label">${esc(t(now.done ? 'mj.fanDone' : 'mj.fanNow'))}</span>
                 <b>${esc(t('mj.fanN', { n: now.fan.totalFan }))}</b>
                 ${e.minFan && !now.ok
                     ? `<span class="mj-fan-now-need">${esc(t('mj.fanNeed', {
                         n: e.minFan - now.fan.totalFan }))}</span>`
-                    : ''}</span>`;
+                    : ''}
+                <span class="mj-fan-bits">${pats || esc(t('mj.fanNowNone'))}</span></span>`;
         }
 
         paintYou() {
@@ -770,12 +861,15 @@
             host.innerHTML = `
                 <div class="hand-head">
                     <span class="tag mj-wind${this.you === e.dealer ? ' is-dealer' : ''}">${this.windOf(this.you)}</span>
+                    ${this.runHtml(this.you)}
                     ${this.fanChipHtml()}
                     ${s.flowers.length
                         ? `<span class="mj-flowers-mine">
                              <span class="mj-flowers-label">${esc(t('mj.myFlowers', { n: s.flowers.length }))}</span>
-                             ${row(s.flowers, { small: true })}
-                             <span class="mj-flowers-fan">${esc(this.flowerWorth(s.flowers.length))}</span>
+                             ${s.flowers.map((x) => tileHtml(x, {
+                                small: true, cls: this.flowerMine(x) ? 'is-mine' : 'is-theirs',
+                             })).join('')}
+                             <span class="mj-flowers-fan">${esc(this.flowerWorth(this.myFlowerFan()))}</span>
                            </span>`
                         : `<span class="muted small">${esc(t('mj.noFlowers'))} · ${
                             esc(this.flowerWorth(0))}</span>`}

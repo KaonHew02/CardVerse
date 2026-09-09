@@ -32,7 +32,12 @@
             // wrong one — a five-run can strand two tiles that a three-run and
             // a set would both have taken. So each candidate is tried and the
             // one that leaves the most behind it wins.
-            const found = L.findMelds(rack, e.rules);
+            // Until a seat has opened, only a run counts — a set it cannot
+            // lay is not a move, and offering one would have the AI play an
+            // action the engine refuses and stall its own turn.
+            const opened = e.seats[seat].opened;
+            const found = L.findMelds(rack, e.rules)
+                .filter((cards) => opened || (L.meld(cards, e.rules) || {}).type === 'run');
             if (found.length) {
                 let pick = found[0], best = -1;
                 for (const cards of found.slice(0, 12)) {
@@ -51,8 +56,12 @@
             if (add) return { type: 'extend', seat, at: add.at, tiles: [add.tile.id] };
 
             if (options.some((o) => o.type === 'done')) return { type: 'done', seat };
-            if (options.some((o) => o.type === 'draw')) return { type: 'draw', seat };
-            return { type: 'pass', seat };
+            // Nothing to lay and nothing to add to. A joker spent on nothing
+            // buys another turn, and another turn is worth more than the
+            // fifteen points the joker costs sitting in the rack — so it goes
+            // rather than the hand going.
+            if (options.some((o) => o.type === 'joker')) return { type: 'joker', seat };
+            return { type: 'fold', seat };
         }
 
         /** The first tile in hand that legally joins a meld on the table. */
@@ -62,8 +71,8 @@
             for (let at = 0; at < e.table.length; at++) {
                 const spot = e.table[at];
                 for (const tile of rack) {
-                    // A joker is worth thirty in the hand, but it is worth more
-                    // than that as the tile that finishes a run later on.
+                    // A joker is worth fifteen in the hand, and more than that
+                    // as the tile that finishes a run later on.
                     if (L.isJoker(tile) && rack.length > 1) continue;
                     if (L.extend(spot.tiles, [tile], e.rules)) return { at, tile };
                 }

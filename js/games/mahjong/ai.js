@@ -187,13 +187,22 @@
                     cnt.set(k, have - used);
                     spent += want - used;
                 };
-                if (opt.type === 'pung')      put(key, 2);
-                else if (opt.type === 'kong') put(key, 3);
+                // A claim on a thrown 飞 names its own meld — the wild has
+                // no key, so `opt.key` is the tile it is being taken as.
+                const on = opt.key || key;
+                if (opt.type === 'pung')      put(on, MJ.isFly(tile) ? 2 : 2);
+                else if (opt.type === 'kong') put(on, 3);
                 else {
                     const suit = opt.low[0], lo = Number(opt.low.slice(1));
+                    // Against a real tile the run is short the two rungs it
+                    // does not cover; against a wild it is short whichever
+                    // rung the seat does not hold, and the fly covers one.
+                    let stood = MJ.isFly(tile);
                     for (let x = lo; x <= lo + 2; x++) {
                         const k = suit + x;
-                        if (k !== key) put(k, 1);
+                        if (!MJ.isFly(tile) && k === key) continue;
+                        if (stood && !(cnt.get(k) || 0)) { stood = false; continue; }
+                        put(k, 1);
                     }
                 }
                 if (spent > wilds) continue;

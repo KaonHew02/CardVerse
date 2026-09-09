@@ -53,14 +53,17 @@
         icon: ICON,
         blurb: 'Rummy on mahjong tiles. Runs, sets, jokers — empty your rack.',
         category: 'tiles',
-        players: [3, 4],
+        // Four seats and twenty tiles each, fixed: the whole shape of this
+        // table is that the box is dealt out and never drawn from, and that
+        // only balances at four.
+        players: [4, 4],
         wagers: true,
         Engine: CV.LamiEngine,
         AI:     CV.LamiAI,
         View:   CV.LamiView,
 
         rules: ['lami.rule1', 'lami.rule2', 'lami.rule3', 'lami.rule4',
-                'lami.rule5', 'lami.rule6', 'lami.rule7'],
+                'lami.rule5', 'lami.rule6', 'lami.rule7', 'lami.rule8'],
 
         extraLabels: {
             lamiRounds: 'Rounds played', lamiWins: 'Rounds won',

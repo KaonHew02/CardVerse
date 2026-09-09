@@ -135,6 +135,16 @@
             const carried = this.config.shoe;
             this.dealer = carried && Number.isInteger(carried.dealer)
                 ? carried.dealer % this.players : 0;
+            /**
+             * **连庄** — how many hands running this seat has held the deal.
+             *
+             * 1 is the first hand of a new dealer. It is carried between
+             * hands rather than counted here, because an engine only ever
+             * sees one hand: the streak is the one thing about the dealer
+             * that a single hand cannot know, and it is exactly the thing
+             * the table talks about.
+             */
+            this.dealerRun = carried && Number.isInteger(carried.run) ? carried.run : 1;
 
             for (const s of this.seats) {
                 s.startCoins = s.coins;
@@ -165,11 +175,47 @@
         /** Flies in a seat's hand — wild at three seats, absent at four. */
         wildsIn(seat) { return this.mode.flyEnabled ? MJ.split(this.seats[seat].hand).wilds : 0; }
 
-        /** East keeps the seat if East wins; otherwise it moves on. */
+        /** The wind this seat is sitting on, as an index into 东南西北. */
+        windOf(seat) { return (seat - this.dealer + this.players) % this.players; }
+
+        /**
+         * **A flower belongs to a wind, and pays the seat sitting on it.**
+         *
+         * The eight flowers are two suits of four — 春夏秋冬 and 梅兰菊竹 —
+         * and both suits are numbered for the same four winds: 春 and 梅 are
+         * East's, 夏 and 兰 are South's, 秋 and 菊 are West's, 冬 and 竹 are
+         * North's. Drawing somebody else's flower is not a bonus, it is a
+         * replacement tile and a piece of information for the table.
+         *
+         * A wind **no seat is sitting on** belongs to nobody, so it pays
+         * whoever turns it: at three seats there is no North, and North's two
+         * flowers would otherwise be two tiles in the box that could never be
+         * worth anything to anyone.
+         *
+         * `flowerFanFor` counts the ones that pay. The raw `flowers.length`
+         * is still what 无花 is about — a box full of other people's flowers
+         * is not an empty box.
+         */
+        flowerFanFor(seat) {
+            const wind = this.windOf(seat);
+            return this.seats[seat].flowers.filter((f) => {
+                const owner = (f.n - 1) % 4;
+                return owner >= this.players || owner === wind;
+            }).length;
+        }
+
+        /**
+         * East keeps the seat if East wins; otherwise it moves on — and the
+         * 连庄 count goes with it, one longer for a seat that held on and
+         * back to one for a seat that has just taken over.
+         */
         get shoeState() {
             const keep = this.winner === this.dealer
                 || (this.drawn && this.config.keepDealerOnDraw);
-            return { dealer: keep ? this.dealer : (this.dealer + 1) % this.players };
+            return {
+                dealer: keep ? this.dealer : (this.dealer + 1) % this.players,
+                run: keep ? this.dealerRun + 1 : 1,
+            };
         }
 
         get wallLeft() { return this.wall.length; }
@@ -289,7 +335,11 @@
             const out = [];
             for (const [key, n] of cnt) if (n === 4) out.push(key);          // concealed
             for (const meld of s.melds) {                                     // added to a pung
-                if (meld.type === 'pung' && (cnt.get(meld.key) || 0) >= 1) out.push(meld.key);
+                // Not onto a 碰 that was made with a fly: the result is a
+                // kong with a wild in it, which is the thing a fly may not
+                // be part of however it got there.
+                if (meld.type !== 'pung' || meld.tiles.some(MJ.isFly)) continue;
+                if ((cnt.get(meld.key) || 0) >= 1) out.push(meld.key);
             }
             return [...new Set(out)];
         }
@@ -340,11 +390,86 @@
         }
 
         /**
+         * Who could take a thrown 飞, and as what.
+         *
+         * A wild in the pool has no key of its own, so unlike every other
+         * claim the *meld* has to be named: "碰 中" and "碰 发" are two
+         * different claims on the same tile, and the seat picks. That is why
+         * these options carry a `key` and a label that says which tile they
+         * would make.
+         *
+         * The rest of the hand has to be real. A 碰 wants two genuine copies
+         * and a 吃 two genuine neighbours — the seat's own flies are not
+         * spent here, because a meld made of a thrown wild and a held wild is
+         * two wild cards buying one meld, and both of them were worth more as
+         * the tiles the hand was actually missing.
+         *
+         * No 杠: a kong is four real tiles wherever it comes from.
+         */
+        flyClaims(tile, from) {
+            if (!this.mode.flyEnabled) return [];
+            const out = [];
+            for (let step = 1; step < this.players; step++) {
+                const i = (from + step) % this.players;
+                const s = this.seats[i];
+                const cnt = MJ.counts(s.hand);
+                const options = [];
+                const named = (key) => MJ.name(MJ.parse(key));
+
+                const hu = this.winFor(i, tile);
+                if (hu && hu.ok) options.push({ type: 'win', label: t('mj.win') });
+
+                // 碰 — every pair in hand is a different claim on this tile.
+                for (const [key, n] of cnt) {
+                    if (n >= 2) options.push({ type: 'pung', key, label: t('mj.pung') + ' ' + named(key) });
+                }
+
+                // 吃 — the seat after the thrower, and only in a numbered
+                // suit. The fly fills the one rung of the run it is missing.
+                if (step === 1) {
+                    for (const suit of ['m', 's', 'p']) {
+                        for (let lo = 1; lo + 2 <= 9; lo++) {
+                            const run = [lo, lo + 1, lo + 2].map((x) => suit + x);
+                            if (!this.pool.includes(run[0])) break;
+                            const short = run.filter((k) => !(cnt.get(k) || 0));
+                            if (short.length !== 1) continue;
+                            // Named by the run, not by the rung the fly
+                            // fills: 1-2-3 and 2-3-4 are both short a 2筒
+                            // from a hand holding 3筒 4筒, and two buttons
+                            // reading "吃 2筒" are two different melds
+                            // wearing one name.
+                            options.push({ type: 'chow', low: suit + lo,
+                                           label: t('mj.chow') + ' ' + lo + (lo + 1)
+                                                  + named(suit + (lo + 2)) });
+                        }
+                    }
+                }
+
+                if (options.length) {
+                    out.push({
+                        seat: i, options,
+                        rank: Math.max(...options.map((o) => PRIORITY[o.type])),
+                        step,
+                    });
+                }
+            }
+            return out.sort((a, b) => b.rank - a.rank || a.step - b.step);
+        }
+
+        /**
          * Who could take this tile, strongest claim first. 吃 is only offered
          * to the seat immediately after the thrower, which is also the only
          * seat that loses nothing by taking it.
          */
         findClaims(tile, from) {
+            // **A thrown 飞 is claimable**, because it is still wild lying in
+            // the pool. It used to fall through the `isPlaying` guard below
+            // and offer nothing at all, which made the most useful tile in
+            // the box the one tile nobody could take: a seat one tile from
+            // home watched a wild card go past and was not asked. It is the
+            // same claim as any other, with the fly standing in for whatever
+            // the meld is short of — 顿飞.
+            if (MJ.isFly(tile)) return this.flyClaims(tile, from);
             if (!MJ.isPlaying(tile)) return [];
             const key = MJ.key(tile);
             const suit = tile.suit, n = tile.n;
@@ -364,9 +489,18 @@
 
                 const hu = this.winFor(i, tile);
                 if (hu && hu.ok) options.push({ type: 'win', label: t('mj.win') });
-                // A kong needs a replacement tile to come back, so the last
-                // few throws of a hand cannot be konged either.
-                if (held + wilds >= 3 && this.wall.length) options.push({ type: 'kong', label: t('mj.kong') });
+                // **A 杠 is four real tiles.** A fly may stand in for a tile
+                // in a 碰 and in a finished hand, but not here: a kong is a
+                // claim on all four copies of one tile, and three copies plus
+                // a wild is a claim on three. It also pays — a kong draws a
+                // replacement and counts towards 四杠子 — so a fly that could
+                // be spent on it would be worth more as a kong than as
+                // whatever the hand actually needed, which is backwards for a
+                // tile whose whole job is to be the tile you are missing.
+                //
+                // A kong also needs a replacement tile to come back, so the
+                // last few throws of a hand cannot be konged either.
+                if (held >= 3 && this.wall.length) options.push({ type: 'kong', label: t('mj.kong') });
                 if (held + wilds >= 2) options.push({ type: 'pung', label: t('mj.pung') });
 
                 if (step === 1 && suit !== 'z') {
@@ -420,39 +554,75 @@
              * The tiles this seat puts down for the claim: its own copies
              * first, then a fly for each one it is short — which is what the
              * claim was offered on in the first place.
+             *
+             * `wild` is false for a 杠, which takes four real tiles and
+             * nothing else. `findClaims` will not offer one that needs a
+             * fly, so this is the same rule said twice on purpose: the
+             * action can arrive from a guest's screen, and a rule enforced
+             * only where the buttons are drawn is not enforced.
              */
-            const take = (key, howMany) => {
+            const take = (key, howMany, wild) => {
                 const got = [];
                 for (let i = s.hand.length - 1; i >= 0 && got.length < howMany; i--) {
                     if (MJ.key(s.hand[i]) === key) got.push(s.hand.splice(i, 1)[0]);
                 }
-                for (let i = s.hand.length - 1; i >= 0 && got.length < howMany; i--) {
-                    if (MJ.isFly(s.hand[i])) got.push(s.hand.splice(i, 1)[0]);
+                if (wild !== false) {
+                    for (let i = s.hand.length - 1; i >= 0 && got.length < howMany; i--) {
+                        if (MJ.isFly(s.hand[i])) got.push(s.hand.splice(i, 1)[0]);
+                    }
                 }
-                return got.length === howMany ? got : null;
+                // Anything taken and not used goes back, or a refused claim
+                // costs the seat the tiles it was about to lay down.
+                if (got.length === howMany) return got;
+                for (const x of got) s.hand.push(x);
+                return null;
             };
 
-            // The tile leaves the thrower's pile — it is on the table now.
-            this.seats[from].discards.pop();
+            // A thrown 飞 has no key of its own, so the claim names the meld
+            // it is being taken for — and the rest of that meld has to be
+            // real, which is why nothing here falls back on the seat's own
+            // flies when the tile on offer is already one.
+            const wild = MJ.isFly(tile);
 
             let meld;
             if (action.type === 'pung' || action.type === 'kong') {
-                const mine = take(MJ.key(tile), action.type === 'pung' ? 2 : 3);
+                const kong = action.type === 'kong';
+                if (kong && wild) return false;          // a 杠 is four real tiles
+                const key = wild ? action.key : MJ.key(tile);
+                if (!key || !this.pool.includes(key)) return false;
+                const mine = take(key, kong ? 3 : 2, !kong && !wild);
                 if (!mine) return false;
-                meld = { type: action.type, key: MJ.key(tile), tiles: mine.concat([tile]),
+                meld = { type: action.type, key, tiles: mine.concat([tile]),
                          concealed: false, from };
             } else if (action.type === 'chow') {
                 const suit = action.low[0], lo = Number(action.low.slice(1));
                 const tiles = [];
+                let stood = false;
                 for (let x = lo; x <= lo + 2; x++) {
                     const k = suit + x;
-                    if (k === MJ.key(tile)) tiles.push(tile);
-                    else tiles.push((take(k, 1) || [])[0]);
+                    if (!wild && k === MJ.key(tile)) { tiles.push(tile); continue; }
+                    // Real copies only while a wild is on offer: the fly in
+                    // the pool takes the one rung the seat is missing, and a
+                    // second wild has no rung left to take.
+                    const got = (take(k, 1, !wild) || [])[0];
+                    if (got) { tiles.push(got); continue; }
+                    if (wild && !stood) { stood = true; tiles.push(tile); continue; }
+                    tiles.push(undefined);
                 }
-                if (tiles.some((x) => !x)) return false;
+                if (tiles.some((x) => !x) || (wild && !stood)) {
+                    // Hand back anything already taken for a claim that
+                    // cannot be completed.
+                    for (const x of tiles) if (x && x !== tile) s.hand.push(x);
+                    return false;
+                }
                 meld = { type: 'chow', key: action.low, tiles, concealed: false, from };
             } else return false;
 
+            // Only now does the tile leave the thrower's pile — a claim that
+            // could not be assembled has to leave the pool exactly as it was,
+            // and a 杠 that a fly is no longer allowed to fill is a claim
+            // that can now fail this late.
+            this.seats[from].discards.pop();
             s.melds.push(meld);
             s.lastAction = action.type;
             this.pending = [];
@@ -570,6 +740,12 @@
                     this.lastDiscard = { tile, from: seat };
                     this.pending = rob;
                     this.claimAt = 0;
+                    // The tile is on offer to the table now, so the turn this
+                    // seat took off a claim is over — the same clearing
+                    // `doDiscard` does, and for the same reason: the flag
+                    // describes the seat in play, and the seat in play is
+                    // about to be somebody else.
+                    this.claimed = false;
                     this.phase = 'claim';
                     this.turn = rob[0].seat;
                     this.emit('claimable', { seat: this.turn, tile, rob: true });
@@ -644,10 +820,17 @@
                 selfDraw: !tile,
                 menzen: s.melds.every((m) => m.concealed),
                 quad: !!shape.quad,
-                // Flowers pay by the tile at three seats, and holding none
-                // pays as 无花 — so the count goes to the scorer whether it
-                // is zero or not. They are never in the hand itself.
-                flowers: s.flowers.length,
+                // Flowers pay by the tile at three seats, but only the ones
+                // numbered for this seat's wind — and holding none at all
+                // pays as 无花, which is a different count. They are never in
+                // the hand itself either way.
+                flowers: this.flowerFanFor(seat),
+                flowersHeld: s.flowers.length,
+                // 中/发/白 pay everybody; a wind pays the seat sitting on it,
+                // and a wind nobody is sitting on pays whoever collects it.
+                // The scorer cannot work either out from the tiles alone.
+                seatWind: this.windOf(seat),
+                players: this.players,
                 // 天胡: the dealer, on the tiles they were dealt, nothing
                 // thrown yet. 地胡: anybody else on the dealer's first throw,
                 // and only if they have not acted — a seat that melded is
@@ -916,6 +1099,7 @@
         snapshot() {
             return Object.assign(super.snapshot(), {
                 dealer: this.dealer,
+                dealerRun: this.dealerRun,
                 players: this.players,
                 mode: this.mode.mode,
                 flyOn: this.flyOn, baoAt: this.baoAt, baoPay: this.baoPay,

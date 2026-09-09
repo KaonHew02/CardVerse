@@ -635,6 +635,9 @@
 .tile-sm .tile-wan i { font-size: .6rem; }
 /* The tile just thrown, because a claim has to be decided on it. */
 .tile.is-last { box-shadow: 0 0 0 2px var(--accent), 0 3px 8px rgba(0,0,0,.5); }
+/* …and while it is being held up in the middle it is only there. The
+ * slot stays, so the row does not jump when the tile lands in it. */
+.tile.is-staged { visibility: hidden; }
 
 /* A tile small enough that a thirteen-tile wall fits down the side of the
  * felt. The face art scales with it; the honours drop their character rather
@@ -865,6 +868,11 @@
     padding: 3px 10px; border-radius: 999px; background: rgba(246,201,220,.16); }
 .mj-flowers-label { font-size: .75rem; font-weight: 700; color: #ffd8e8; }
 .mj-flowers-mine .tile-sm { width: 34px; height: 45px; border-radius: 5px; }
+/* A flower is numbered for a wind and pays the seat sitting on it, so the
+ * ones that are yours are lit and the rest are dimmed. Without this, "two
+ * flowers, one 番" is a row of identical tiles and an unexplained number. */
+.mj-flowers-mine .is-mine { box-shadow: inset 0 -3px 0 rgba(0,0,0,.14), 0 0 0 2px var(--accent); }
+.mj-flowers-mine .is-theirs { opacity: .42; }
 .mj-flowers-fan { font-size: .66rem; font-weight: 700; color: rgba(255,255,255,.62);
     padding-left: 1px; white-space: nowrap; }
 
@@ -880,6 +888,12 @@
     background: rgba(0,0,0,.28); box-shadow: inset 0 0 0 1px rgba(255,255,255,.12);
 }
 .mj-fan-now b { font-size: .84rem; font-weight: 800; color: var(--accent); }
+/* The sum, written out. A bare "2番" is a number the player cannot check,
+ * and a counter nobody can check is a counter nobody believes. */
+.mj-fan-bits { display: inline-flex; align-items: baseline; gap: 5px; flex-wrap: wrap;
+    padding-left: 6px; margin-left: 2px; border-left: 1px solid rgba(255,255,255,.16); }
+.mj-fan-bit { font-size: .66rem; color: rgba(255,255,255,.72); white-space: nowrap; }
+.mj-fan-bit b { font-size: .66rem; color: var(--accent); }
 .mj-fan-now-label { color: rgba(255,255,255,.66); font-weight: 700; }
 .mj-fan-now-need { color: var(--warn); font-weight: 700; }
 .mj-fan-now.is-short { box-shadow: inset 0 0 0 1px rgba(245,185,66,.45); }
@@ -924,6 +938,10 @@
     0%, 100% { box-shadow: 0 0 0 0 rgba(245,185,66,.5); }
     50%      { box-shadow: 0 0 0 9px rgba(245,185,66,0); }
 }
+/* 连庄 — how many hands running this seat has held the deal. Shown from the
+ * second, because 连1庄 is just "the dealer". */
+.mj-run { background: var(--accent); color: var(--accent-ink); font-weight: 800; }
+.mj-hub-run { font-size: .66rem; font-weight: 700; color: var(--accent); white-space: nowrap; }
 .mj-min { color: var(--warn); font-size: .8rem; font-weight: 700; }
 .mj-short { color: var(--warn); font-weight: 700; }
 .mj-hub-btn {
@@ -1220,3 +1238,9 @@
 .dg-posts { color: var(--warn); font-weight: 700; font-size: .82rem; }
 .dg-ante { font-size: .72rem; padding: 1px 8px; border-radius: 999px;
     background: rgba(255,255,255,.12); color: rgba(255,255,255,.75); }
+
+/* A folded Lami seat: out of the turn order, still holding a rack that will
+ * be counted at the end. Dimmed rather than removed — a seat that vanished
+ * would look like the game losing track of a player. */
+.lami-seat.is-folded { opacity: .45; }
+.lami-seat.is-folded .play-pass { color: var(--warn); font-weight: 700; }

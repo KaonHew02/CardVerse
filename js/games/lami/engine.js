@@ -52,6 +52,7 @@
 
             this.pool = [];
             this.table = [];        // [{ tiles, meld, by }]
+            this.spent = [];        // jokers laid alone to buy a turn
             this.dice = null;       // [{ seat, roll }] from the opening throw
             this.played = 0;        // tiles this seat has put down this turn
             this.passes = 0;
@@ -67,8 +68,12 @@
                 s.net = 0;
                 s.rack = [];
                 s.points = 0;
+                s.pieces = 0;       // the joker/ace side count
+                s.opened = false;   // has laid its first run
+                s.folded = false;   // could not play, and is out of the hand
                 s.lastAction = null;
             }
+            this.heaven = -1;       // the seat dealt a 天胡, if any
         }
 
         /** The winner opens the next round — the rule the game rides on. */
@@ -96,6 +101,15 @@
             return live[0];
         }
 
+        /**
+         * **Everything is dealt at the start and there is no draw pile.**
+         *
+         * Twenty tiles each and the rest of the box is dead — which is the
+         * whole shape of this game. Ordinary rummy is a race to improve a
+         * hand you keep topping up; here the hand you are dealt is the hand
+         * you have, and every turn spends it. `pool` is kept only so the
+         * count can be shown; nothing draws from it.
+         */
         start() {
             const box = L.build(this.rules);
             this.rng.shuffle(box);
@@ -108,20 +122,52 @@
             this.phase = 'play';
             this.round = 1;
             this.emit('deal', { starter: this.turn, dice: this.dice, pool: this.pool.length });
+
+            // 天胡 — twenty tiles that already lie in melds with nothing over.
+            // It is read off the deal and pays before anybody has played, so
+            // it is checked here rather than anywhere a turn could reach.
+            for (const s of this.seats) {
+                if (!L.partition(s.rack, this.rules)) continue;
+                this.heaven = s.index;
+                this.winner = s.index;
+                s.rack = [];
+                this.emit('heaven', { seat: s.index });
+                this.finishRound();
+                return;
+            }
             this.emit('turn', { seat: this.turn });
         }
 
         /* ---- what a seat may do -------------------------------------------- */
 
+        /**
+         * **You put something down every turn, or you are out.**
+         *
+         * There is nothing to draw, so a turn is not a chance to improve —
+         * it is a demand. Lay a meld, add to one on the table, or spend a
+         * joker on its own to buy the turn; do none of those and you fold,
+         * and your rack is frozen and counted at the end.
+         *
+         * A seat that has not opened may only lay a run of three or more, and
+         * may not add to anybody else's meld. That is the entry fee: until
+         * you have shown a run you are not on the table.
+         */
         legalActions(seat) {
             if (this.over || seat !== this.turn || this.phase !== 'play') return [];
+            const s = this.seats[seat];
+            if (s.folded) return [];
+
             const out = [{ type: 'play', label: t('lami.play') }];
-            for (let i = 0; i < this.table.length; i++) {
-                out.push({ type: 'extend', at: i, label: t('lami.add') });
+            if (s.opened) {
+                for (let i = 0; i < this.table.length; i++) {
+                    out.push({ type: 'extend', at: i, label: t('lami.add') });
+                }
             }
             if (!this.played) {
-                if (this.pool.length) out.push({ type: 'draw', label: t('lami.draw') });
-                else out.push({ type: 'pass', label: t('lami.pass') });
+                // A lone joker buys the turn. It is the one tile that can be
+                // spent on nothing, and spending it is better than folding.
+                if (s.rack.some(L.isJoker)) out.push({ type: 'joker', label: t('lami.jokerOut') });
+                out.push({ type: 'fold', label: t('lami.fold') });
             } else {
                 out.push({ type: 'done', label: t('lami.done') });
             }
@@ -174,8 +220,8 @@
             const seat = action.seat;
             if (action.type === 'play')   return this.doPlay(seat, action.tiles);
             if (action.type === 'extend') return this.doExtend(seat, action.at, action.tiles);
-            if (action.type === 'draw')   return this.doDraw(seat);
-            if (action.type === 'pass')   return this.endTurn(seat, true);
+            if (action.type === 'joker')  return this.doJoker(seat);
+            if (action.type === 'fold')   return this.doFold(seat);
             if (action.type === 'done')   return this.endTurn(seat, false);
             return false;
         }
@@ -192,6 +238,9 @@
         doPlay(seat, ids) {
             const shape = this.validPlay(seat, ids);
             if (!shape) return false;
+            // The first thing a seat lays has to be a run. Sets come after.
+            if (!this.seats[seat].opened && shape.type !== 'run') return false;
+            this.seats[seat].opened = true;
             const tiles = this.pull(seat, ids);
             this.table.push({ tiles: L.sort(tiles), meld: shape, by: seat });
             this.played += tiles.length;
@@ -213,14 +262,40 @@
             return this.checkOut(seat);
         }
 
-        doDraw(seat) {
-            if (!this.pool.length) return this.endTurn(seat, true);
-            const tile = this.pool.pop();
+        /**
+         * A joker spent on nothing, to buy a turn you could not otherwise
+         * take. It leaves the rack — so it stops costing points and stops
+         * counting towards the side settlement — and goes face up on the
+         * table where everybody can see what it cost.
+         */
+        doJoker(seat) {
             const s = this.seats[seat];
-            s.rack = L.sort(s.rack.concat([tile]));
-            s.lastAction = 'draw';
-            this.emit('draw', { seat, tile, pool: this.pool.length });
+            const idx = s.rack.findIndex(L.isJoker);
+            if (idx < 0) return false;
+            const tile = s.rack.splice(idx, 1)[0];
+            this.spent.push({ seat, tile });
+            s.lastAction = 'joker';
+            this.emit('joker', { seat, tile, left: s.rack.length });
+            if (!s.rack.length) return this.checkOut(seat);
             return this.endTurn(seat, false);
+        }
+
+        /** Nothing to play. The rack is frozen and counted at the end. */
+        doFold(seat) {
+            const s = this.seats[seat];
+            s.folded = true;
+            s.lastAction = 'fold';
+            this.emit('fold', { seat, left: s.rack.length });
+            return this.endTurn(seat, true);
+        }
+
+        /** Seats still in the hand, in turn order from `from`. */
+        nextLive(from) {
+            for (let k = 1; k <= this.seats.length; k++) {
+                const i = (from + k) % this.seats.length;
+                if (!this.seats[i].folded) return i;
+            }
+            return -1;
         }
 
         /** A rack down to nothing ends the round on the spot. */
@@ -232,15 +307,20 @@
             return true;
         }
 
-        endTurn(seat, passed) {
-            this.passes = passed ? this.passes + 1 : 0;
+        /**
+         * The hand runs until everybody has folded or somebody goes out.
+         * There is no stall to detect any more: a seat that cannot move does
+         * not sit there passing, it folds and stops being asked.
+         */
+        endTurn(seat, folded) {
             this.played = 0;
-            if (passed && this.passes >= this.seats.length * STALL) {
+            const next = this.nextLive(seat);
+            if (next < 0) {
                 this.emit('stalled', {});
                 this.finishRound();
                 return true;
             }
-            this.turn = (seat + 1) % this.seats.length;
+            this.turn = next;
             this.emit('turn', { seat: this.turn });
             return true;
         }
@@ -248,34 +328,107 @@
         /* ---- the count ------------------------------------------------------- */
 
         /**
-         * Everyone pays for what is left in their hand and the smallest hand
-         * takes the lot. A player who went out pays nothing and collects
-         * everything, which is what "no remaining penalty" means in coins.
+         * **Two settlements, and they are not the same game.**
+         *
+         * The **hand** pays one way: the fewest points left wins, and the
+         * three behind pay 3, 2 and 1 stakes to them by how much they are
+         * holding — 大哥 the most, then 二哥, then 小哥. A hand that ends
+         * early pays flat instead: going out is 5 stakes from everybody, and
+         * a 天胡 dealt in one piece is 10. Neither of those is scaled by
+         * anybody's points, because neither gave the table a chance to play.
+         *
+         * The **side count** pays the other way, and it runs whatever the
+         * hand did: jokers and aces are counted in pieces (see
+         * `Lami.pieces`), every player settles head to head with every
+         * other, and whoever holds more collects half a stake for each piece
+         * of difference. Somebody can win the hand and lose money on the
+         * side, which is the point of it — the ace you were told to throw is
+         * the ace that pays you.
+         *
+         * Nobody ever hands over more than they are sitting on, so the whole
+         * thing is trimmed to what is there before a coin moves.
          */
         finishRound() {
-            for (const s of this.seats) s.points = L.handPoints(s.rack);
-            const low = Math.min(...this.seats.map((s) => s.points));
-            const best = this.seats.filter((s) => s.points === low).map((s) => s.index);
-
-            let pot = 0;
             for (const s of this.seats) {
-                const owed = Math.min(s.points * this.stake, s.coins);
-                s.net = -owed;
-                s.coins -= owed;
-                pot += owed;
+                s.points = L.handPoints(s.rack);
+                s.pieces = L.pieces(s.rack);
             }
-            const share = Math.floor(pot / best.length);
-            let odd = pot - share * best.length;
-            for (const i of best) {
-                const take = share + (odd > 0 ? 1 : 0);
-                if (odd > 0) odd--;
-                this.seats[i].net += take;
-                this.seats[i].coins += take;
+
+            const owed = this.seats.map(() => 0);   // negative = pays
+            const n = this.seats.length;
+
+            /* --- the hand ---------------------------------------------------- */
+            const flat = this.heaven >= 0 ? this.rules.heavenRatio
+                : (this.winner >= 0 && !this.seats[this.winner].rack.length) ? this.rules.outRatio
+                : 0;
+            let ranked;
+            if (flat) {
+                ranked = [];
+                for (let i = 0; i < n; i++) {
+                    if (i === this.winner) continue;
+                    owed[i] -= flat * this.stake;
+                    owed[this.winner] += flat * this.stake;
+                }
+            } else {
+                // Fewest points wins; the rest pay by how much they are
+                // holding. A tie on points takes the earlier seat, which is
+                // arbitrary and has to be *something*.
+                ranked = this.seats.map((s) => s.index)
+                    .sort((a, b) => this.seats[a].points - this.seats[b].points || a - b);
+                this.winner = ranked[0];
+                // `ranked` runs from fewest points to most, so the seat one
+                // place behind the winner is 小哥 and the last is 大哥 — and
+                // `rankRatio` is in that same order.
+                const RATIO = this.rules.rankRatio;
+                for (let k = 1; k < ranked.length; k++) {
+                    const pay = (RATIO[k - 1] || 0) * this.stake;
+                    owed[ranked[k]] -= pay;
+                    owed[this.winner] += pay;
+                }
             }
-            if (this.winner < 0 && best.length === 1) this.winner = best[0];
+
+            /* --- the side count ---------------------------------------------- */
+            const half = this.rules.pieceRatio;
+            for (let i = 0; i < n; i++) {
+                for (let j = i + 1; j < n; j++) {
+                    const gap = this.seats[i].pieces - this.seats[j].pieces;
+                    if (!gap) continue;
+                    const pay = Math.round(Math.abs(gap) * half * this.stake);
+                    const winner = gap > 0 ? i : j, loser = gap > 0 ? j : i;
+                    owed[winner] += pay;
+                    owed[loser] -= pay;
+                }
+            }
+
+            /* --- nobody pays what they do not have --------------------------- */
+            const stacks = this.seats.map((s) => s.coins);
+            const paid = owed.slice();
+            let short = 0;
+            for (let i = 0; i < n; i++) {
+                if (paid[i] >= 0) continue;
+                const can = Math.min(-paid[i], stacks[i]);
+                short += -paid[i] - can;
+                paid[i] = -can;
+            }
+            // What could not be paid comes off the winners, largest first, so
+            // the table still balances to zero.
+            const takers = paid.map((v, i) => i).filter((i) => paid[i] > 0)
+                .sort((a, b) => paid[b] - paid[a]);
+            for (const i of takers) {
+                if (short <= 0) break;
+                const cut = Math.min(paid[i], short);
+                paid[i] -= cut;
+                short -= cut;
+            }
+
+            this.seats.forEach((s, i) => { s.net = paid[i]; s.coins = s.startCoins + paid[i]; });
 
             this.phase = 'over';
-            this.emit('scored', { points: this.seats.map((s) => s.points), pot });
+            this.emit('scored', {
+                points: this.seats.map((s) => s.points),
+                pieces: this.seats.map((s) => s.pieces),
+                ranked, heaven: this.heaven,
+            });
             this.finish();
         }
 
