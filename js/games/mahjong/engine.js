@@ -58,19 +58,27 @@
             mode: '3P', players: 3,
             flyEnabled: true, dunFlyEnabled: true,
             flowers: 8,
+            // **七对子 is not played here.** Not "scored at zero" — not a
+            // hand. See `MJWin.isWin`: a table that leaves the shape in and
+            // takes it out of the fan table lets a player declare a hand
+            // worth nothing and then refuses it at the floor, with nothing
+            // on screen to say why their seven pairs were not a win.
+            shapes: { pairs: false, orphans: true },
             // The floor, and it is the pay profile's floor: `minFan` is what
             // the screen prints and `MJPay.canWin` is what actually refuses a
             // declaration, so the two disagreeing would show a player a
             // number the table does not go by. The smoke test holds them
-            // together. It reads 2 rather than 5 because 混一色 no longer
-            // hands every hand in this box 3番 — see fan.js and pay.js.
-            minimumFan: 2, baoFanThreshold: 10, baoFanPayment: 20,
+            // together. 5番, against a table where an ordinary hand with a
+            // triplet in it is 鸡胡 1番 — the floor is what makes 平胡,
+            // 碰碰胡 and the flowers worth building towards. See fan.js.
+            minimumFan: 5, baoFanThreshold: 10, baoFanPayment: 20,
             flyUnit: 5,        // coins, the shape of RM0.50 — not yet settled
         },
         4: {
             mode: '4P', players: 4,
             flyEnabled: false, dunFlyEnabled: false,
             flowers: 0,
+            shapes: { pairs: true, orphans: true },
             minimumFan: 0, baoFanThreshold: 10, baoFanPayment: 20,
             flyUnit: 0,
         },
@@ -79,12 +87,12 @@
     class MahjongEngine extends CV.GameEngine {
 
         static get code() { return 'mahjong'; }
-        static get publicConfig() { return ['room', 'unitStep', 'players']; }
+        static get publicConfig() { return ['room', 'unitStep', 'players', 'manualDraw']; }
 
         static get defaults() {
             // unitStep multiplies the room's base stake: 2, 5 or 10, which is
             // the 0.20 / 0.50 / 1.00 shape the table is normally played at.
-            return { room: 'beginner', shoe: null, keepDealerOnDraw: true, unitStep: 2 };
+            return { room: 'beginner', shoe: null, keepDealerOnDraw: true, unitStep: 2, manualDraw: 0 };
         }
 
         constructor(opts) {
@@ -93,6 +101,10 @@
             this.players = this.seats.length;
             this.mode = Object.assign({}, MODES[this.players] || MODES[4], this.config.mode || {});
             this.pool = MJ.keysFor(this.players);
+            /** Which non-standard hands this table plays. See `MJWin.isWin`. */
+            this.shapes = this.mode.shapes || { pairs: true, orphans: true };
+            /** Whether a seat played from this browser draws its own tile. */
+            this.manualDraw = !!this.config.manualDraw;
             this.profile = CV.MJPay.profileFor(this.players);
             // One fan table per mode, because the two modes are played out of
             // different boxes: 混一色 describes the three-player box rather
@@ -190,6 +202,11 @@
             this.phase = 'discard';
             this.turn = this.dealer;
             this.round = 1;
+            // How many tiles have been thrown this hand. 天胡 is the dealer
+            // going out on none, 地胡 is anybody else going out on the
+            // dealer's first — the two hands that are over before the game
+            // has really started, and neither can be read off the tiles.
+            this.plays = 0;
             this.emit('deal', { dealer: this.dealer, players: this.players, wall: this.wall.length });
             this.emit('turn', { seat: this.turn, drew: null });
         }
@@ -249,6 +266,11 @@
                 if (!entry || entry.seat !== seat) return [];
                 return entry.options.concat([{ type: 'pass', label: t('mj.pass') }]);
             }
+
+            // Manual draw: one thing to do, and the hand cannot be thrown
+            // from until it is done. Listing the tiles here would offer a
+            // discard off thirteen.
+            if (this.phase === 'draw') return [{ type: 'draw', label: t('mj.draw') }];
             return [];
         }
 
@@ -274,6 +296,10 @@
 
         handle(action) {
             const seat = action.seat;
+            if (this.phase === 'draw') {
+                if (action.type !== 'draw' || seat !== this.turn) return false;
+                return this.takeTile(seat);
+            }
             if (this.phase === 'discard') {
                 if (action.type === 'win')     return this.declareWin(seat, null);
                 if (action.type === 'kong')    return this.doKong(seat, action.key);
@@ -297,6 +323,7 @@
             s.discards.push(tile);
             s.lastAction = 'discard';
             this.lastDiscard = { tile, from: seat };
+            this.plays++;
             // The turn this seat took off a claim is over. Left standing, the
             // flag would describe a seat that is no longer in play, and the
             // next reader of it would be reading the wrong seat's history.
@@ -445,7 +472,36 @@
 
         /* ---- drawing --------------------------------------------------------------- */
 
+        /**
+         * **摸牌, by hand or by itself.**
+         *
+         * On auto the tile is simply taken and the seat is asked to throw —
+         * which is the right default and the wrong feel: the draw is half of
+         * playing mahjong, and a hand where fourteen tiles keep appearing is
+         * a hand you are only ever tidying. On manual the seat is put in
+         * front of the wall and left there, with the tile taken when it says
+         * so. Nothing else changes: the same tile comes off the same wall in
+         * the same order, so the mode is a matter of who presses the button
+         * and never of what is drawn.
+         *
+         * Only for seats this browser plays by hand — an AI is never left
+         * waiting on a button nobody is going to press, and a remote seat's
+         * draw belongs to whoever is sitting at it.
+         */
         drawFor(seat) {
+            if (!this.wall.length) return this.exhausted();
+            if (this.manualDraw && this.seats[seat].isHuman) {
+                this.claimed = false;
+                this.phase = 'draw';
+                this.turn = seat;
+                this.emit('turn', { seat, drew: null, wall: this.wall.length });
+                return true;
+            }
+            return this.takeTile(seat);
+        }
+
+        /** The tile actually leaves the wall. */
+        takeTile(seat) {
             if (!this.wall.length) return this.exhausted();
             const tile = this.wall.pop();
             this.seats[seat].hand.push(tile);
@@ -573,7 +629,7 @@
             const parts = MJ.split(tiles);
             const wilds = this.mode.flyEnabled ? parts.wilds : 0;
             if (!this.mode.flyEnabled && parts.wilds) return null;
-            const shape = W.isWin(parts.counts, s.melds.length, wilds, this.pool);
+            const shape = W.isWin(parts.counts, s.melds.length, wilds, this.pool, this.shapes);
             if (!shape) return null;
 
             const melds = s.melds.map((m) => ({ type: m.type, key: m.key })).concat(shape.melds || []);
@@ -588,6 +644,18 @@
                 selfDraw: !tile,
                 menzen: s.melds.every((m) => m.concealed),
                 quad: !!shape.quad,
+                // Flowers pay by the tile at three seats, and holding none
+                // pays as 无花 — so the count goes to the scorer whether it
+                // is zero or not. They are never in the hand itself.
+                flowers: s.flowers.length,
+                // 天胡: the dealer, on the tiles they were dealt, nothing
+                // thrown yet. 地胡: anybody else on the dealer's first throw,
+                // and only if they have not acted — a seat that melded is
+                // not going out on the opening discard any more.
+                heaven: seat === this.dealer && !tile && this.plays === 0,
+                earth: seat !== this.dealer && !!tile && this.plays === 1
+                    && this.lastDiscard && this.lastDiscard.from === this.dealer
+                    && !s.melds.length,
                 // A plain fly adds nothing. 顿飞 may one day — see MJ.isDun.
                 wilds,
                 dun: this.mode.dunFlyEnabled ? parts.dun : 0,
@@ -619,6 +687,28 @@
             if (!tile && this.claimed && seat === this.turn) return null;
             const got = this.winFor(seat, tile || null);
             if (!got) return null;
+
+            return {
+                ok: got.ok, fan: got.fan, shape: got.shape.shape,
+                groups: this.readGroups(seat, got.shape),
+                need: this.minFan, selfDraw: !tile,
+            };
+        }
+
+        /**
+         * A winning hand cut into the melds it was **read** as.
+         *
+         * Not the tiles as they lie: a 飞 counts as whatever it was played
+         * as, and a row of fourteen cannot say which. Every group comes back
+         * as keys with the wild ones flagged, so the screen can draw a fly as
+         * the tile it turned into and ring it.
+         *
+         * Kept apart from `explain` because the recap needs it too, and by
+         * the time the recap is drawn the hand is over: the tiles have been
+         * taken off the pool and `explain` would have nothing to read. The
+         * winner's reading is therefore taken once, as the hand is declared.
+         */
+        readGroups(seat, shape) {
             const s = this.seats[seat];
             const groups = [];
             /** `n` copies of one key, the last `wild` of them played by a fly. */
@@ -637,7 +727,6 @@
                 }
             }
 
-            const shape = got.shape;
             if (shape.shape === 'sevenPairs') {
                 for (const g of (shape.groups || [])) {
                     groups.push({ type: 'pair', tiles: copies(g.key, 2, g.wild) });
@@ -658,11 +747,7 @@
                 }
                 groups.push({ type: 'pair', tiles: copies(shape.pair, 2, shape.pairWild) });
             }
-
-            return {
-                ok: got.ok, fan: got.fan, shape: shape.shape, groups,
-                need: this.minFan, selfDraw: !tile,
-            };
+            return groups;
         }
 
         /** Every tile the finished hand is made of, wilds resolved. */
@@ -725,6 +810,10 @@
             // hand like any other.
             this.winTile = selfDraw ? this.drew : this.lastDiscard.tile;
             this.winHand = got.hand;
+            // Taken now, not at recap time: `finish` clears the pool and the
+            // hand, and a fly drawn as a plain 飞 in the recap is the one
+            // thing the winner cannot work out afterwards.
+            this.winRead = this.readGroups(seat, got.shape);
             this.fan = got.fan;
 
             // Fan first, then what it is worth. The two never meet.
@@ -776,6 +865,10 @@
                     hand: MJ.sort(i === this.winner && this.winTiles ? this.winTiles : s.hand),
                     flowers: s.flowers.slice(),
                     win: i === this.winner ? this.winTile || null : null,
+                    // The winning hand as it was read — melds cut apart, each
+                    // fly marked with the tile it stood for. Only the winner
+                    // has one; everybody else's tiles are just tiles.
+                    read: i === this.winner ? (this.winRead || null) : null,
                 },
                 // What the 番 were, pattern by pattern. The names are the
                 // ones the table uses and half of them explain nothing on

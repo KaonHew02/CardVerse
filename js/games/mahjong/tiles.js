@@ -123,7 +123,9 @@
 
     /** Characters, bamboo, dots, honours, then flowers and fly. */
     const ORDER = { m: 0, s: 1, p: 2, z: 3, f: 4, F: 5 };
-    const sort = (tiles) => tiles.slice().sort((a, b) => ORDER[a.suit] - ORDER[b.suit] || a.n - b.n);
+    /** Where one tile sits against another in a sorted hand. */
+    const cmp = (a, b) => ORDER[a.suit] - ORDER[b.suit] || a.n - b.n;
+    const sort = (tiles) => tiles.slice().sort(cmp);
 
     /** How many of each playing tile, keyed by `key`. Flowers and fly are not in it. */
     function counts(tiles) {
@@ -171,6 +173,6 @@
         FLY_COUNT, FLOWER_COUNT,
         key, parse, isHonour, isWind, isDragon, isTerminal, isOrphan,
         isFlower, isFly, isPlaying, isDun,
-        keysFor, build, sort, counts, split, name, nameEn,
+        keysFor, build, sort, cmp, counts, split, name, nameEn,
     };
 })();

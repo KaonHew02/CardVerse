@@ -11,7 +11,7 @@ copy-paste rather than a fresh round of Google Cloud archaeology.
 | --- | --- |
 | Cloud project | **GameHub** — its consent screen sets the name every game shows at sign-in |
 | OAuth client | **one**, Web application, origin `https://kaonhew02.github.io` |
-| Drive folder | **`GameHub`**, with one sub-folder per game |
+| Drive folder | **`GameHub`** — one per *player*, made by the app in their own Drive |
 | Scope | `drive.file`, always. Never widen it to `drive`. |
 
 ### Why one client, when the earlier advice was one per app
@@ -33,36 +33,58 @@ Two facts, both learned the awkward way:
 MoneyFlow and FinSim have shared a client since day one, so this is what was
 happening in practice anyway.
 
-## Folder layout
+## Folder layout — one folder per player, not one folder
 
-The folder is independent of the client ID — one OAuth client writes into as
-many folders as you point it at, because `folderId` is only the parent a file
-is filed under. So the hub mirrors the Cloud project structure:
+`drive-config.js` carries a folder **name**, `folderName: 'GameHub'`, and no
+folder id at all. `findFolder()` looks that name up in whichever Drive just
+signed in and creates it there when it is missing, so what exists is one folder
+per *player*:
 
 ```
-GameHub/                 1Qc4ZfqWyoQf-2_ohW1ieoebwtCWKjJOz   ← parent, nothing files here
-  CardVerse/             1gp4tdFod_306oTR6xQy-5eVPhAuyp_ya
+<each player's own My Drive>/
+  GameHub/
     cardverse-data.json
-  <next game>/           <make one, copy its id>
-    <app>-data.json
+    <app>-data.json          ← every game on this client, same folder
 ```
 
-The parent's id is recorded only for navigation — **no game points at it**.
-Each `drive-config.js` carries its own sub-folder id.
+### Why a name and not an id
 
-Each game's `drive-config.js` carries **its own sub-folder id**, not the
-GameHub root's. Making the sub-folder and copying its id is the one manual
-step per game; in exchange the folder is browsable at a glance and a single
-game's folder can be shared or cleared without touching the others.
+A hard-coded id names one folder in one person's Drive, and that is the whole
+problem: `drive.file` reaches only files this app created *for the account
+holding the token*, so a second player has no permission on the first player's
+folder and Drive refuses the write with a 404. It works perfectly for whoever
+made the folder and fails for everyone else, which is the worst way for a thing
+to be broken.
 
-A **flat** `GameHub/` holding every file also works — filenames are unique, and
-`findFile()` matches parent *plus* name — but then which file belongs to which
-game is only legible by reading filenames. Sub-folders are the default here.
+Sharing that folder as Editor gets past the 404 and is worse. Every player's
+save then lands in one person's Drive, on one person's quota, readable by them
+— and because each player's `drive.file` grant cannot see files created under
+another's, `findFile()` returns nothing and each player writes *another*
+`cardverse-data.json` beside the rest. Drive permits duplicate names, so the
+folder fills with identical-looking files and the app reads whichever it made.
 
-Whichever is used, changing a game's `folderId` after it has written a file
-**orphans that file**: the app looks in the new folder, finds nothing, and
-writes a fresh one. Press *From Drive* (or Export) before moving a game that
-already has a save, and delete the old file afterwards.
+A name has none of that. No sharing, no setup per player, no way for one
+player's save to touch another's, and the search stays correct because
+`drive.file` already narrows results to folders this app made — so the query
+can only ever match the signing-in player's own.
+
+### Sub-folders per game
+
+Dropped. They cost one manual step per game and an id in every config, which
+is precisely the thing that could not be made to work for a second player. The
+flat layout was always allowed here and is now the only one: **`filename` is
+what keeps the games apart**, which is why it must stay unique.
+
+Games share the folder rather than making one each because they share the
+OAuth client, and `drive.file` is granted per client — so a player who plays
+three of these ends up with one folder holding three files.
+
+### The id-change trap, in its new form
+
+Changing a game's `filename` — or `folderName` — after it has written a save
+**orphans that file**: the app looks under the new name, finds nothing, and
+writes a fresh one beside the old. Press *From Drive* (or Export) first, and
+delete the old file afterwards.
 
 ## One repo per game
 
@@ -122,8 +144,9 @@ renamed file in Drive is a *new* file and the old one is orphaned.
 Both fields matter and they do different jobs:
 
 - **The filename** is what `findFile()` searches for, scoped to the folder
-  (`'<folderId>' in parents and name = '<filename>'`). Distinct names are what
-  let one folder hold every game without collision.
+  `findFolder()` just resolved (`'<id>' in parents and name = '<filename>'`).
+  Distinct names are what let one folder hold every game without collision —
+  and with sub-folders gone, they are the *only* thing that does.
 - **The `format` string** is what "From Drive" checks before it replaces
   anything. Point a game at another game's file and it refuses by name rather
   than importing nonsense. This is the safety net that makes a shared folder
@@ -136,7 +159,9 @@ Both fields matter and they do different jobs:
    (`prompt: 'none'`, the `inFlight` lock, the timeout, and `silentOff`) *and*
    the icon-only stamp UI. Swap the `CV_` / `CV` prefixes for the new game's.
 2. **Copy `drive-config.js`** and set the three values: the shared `clientId`,
-   the shared GameHub `folderId`, and a **new, unique** `filename`.
+   the shared `folderName: 'GameHub'`, and a **new, unique** `filename`. There
+   is no folder id and nothing to make in Drive by hand — the first player to
+   press the button makes the folder in their own Drive.
 3. **Give the envelope a unique `format`** in the new game's `save.js`, and
    check it on import. `<app>.backup`.
 4. **Add the sign-in library** to `index.html` — this is the one that gets
@@ -168,7 +193,7 @@ If you move one anyway, in this order:
 
 1. **Export** from the app's own Settings, and keep the file. This is the copy
    that does not depend on any of this working.
-2. Change `clientId` and `folderId`, commit, push.
+2. Change `clientId`, and swap `folderId` for `folderName: 'GameHub'`, commit, push.
 3. Press **To Drive**. It creates a fresh file under the new client.
 4. In Drive, **delete the orphaned old file** by hand so the folder does not
    hold two of the same name.

@@ -51,6 +51,8 @@
         }
 
         get pool() { return this.engine.pool; }
+        /** Which non-standard hands this table plays. See `MJWin.isWin`. */
+        get shapes() { return this.engine.shapes; }
 
         /** A fly is a tile already found, so the search has to know about it. */
         wilds(seat) { return this.engine.wildsIn(seat); }
@@ -83,7 +85,7 @@
 
                 const cnt = MJ.counts(s.hand);
                 cnt.set(key, cnt.get(key) - 1);
-                const st = W.shanten(cnt, exposed, wilds, this.pool);
+                const st = W.shanten(cnt, exposed, wilds, this.pool, this.shapes);
                 const junk = this.junk(seat, tile);
                 if (st < bestSt || (st === bestSt && junk > bestJunk)) {
                     best = opt; bestSt = st; bestJunk = junk;
@@ -128,13 +130,13 @@
             const e = this.engine;
             const s = e.seats[seat];
             const wilds = this.wilds(seat);
-            const before = W.shanten(MJ.counts(s.hand), s.melds.length, wilds, this.pool);
+            const before = W.shanten(MJ.counts(s.hand), s.melds.length, wilds, this.pool, this.shapes);
             const cnt = MJ.counts(s.hand);
             const take = Math.min(cnt.get(key) || 0, 4);
             cnt.set(key, (cnt.get(key) || 0) - take);
             const melds = s.melds.some((m) => m.key === key && m.type === 'pung')
                 ? s.melds.length : s.melds.length + 1;
-            return W.shanten(cnt, melds, wilds, this.pool) <= before;
+            return W.shanten(cnt, melds, wilds, this.pool, this.shapes) <= before;
         }
 
         /* ---- somebody else's discard --------------------------------------------- */
@@ -165,7 +167,7 @@
             const tile = e.lastDiscard.tile;
             const key = MJ.key(tile);
             const wilds = this.wilds(seat);
-            const before = W.shanten(MJ.counts(s.hand), s.melds.length, wilds, this.pool);
+            const before = W.shanten(MJ.counts(s.hand), s.melds.length, wilds, this.pool, this.shapes);
 
             let best = null, bestSt = before;
             for (const opt of options) {
@@ -195,7 +197,7 @@
                     }
                 }
                 if (spent > wilds) continue;
-                const st = W.shanten(cnt, melds, wilds - spent, this.pool);
+                const st = W.shanten(cnt, melds, wilds - spent, this.pool, this.shapes);
                 if (st < bestSt) { bestSt = st; best = opt; }
             }
             if (!best) return { type: 'pass', seat };

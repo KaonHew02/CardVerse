@@ -238,22 +238,33 @@
      * @param {number} [wilds] flies in hand
      * @param {string[]} [pool] the keys this set contains
      */
-    function isWin(cnt, exposed, wilds, pool) {
+    /**
+     * `shapes` says which non-standard hands this table recognises at all —
+     * `{ pairs, orphans }`, both on unless a table turns one off. It is a
+     * question about the *rules*, not about scoring: a table that does not
+     * play 七对子 does not have a cheap 七对子, it has no 七対子, and a hand
+     * of seven pairs there is thirteen tiles that are not a win. Leaving the
+     * shape in and taking it out of the fan table would let a player declare
+     * a hand worth nothing and be refused by the floor with no way to see
+     * why the tiles in front of them were not a hand.
+     */
+    function isWin(cnt, exposed, wilds, pool, shapes) {
         const w = wilds || 0;
         const keys = poolOf(pool);
-        return thirteenOrphans(cnt, exposed, w, keys)
-            || sevenPairs(cnt, exposed, w, keys)
+        const on = shapes || {};
+        return (on.orphans === false ? null : thirteenOrphans(cnt, exposed, w, keys))
+            || (on.pairs === false ? null : sevenPairs(cnt, exposed, w, keys))
             || standard(cnt, exposed, w, keys);
     }
 
     /** Which tiles would complete this hand, as keys. */
-    function waits(cnt, exposed, wilds, pool) {
+    function waits(cnt, exposed, wilds, pool, shapes) {
         const keys = poolOf(pool);
         const out = [];
         for (const k of keys) {
             if (at(cnt, k) >= 4) continue;
             add(cnt, k, 1);
-            if (isWin(cnt, exposed, wilds, pool)) out.push(k);
+            if (isWin(cnt, exposed, wilds, pool, shapes)) out.push(k);
             add(cnt, k, -1);
         }
         return out;
@@ -333,21 +344,28 @@
      * block count — good enough to choose between two discards, which is all
      * it is asked to do. Every fly in hand is a tile already found.
      */
-    function shanten(cnt, exposed, wilds, pool) {
+    function shanten(cnt, exposed, wilds, pool, shapes) {
         const w = wilds || 0;
         const keys = poolOf(pool);
-        if (isWin(cnt, exposed, w, pool)) return -1;
+        const on = shapes || {};
+        if (isWin(cnt, exposed, w, pool, shapes)) return -1;
 
         const b = blocks(cnt, keys);
         const sets = b.sets + exposed;
         const partials = Math.min(b.partials, Math.max(0, 4 - sets));
         let st = 8 - 2 * sets - partials - (b.pair ? 1 : 0);
-        if (!exposed) st = Math.min(st, pairShanten(cnt, keys), orphanShanten(cnt, keys));
+        if (!exposed) {
+            // Only towards shapes this table actually recognises: aiming a
+            // hand at seven pairs on a table that does not play them is how
+            // an AI talks itself into a hand that cannot be declared.
+            if (on.pairs !== false) st = Math.min(st, pairShanten(cnt, keys));
+            if (on.orphans !== false) st = Math.min(st, orphanShanten(cnt, keys));
+        }
         st = Math.max(1, st - w);
 
         // Only a hand the count thinks is close is worth asking exactly, and
         // "ready" is a question worth asking exactly.
-        if (st <= 1 && waits(cnt, exposed, w, pool).length) return 0;
+        if (st <= 1 && waits(cnt, exposed, w, pool, shapes).length) return 0;
         return st;
     }
 

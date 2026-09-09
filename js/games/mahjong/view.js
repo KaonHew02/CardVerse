@@ -91,6 +91,18 @@
         3: ['left', 'right'],
     };
 
+    /** Where each seat's discards pile up, by where that seat is sitting. */
+    const POOL_CELL = { top: 'mjPoolTop', left: 'mjPoolLeft', right: 'mjPoolRight', bottom: 'mjPoolBottom' };
+
+    /* How long a thrown tile is held up in the middle before it goes home,
+     * against the 700–1500ms an opponent takes to think. Long enough to read
+     * the tile, short enough that the throw after it does not queue up.
+     * `SPOT_PASS` is the shorter beat after a claim you passed on: you have
+     * already looked at that tile for as long as you wanted to. */
+    const SPOT_HOLD = 820;
+    const SPOT_PASS = 160;
+    const SPOT_FLY  = 360;
+
     class MahjongView {
         constructor(root, table, session) {
             this.root    = root;
@@ -145,10 +157,11 @@
                         <div class="mj-pool">
                             <div class="mj-pool-cell at-top"    id="mjPoolTop"></div>
                             <div class="mj-pool-cell at-left"   id="mjPoolLeft"></div>
-                            <div class="mj-hub"                 id="mjHub"></div>
+                            <div class="mj-spot"                id="mjSpot"></div>
                             <div class="mj-pool-cell at-right"  id="mjPoolRight"></div>
                             <div class="mj-pool-cell at-bottom" id="mjPoolBottom"></div>
                         </div>
+                        <div class="mj-hub" id="mjHub"></div>
                     </div>
                     <div class="bj-status" id="mjStatus"></div>
                     <div class="mj-why" id="mjWhy"></div>
@@ -185,6 +198,7 @@
 
         unmount() {
             clearTimeout(this.timer);
+            clearTimeout(this.spotTimer);
             window.removeEventListener('pointermove', this.onMove);
             window.removeEventListener('pointerup', this.onUp);
             window.removeEventListener('pointercancel', this.onUp);
@@ -226,6 +240,7 @@
         paint() {
             this.paintSeats();
             this.paintPool();
+            this.paintSpot();
             this.paintHub();
             this.paintStatus();
             this.paintWhy();
@@ -287,9 +302,50 @@
                         <span class="tag mj-count">${s.hand.length}</span>
                     </div>
                     ${this.flowersHtml(s)}
-                    <div class="mj-wall-row${upright ? '' : ' is-side'}">${row(hand, { tiny: true })}</div>
-                    <div class="mj-melds">${s.melds.map((m) => this.meldHtml(m, { tiny: true })).join('')}</div>
+                    <div class="mj-wall-row${upright ? '' : ' is-side'}">${row(hand, { small: true })}</div>
+                    <div class="mj-melds">${s.melds.map((m) => this.meldHtml(m)).join('')}</div>
+                    ${this.seatSheet(s)}
                 </div>`;
+        }
+
+        /**
+         * **What this seat has actually done, opened out under them.**
+         *
+         * The pool shows each seat's throws on that seat's side of the felt,
+         * which answers "who threw the tile I want" and nothing else. The
+         * question a player asks about an opponent three quarters of the way
+         * through a hand is a different one — *what have they been throwing*
+         * — and the answer is a wrapped block of small tiles at the edge of
+         * the table with no order you can read off it and no numbers.
+         *
+         * So hovering a seat opens the full account underneath it: every
+         * tile it has thrown, in order, numbered every fifth so a long row
+         * can be counted; and its flowers, which pay 1番 each and are
+         * otherwise a strip of pictures nobody can total. It goes below the
+         * seat because that is where the felt is empty — the space under the
+         * side seats is the largest unused area on the table.
+         *
+         * It is hover-and-focus only and `pointer-events: none`, so it can
+         * never sit between a player and a tile they meant to click.
+         */
+        seatSheet(s) {
+            const thrown = s.discards.length
+                ? `<div class="mj-sheet-row">
+                     <span class="mj-sheet-label">${esc(t('mj.sheetThrown', { n: s.discards.length }))}</span>
+                     <span class="mj-sheet-tiles">${s.discards.map((tile, i) =>
+                        `<span class="mj-sheet-slot${(i + 1) % 5 === 0 ? ' is-fifth' : ''}"
+                               data-n="${i + 1}">${tileHtml(tile, { small: true })}</span>`).join('')}</span>
+                   </div>`
+                : `<div class="mj-sheet-row"><span class="mj-sheet-label">${
+                    esc(t('mj.sheetNothing'))}</span></div>`;
+            const flowers = s.flowers.length
+                ? `<div class="mj-sheet-row">
+                     <span class="mj-sheet-label">${esc(t('mj.sheetFlowers', {
+                        n: s.flowers.length, fan: s.flowers.length * CV.MJFan.flowerFan(this.engine.players) }))}</span>
+                     <span class="mj-sheet-tiles">${row(s.flowers, { small: true })}</span>
+                   </div>`
+                : '';
+            return `<div class="mj-sheet">${thrown}${flowers}</div>`;
         }
 
         paintSeats() {
@@ -319,12 +375,102 @@
         }
 
         paintPool() {
-            const cells = { top: 'mjPoolTop', left: 'mjPoolLeft', right: 'mjPoolRight', bottom: 'mjPoolBottom' };
+            const cells = POOL_CELL;
             for (const id of Object.values(cells)) this.$(id).innerHTML = '';
             if (this.you >= 0) this.$(cells.bottom).innerHTML = this.discardRow(this.you);
             for (const { seat, place } of this.places()) {
                 this.$(cells[place]).innerHTML = this.discardRow(seat);
             }
+        }
+
+        /**
+         * **The tile somebody just threw, held up in the middle first.**
+         *
+         * A discard that appears straight into the row in front of the seat
+         * that threw it is a tile that arrived without ever being shown: at
+         * three seats the two opponents sit at the edges of the felt, their
+         * rows are small, and the one tile the next decision turns on is
+         * added to a row of twenty somewhere off to the side. Players end up
+         * reading the rows to find out what happened, which is exactly the
+         * thing a table is supposed to spare them.
+         *
+         * So a thrown tile is staged in the centre of the pool, full size and
+         * named with the seat that threw it, and only travels back to that
+         * seat's row once nobody is going to take it — which is what happens
+         * on a real table, where a discard sits in the middle until it is
+         * claimed or passed over. If it is yours to claim it stays in the
+         * middle until you have decided; it never flies away with a live
+         * 碰 on the screen.
+         *
+         * Your own throws are not staged: you know what you threw.
+         */
+        paintSpot() {
+            const e = this.engine;
+            const host = this.$('mjSpot');
+            if (!host) return;
+
+            const d = (!e.over && e.lastDiscard) ? e.lastDiscard : null;
+            const sig = d ? d.from + ':' + d.tile.id : '';
+            // Still claimable by somebody, so it stays out in the middle —
+            // which is what a discard does on a real table, and it is also
+            // the only correct test. `turn` during a claim is whoever is
+            // *first in line* for the tile: a 碰 that is yours to make sits
+            // behind an opponent's stronger claim for a beat first, so a
+            // tile held only while `turn === you` would fly home during that
+            // beat and leave the 碰 button asking about a tile it had just
+            // put away.
+            const held = !!d && e.phase === 'claim';
+            if (sig === this.spotSig && held === this.spotHeld) return;
+
+            // Staged again when the throw is new — or when it turns out to
+            // be claimable after it had already set off for home, which no
+            // amount of care over the first test can rule out.
+            const fresh = sig !== this.spotSig || (held && host.classList.contains('is-home'));
+            this.spotSig = sig;
+            this.spotHeld = held;
+            clearTimeout(this.spotTimer);
+
+            if (!sig || d.from === this.you) { host.innerHTML = ''; host.className = 'mj-spot'; return; }
+
+            if (fresh) {
+                // A throw that lands while the one before it is still flying
+                // must not drag the box back to the middle on its way in, so
+                // the reset is made with the transition switched off.
+                host.style.transition = 'none';
+                host.style.transform = '';
+                host.className = 'mj-spot is-up';
+                host.innerHTML = `<span class="mj-spot-who">${esc(e.seats[d.from].name)}</span>
+                    ${tileHtml(d.tile, { cls: 'mj-spot-tile' })}`;
+                void host.offsetWidth;
+                host.style.transition = '';
+            }
+            if (held) return;
+            this.spotTimer = setTimeout(() => this.spotHome(d.from), fresh ? SPOT_HOLD : SPOT_PASS);
+        }
+
+        /**
+         * The staged tile travelling to the row in front of the seat that
+         * threw it, measured rather than guessed: the row is laid out by the
+         * grid and the felt changes shape with the window, so the only place
+         * the distance can come from is the two boxes themselves.
+         */
+        spotHome(from) {
+            const host = this.$('mjSpot');
+            if (!host || !host.firstChild) return;
+            const place = (this.places().find((x) => x.seat === from) || {}).place;
+            const cell = place ? this.$(POOL_CELL[place]) : null;
+            if (cell) {
+                const a = host.getBoundingClientRect();
+                const b = cell.getBoundingClientRect();
+                host.style.transform = `translate(${Math.round(b.left + b.width / 2 - a.left - a.width / 2)}px,`
+                    + ` ${Math.round(b.top + b.height / 2 - a.top - a.height / 2)}px) scale(.42)`;
+            }
+            host.classList.add('is-home');
+            this.spotTimer = setTimeout(() => {
+                host.innerHTML = '';
+                host.className = 'mj-spot';
+                host.style.transform = '';
+            }, SPOT_FLY);
         }
 
         /** The wind, the wall and the stake — the centre of a real table. */
@@ -348,6 +494,13 @@
                     ? `<span class="muted">${esc(t('mj.drawn'))}</span>`
                     : `<span class="you">${esc(t('mj.won', {
                         name: e.seats[e.winner].name, n: e.fan.totalFan }))}</span>`;
+                return;
+            }
+            // Manual draw: nothing has been drawn yet, and the hand is
+            // thirteen tiles that cannot be thrown from. Saying "your turn —
+            // tap a tile" here would be asking for a move that is not legal.
+            if (e.phase === 'draw' && e.turn === this.you) {
+                host.innerHTML = `<span class="you">${esc(t('mj.yourDraw', { n: this.wallLeft }))}</span>`;
                 return;
             }
             if (e.phase === 'claim' && e.turn === this.you) {
@@ -518,6 +671,89 @@
             return out;
         }
 
+        /**
+         * **番, counted as you go.**
+         *
+         * The score arrives once, at the end, on a hand that is already
+         * over — and at three seats there is a 2番 floor, so "how much is
+         * this worth" is a question that has to be answered while there is
+         * still something to do about the answer. A player who finds out on
+         * the fourteenth tile that their hand pays 1番 has been building the
+         * wrong hand for ten minutes.
+         *
+         * Two different numbers, and the difference matters:
+         *
+         *   finished   the real total for the hand as it stands, the same
+         *              number the 胡 would pay. `done` is true.
+         *   otherwise  what the tiles already carry — see `MJFan.progress`.
+         *              Only facts, never a guess at how the hand will close,
+         *              so this number never goes down on its own.
+         *
+         * Flowers are in neither, because flowers score nothing at this
+         * table: they are set aside, replaced, and paid for by nobody. The
+         * strip beside your hand says so, since a pile of tiles that pays
+         * nothing looks exactly like a pile of tiles that pays.
+         */
+        fanNow() {
+            const e = this.engine;
+            if (this.you < 0) return null;
+            const s = e.seats[this.you];
+            if (!s || !s.hand) return null;
+
+            // Fourteen tiles that already win are worth what they are worth.
+            const done = (this.live && !e.over && e.turn === this.you) ? e.winFor(this.you, null) : null;
+            if (done) return { fan: done.fan, done: true, ok: done.ok };
+
+            const keys = [];
+            for (const m of (s.melds || [])) {
+                if (m.type === 'chow') {
+                    const suit = m.key[0], lo = Number(m.key.slice(1));
+                    keys.push(suit + lo, suit + (lo + 1), suit + (lo + 2));
+                } else keys.push(m.key);
+            }
+            // A fly is not in a suit and a flower is not in the hand, so
+            // neither one decides 清一色 and neither belongs here.
+            for (const x of s.hand) if (x && MJ.isPlaying(x)) keys.push(MJ.key(x));
+
+            const fan = CV.MJFan.progress({
+                keys, menzen: (s.melds || []).every((m) => m.concealed),
+                flowers: (s.flowers || []).length,
+            }, e.fanTable || CV.MJFan.tableFor(e.players));
+            return { fan, done: false, ok: fan.totalFan >= (e.minFan || 0) };
+        }
+
+        /**
+         * What the flowers beside your hand are worth, said out loud.
+         *
+         * A row of tiles in a chip next to the hand looks like something
+         * being scored whether it is or not, and at this table the answer
+         * changes with the seat count: three seats pay 1番 a flower and
+         * another 1番 for holding none, four seats have no flowers at all.
+         * Neither is guessable from the tiles.
+         */
+        flowerWorth(n) {
+            const rate = CV.MJFan.flowerFan(this.engine.players);
+            if (!rate) return t('mj.flowerNoFan');
+            return n ? t('mj.flowerFan', { n: n * rate }) : t('mj.flowerNone');
+        }
+
+        /** The running 番 count, with what it is counting written on it. */
+        fanChipHtml() {
+            const e = this.engine;
+            const now = this.fanNow();
+            if (!now) return '';
+            const pats = now.fan.patterns
+                .map((p) => p.name + (p.n > 1 ? '×' + p.n : '') + ' ' + p.fan).join(' · ');
+            const cls = now.done ? (now.ok ? ' is-win' : ' is-short') : (now.ok ? ' is-ok' : ' is-short');
+            return `<span class="mj-fan-now${cls}" title="${esc(pats || t('mj.fanNowNone'))}">
+                <span class="mj-fan-now-label">${esc(t(now.done ? 'mj.fanDone' : 'mj.fanNow'))}</span>
+                <b>${esc(t('mj.fanN', { n: now.fan.totalFan }))}</b>
+                ${e.minFan && !now.ok
+                    ? `<span class="mj-fan-now-need">${esc(t('mj.fanNeed', {
+                        n: e.minFan - now.fan.totalFan }))}</span>`
+                    : ''}</span>`;
+        }
+
         paintYou() {
             const e = this.engine;
             const host = this.$('mjYou');
@@ -534,12 +770,15 @@
             host.innerHTML = `
                 <div class="hand-head">
                     <span class="tag mj-wind${this.you === e.dealer ? ' is-dealer' : ''}">${this.windOf(this.you)}</span>
+                    ${this.fanChipHtml()}
                     ${s.flowers.length
                         ? `<span class="mj-flowers-mine">
                              <span class="mj-flowers-label">${esc(t('mj.myFlowers', { n: s.flowers.length }))}</span>
                              ${row(s.flowers, { small: true })}
+                             <span class="mj-flowers-fan">${esc(this.flowerWorth(s.flowers.length))}</span>
                            </span>`
-                        : `<span class="muted small">${esc(t('mj.noFlowers'))}</span>`}
+                        : `<span class="muted small">${esc(t('mj.noFlowers'))} · ${
+                            esc(this.flowerWorth(0))}</span>`}
                     <button class="btn tiny" data-sort>${esc(t('mj.sort'))}</button>
                 </div>
                 <div class="mj-melds mine">${s.melds.map((m) => this.meldHtml(m)).join('')}</div>
@@ -561,9 +800,24 @@
          * Your hand in the order you put it in.
          *
          * Anything you have not moved keeps the engine's sorted order, and a
-         * tile that was not there last time goes on the right — which is
-         * where a tile you have just drawn belongs, rather than sorted
-         * silently into the middle of a hand you had arranged.
+         * tile that was not there last time is **slid into its place** —
+         * before the first tile it sorts ahead of, appended if there is no
+         * such tile.
+         *
+         * A drawn tile used to be parked on the right instead, so that the
+         * one tile the decision was about could not be lost in the row. It
+         * is not lost: it is ringed green wherever it lands, which was
+         * always doing that job on its own. What parking it actually cost
+         * was the rest of the hand — the draw sat away from the tiles it
+         * belonged with, so the pair it made was two tiles at opposite ends
+         * of the row, and when it was thrown or melded the hole it left kept
+         * the tile after it out of place for the rest of the game. A hand
+         * you have not touched now stays sorted, hand after hand.
+         *
+         * A hand you *have* touched still keeps your arrangement: the new
+         * tile is placed against the order that is actually on screen, not
+         * against the engine's sort, so it lands next to its own kind
+         * wherever you have put them.
          */
         mine(seat) {
             const byId = new Map(seat.hand.map((x) => [x.id, x]));
@@ -572,7 +826,13 @@
                 const tile = byId.get(id);
                 if (tile) { out.push(tile); byId.delete(id); }
             }
-            for (const tile of seat.hand) if (byId.has(tile.id)) out.push(tile);
+            for (const tile of seat.hand) {
+                if (!byId.has(tile.id)) continue;
+                // 飞 is wild and sorts last, which is where it belongs: it is
+                // not part of a run and nothing wants to sit next to it.
+                const at = out.findIndex((x) => MJ.cmp(x, tile) > 0);
+                if (at < 0) out.push(tile); else out.splice(at, 0, tile);
+            }
             this.order = out.map((x) => x.id);
             return out;
         }
@@ -647,7 +907,8 @@
             const buttons = [];
             for (const o of options) {
                 if (o.type === 'discard') continue;      // tiles are the buttons
-                const cls = o.type === 'win' ? 'btn primary big' : 'btn';
+                const cls = o.type === 'win' ? 'btn primary big'
+                    : o.type === 'draw' ? 'btn primary big mj-draw-btn' : 'btn';
                 const data = o.type === 'kong' && o.key ? ` data-key="${o.key}"` : '';
                 const low = o.low ? ` data-low="${o.low}"` : '';
                 buttons.push(`<button class="${cls}" data-act="${o.type}"${data}${low}>${esc(o.label)}</button>`);
@@ -679,4 +940,10 @@
 
     CV.MahjongView = MahjongView;
     CV.MahjongTile = tileHtml;
+    /**
+     * A tile drawn from a key rather than from a tile, for the recap: a fly
+     * has to be shown as what it was counted as, and by the time the overlay
+     * is up the hand has been taken off the table.
+     */
+    CV.MahjongKeyTile = keyTile;
 })();

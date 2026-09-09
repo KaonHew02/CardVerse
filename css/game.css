@@ -692,9 +692,9 @@
  * A grid rather than absolute positions, so the middle stretches and the
  * sides stay wide enough for a wall of tiles. */
 .mj-table {
-    display: grid;
-    grid-template-columns: minmax(88px, 0.9fr) minmax(0, 2.4fr) minmax(88px, 0.9fr);
-    grid-template-rows: auto minmax(150px, 1fr);
+    display: grid; position: relative;
+    grid-template-columns: minmax(150px, 1fr) minmax(0, 2.1fr) minmax(150px, 1fr);
+    grid-template-rows: auto minmax(230px, 1fr);
     gap: 8px;
     padding: 10px;
     border-radius: 18px;
@@ -704,8 +704,8 @@
     box-shadow: inset 0 0 0 2px rgba(0,0,0,.28), inset 0 0 40px rgba(0,0,0,.35);
 }
 .mj-seat-slot.at-top   { grid-column: 1 / -1; grid-row: 1; }
-.mj-seat-slot.at-left  { grid-column: 1; grid-row: 2; }
-.mj-seat-slot.at-right { grid-column: 3; grid-row: 2; }
+.mj-seat-slot.at-left  { grid-column: 1; grid-row: 2; align-self: start; }
+.mj-seat-slot.at-right { grid-column: 3; grid-row: 2; align-self: start; }
 .mj-seat-slot:empty    { display: none; }
 
 .mj-seat { display: flex; flex-direction: column; gap: 4px; padding: 6px 8px;
@@ -720,54 +720,173 @@
 .mj-seat-head .coins { font-size: .7rem; color: rgba(255,255,255,.7); }
 
 /* A concealed hand is a wall of backs. On the sides it wraps into a block
- * two or three deep, which is what a wall in front of a seat looks like. */
-.mj-wall-row { display: flex; gap: 1px; flex-wrap: wrap; }
+ * two or three deep, which is what a wall in front of a seat looks like.
+ *
+ * These were drawn at 15×21 — small enough that a wall of thirteen read as
+ * texture rather than tiles, and a melded 碰 across the table was a smudge
+ * you had to lean in to identify. An hour of that is an hour of squinting,
+ * and the melds are the one part of an opponent's hand you are *supposed*
+ * to be able to read. They are at hand size now; the felt was given the
+ * width for it above. */
+.mj-wall-row { display: flex; gap: 2px; flex-wrap: wrap; }
 .mj-wall-row.is-side { max-width: 100%; }
 .mj-melds { display: flex; gap: 6px; flex-wrap: wrap; }
 .mj-meld { display: inline-flex; gap: 1px; }
-.mj-flower-strip { display: inline-flex; gap: 1px; flex-wrap: wrap; }
+.mj-flower-strip { display: inline-flex; gap: 2px; flex-wrap: wrap; }
+.mj-flower-strip .tile-xs { width: 22px; height: 30px; }
 .mj-count { background: rgba(0,0,0,.4); color: #fff; }
 .mj-wind { background: rgba(255,255,255,.16); color: #fff; font-size: .95rem; }
 .mj-wind.is-dealer { background: var(--accent); color: var(--accent-ink); }
+
+/* ---- what a seat has done, on hover --------------------------------------
+ *
+ * The pool answers "who threw the tile I want". This answers the other
+ * question — "what has this player been throwing" — which the pool cannot,
+ * because it wraps a seat's throws into a block at the edge of the felt with
+ * no order you can read off it. Here they are in a row, in order, numbered
+ * every fifth so a long one can be counted, with the flowers and what they
+ * are worth underneath.
+ *
+ * It hangs below the seat because that is where the table is empty: under
+ * the side seats is the largest unused area on the felt. `pointer-events:
+ * none` so it can never sit between a player and a tile they meant to click,
+ * and it opens on focus as well as hover so it is reachable from a keyboard. */
+.mj-seat { position: relative; }
+.mj-sheet {
+    position: absolute; top: calc(100% + 6px); left: 0; z-index: 6;
+    min-width: 100%; max-width: min(420px, 46vw);
+    display: flex; flex-direction: column; gap: 6px;
+    padding: 8px 10px; border-radius: 12px;
+    background: rgba(8, 34, 24, .96); box-shadow: 0 10px 26px rgba(0,0,0,.5),
+        inset 0 0 0 1px rgba(255,255,255,.14);
+    opacity: 0; transform: translateY(-4px); pointer-events: none;
+    transition: opacity 140ms, transform 140ms;
+}
+.mj-seat:hover .mj-sheet, .mj-seat:focus-within .mj-sheet { opacity: 1; transform: none; }
+/* The right-hand seat's sheet would run off the felt, so it hangs the other way. */
+.mj-seat.at-right .mj-sheet { left: auto; right: 0; }
+.mj-sheet-row { display: flex; flex-direction: column; gap: 4px; }
+.mj-sheet-label { font-size: .68rem; font-weight: 700; color: rgba(255,255,255,.62); }
+.mj-sheet-tiles { display: flex; gap: 2px; flex-wrap: wrap; }
+/* Every fifth tile carries its number, so a row of twenty can be counted
+ * without pointing at the screen. */
+.mj-sheet-slot { position: relative; display: inline-flex; }
+.mj-sheet-slot.is-fifth::after {
+    content: attr(data-n); position: absolute; left: 50%; bottom: -9px;
+    transform: translateX(-50%);
+    font-size: .52rem; font-weight: 800; color: rgba(255,255,255,.5);
+}
+.mj-sheet-slot.is-fifth { margin-bottom: 9px; }
 
 /* ---- the pool ----------------------------------------------------------- */
 
 .mj-pool {
     grid-column: 2; grid-row: 2;
     display: grid;
-    grid-template-columns: auto minmax(96px, auto) auto;
-    grid-template-rows: auto minmax(64px, auto) auto;
+    grid-template-columns: auto minmax(120px, auto) auto;
+    grid-template-rows: auto minmax(96px, auto) auto;
     gap: 6px; align-items: center; justify-items: center;
 }
 .mj-pool-cell { display: flex; gap: 2px; flex-wrap: wrap; align-content: flex-start;
     justify-content: center; max-width: 100%; }
 .mj-pool-cell.at-top    { grid-column: 1 / -1; grid-row: 1; }
 .mj-pool-cell.at-bottom { grid-column: 1 / -1; grid-row: 3; }
-.mj-pool-cell.at-left   { grid-column: 1; grid-row: 2; max-width: 82px; }
-.mj-pool-cell.at-right  { grid-column: 3; grid-row: 2; max-width: 82px; }
+.mj-pool-cell.at-left   { grid-column: 1; grid-row: 2; max-width: 110px; }
+.mj-pool-cell.at-right  { grid-column: 3; grid-row: 2; max-width: 110px; }
 
-/* The centre of the table: the wind, the wall and the stake, where the dice
- * and the indicator sit on a real one. */
+/* The table's standing facts — the wall count, the mode, the stake and the
+ * floor — parked in the corner of the felt.
+ *
+ * They used to sit in the middle, where a real table keeps the dice and the
+ * wind indicator. But a real table's indicator is not a stack of six lines of
+ * text, and the middle of the felt is where the tile somebody just threw
+ * needs to be: a block that never changes was standing in the one place the
+ * game actually moves. None of it is read more than once a hand — the seat
+ * wind is on your hand as well, on the tag next to your tiles — so it goes to
+ * the corner, on one line, and lifts to full strength when you look at it. */
 .mj-hub {
-    grid-column: 2; grid-row: 2;
-    display: flex; flex-direction: column; align-items: center; gap: 1px;
-    padding: 8px 12px; border-radius: 12px;
-    background: rgba(0,0,0,.4); box-shadow: inset 0 0 0 1px rgba(255,255,255,.12);
+    position: absolute; right: 9px; bottom: 8px; z-index: 4;
+    display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end;
+    gap: 2px 8px; max-width: min(64%, 340px);
+    padding: 3px 11px; border-radius: 999px;
+    background: rgba(0,0,0,.46); box-shadow: inset 0 0 0 1px rgba(255,255,255,.1);
+    opacity: .72; transition: opacity 140ms;
 }
-.mj-hub-wind { font-size: 1.5rem; font-weight: 800; color: var(--accent); line-height: 1; }
-.mj-hub-wall { font-size: .8rem; font-weight: 700; }
-.mj-hub-line { font-size: .68rem; color: rgba(255,255,255,.6); white-space: nowrap; }
+.mj-hub:hover, .mj-hub:focus-within { opacity: 1; }
+.mj-hub-wind { font-size: .95rem; font-weight: 800; color: var(--accent); line-height: 1.4; }
+.mj-hub-wall { font-size: .72rem; font-weight: 700; }
+.mj-hub-line { font-size: .66rem; color: rgba(255,255,255,.6); white-space: nowrap; }
+
+/* ---- the tile somebody just threw ----------------------------------------
+ *
+ * Held up in the middle of the pool, full size, named with the seat that
+ * threw it, and only then travelling back to that seat's row — which is what
+ * a discard does on a real table, where it sits in the middle until it has
+ * been claimed or passed over. The flight is a transform written from two
+ * measured boxes, so it lands on the row wherever the felt has put it. */
+.mj-spot {
+    grid-column: 2; grid-row: 2; z-index: 3;
+    display: flex; flex-direction: column; align-items: center; gap: 4px;
+    pointer-events: none;
+    transition: transform 360ms cubic-bezier(.4, 0, .2, 1), opacity 300ms ease-in;
+}
+.mj-spot:empty { display: none; }
+.mj-spot.is-home { opacity: 0; }
+.mj-spot-who {
+    padding: 1px 8px; border-radius: 999px; white-space: nowrap;
+    font-size: .66rem; font-weight: 700; color: rgba(255,255,255,.88);
+    background: rgba(0,0,0,.5);
+}
+.mj-spot .tile { box-shadow: 0 0 0 2px var(--accent), 0 10px 22px rgba(0,0,0,.55); }
+/* On the children, not the box: a throw that lands while the one before it
+ * is still flying rebuilds the children and so plays again. */
+.mj-spot.is-up > * { animation: mj-spot-in 200ms cubic-bezier(.2, .9, .3, 1.3) both; }
+.mj-spot.is-up > .mj-spot-who { animation-delay: 60ms; }
+@keyframes mj-spot-in {
+    from { transform: scale(.35); opacity: 0; }
+    to   { transform: scale(1);   opacity: 1; }
+}
 
 /* ---- your side ---------------------------------------------------------- */
 
 .mj-you { display: flex; flex-direction: column; align-items: center; gap: 8px; margin-top: auto; }
 .mj-you .hand-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: center; }
 .mj-you .mj-melds { justify-content: center; }
-/* Your flowers, as flowers. They are set aside from the hand and pay on
- * their own, so they sit apart from it rather than inside it. */
-.mj-flowers-mine { display: inline-flex; align-items: center; gap: 5px; flex-wrap: wrap;
-    padding: 3px 9px; border-radius: 999px; background: rgba(246,201,220,.16); }
-.mj-flowers-label { font-size: .72rem; font-weight: 700; color: #ffd8e8; }
+/* Your flowers, as flowers. They are set aside from the hand, so they sit
+ * apart from it rather than inside it — and they are drawn nearly hand-size,
+ * because a flower is a picture and a 24px one is a smudge. 春 and 竹 have to
+ * be told apart at a glance or the strip is just a count with decoration.
+ *
+ * And it says what they pay, which is nothing. A row of tiles in a pink chip
+ * beside a hand looks exactly like something being scored; the one thing a
+ * player cannot find out from anywhere else on the felt is that these are
+ * not. See `mj.rule12` — a flower is set aside, replaced, and scores 0番. */
+.mj-flowers-mine { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap;
+    padding: 3px 10px; border-radius: 999px; background: rgba(246,201,220,.16); }
+.mj-flowers-label { font-size: .75rem; font-weight: 700; color: #ffd8e8; }
+.mj-flowers-mine .tile-sm { width: 34px; height: 45px; border-radius: 5px; }
+.mj-flowers-fan { font-size: .66rem; font-weight: 700; color: rgba(255,255,255,.62);
+    padding-left: 1px; white-space: nowrap; }
+
+/* ---- 番, counted as you go -----------------------------------------------
+ *
+ * The one number the whole game is played for, and until now it appeared
+ * once, on a hand that was already over. At three seats there is a 2番 floor
+ * to clear, so it sits on the hand it is counting, and turns amber the
+ * moment it is under that floor with how much is missing written on it. */
+.mj-fan-now {
+    display: inline-flex; align-items: baseline; gap: 5px;
+    padding: 2px 10px; border-radius: 999px; font-size: .72rem;
+    background: rgba(0,0,0,.28); box-shadow: inset 0 0 0 1px rgba(255,255,255,.12);
+}
+.mj-fan-now b { font-size: .84rem; font-weight: 800; color: var(--accent); }
+.mj-fan-now-label { color: rgba(255,255,255,.66); font-weight: 700; }
+.mj-fan-now-need { color: var(--warn); font-weight: 700; }
+.mj-fan-now.is-short { box-shadow: inset 0 0 0 1px rgba(245,185,66,.45); }
+.mj-fan-now.is-win {
+    background: rgba(70,200,120,.16); box-shadow: inset 0 0 0 1px rgba(70,200,120,.5);
+}
+.mj-fan-now.is-win b { color: var(--good); }
 /* Your own tiles are the ones you actually read, so they are the biggest
  * thing on the felt. A drawn 9筒 needs the room. */
 .mj-mine { display: flex; gap: 2px; flex-wrap: wrap; justify-content: center; }
@@ -798,6 +917,13 @@
  * hide the one tile the decision is actually about. */
 .mj-pick.is-drawn .tile { box-shadow: inset 0 -3px 0 rgba(0,0,0,.14), 0 0 0 2px var(--good); }
 .mj-drag-hint { opacity: .75; }
+/* 摸牌. The one button on the table that is a *moment* rather than a choice,
+ * so it breathes on its own until it is pressed. */
+.mj-draw-btn { animation: mj-draw-pulse 1.6s ease-in-out infinite; }
+@keyframes mj-draw-pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(245,185,66,.5); }
+    50%      { box-shadow: 0 0 0 9px rgba(245,185,66,0); }
+}
 .mj-min { color: var(--warn); font-size: .8rem; font-weight: 700; }
 .mj-short { color: var(--warn); font-weight: 700; }
 .mj-hub-btn {

@@ -35,7 +35,7 @@
 
     const configured = () => !!cfg
         && !/YOUR-CLIENT-ID/i.test(cfg.clientId || '')
-        && !!cfg.folderId;
+        && !!cfg.folderName;
 
     /** The current access token, and when it stops being any use. */
     let token = null;
@@ -57,7 +57,15 @@
     let silentOff = false;
     let warned = false;
 
-    /** The Drive file id, once found or created. Cached so each save is one call. */
+    /**
+     * The player's folder, and their file inside it, once found or made.
+     *
+     * Cached so a save is one call rather than three, and cleared whenever a
+     * fresh interactive sign-in comes back — that is the one moment the account
+     * can change underneath us, and ids kept from before it would point into
+     * somebody else's Drive.
+     */
+    let folderId = null;
     let fileId = null;
 
     const valid = () => token && Date.now() < tokenExpires - 60000;
@@ -123,14 +131,24 @@
             tokenClient.callback = (response) => {
                 if (!response || response.error || !response.access_token) {
                     const code = (response && response.error) || 'no_token';
-                    // access_denied is a person clicking Cancel, not a fault.
+                    // access_denied arrives for two unrelated things: someone
+                    // pressing Cancel, and Google refusing an account that is not
+                    // on the Cloud project's test-user list while the consent
+                    // screen is still in Testing. Telling the second one "you
+                    // cancelled" sends them hunting for a mistake they did not
+                    // make, so the message has to allow for both.
                     if (/access_denied|user_cancel/i.test(code)) {
-                        return settle(reject, new Error('Sign-in was cancelled, so nothing was sent to Drive.'));
+                        return settle(reject, new Error(
+                            'Google did not finish the sign-in. Either it was cancelled, or this '
+                            + 'Google account is not allowed into the app yet — while the consent '
+                            + 'screen is in Testing, only accounts on its test-user list can sign in.'));
                     }
                     return settle(reject, new Error('Google refused the sign-in: ' + code));
                 }
                 token = response.access_token;
                 tokenExpires = Date.now() + (Number(response.expires_in || 3600) * 1000);
+                // A different account may have just been chosen in that window.
+                if (interactive) { folderId = null; fileId = null; }
                 silentOff = false;
                 warned = false;
                 settle(resolve, token);
@@ -196,12 +214,16 @@
             } catch (err) { /* a non-JSON error body tells us nothing extra */ }
 
             if (response.status === 403 && /insufficient|permission/i.test(detail)) {
-                throw new Error('Google allowed the sign-in but refused the folder. Check that the '
-                    + 'folder ID in drive-config.js is a folder this account can edit.');
+                throw new Error('Google allowed the sign-in but refused the folder. This account '
+                    + 'may be out of Drive storage — check <drive.google.com>.');
             }
             if (response.status === 404) {
-                throw new Error('That folder no longer exists, or this account cannot see it. '
-                    + 'Check the folder ID in drive-config.js.');
+                // The folder and the file are both made by this app in the
+                // signed-in account's own Drive, so a 404 means one of them was
+                // deleted in Drive after we cached its id, not a misconfiguration.
+                throw new Error('The CardVerse file or folder is no longer in your Drive — it looks '
+                    + 'like it was deleted or emptied from the bin. Reload the page and press '
+                    + '“To Drive” to write a fresh one.');
             }
             throw new Error('Drive refused the request (' + response.status + ')'
                 + (detail ? ': ' + detail : '.'));
@@ -211,7 +233,49 @@
     }
 
     /**
-     * Finds the app's file in the folder, or reports that there is not one yet.
+     * The player's own folder — found in whichever Drive just signed in, or
+     * made there the first time.
+     *
+     * This is the whole of what makes the save per-player, and it is why there
+     * is no folder id in the config. The query runs against the signed-in
+     * account, and `drive.file` narrows it to folders *this app* created, so it
+     * can only ever match that player's own folder — never another player's,
+     * even though every player's folder carries the same name. Nothing is
+     * shared, and nothing has to be set up by hand for a new player.
+     *
+     * Games on the GameHub client share the folder rather than making one
+     * each, which is the point of the hub: one folder per player, one file per
+     * game inside it, told apart by `filename`.
+     */
+    async function findFolder() {
+        if (folderId) return folderId;
+
+        const query = encodeURIComponent(
+            `name = '${cfg.folderName}' and mimeType = 'application/vnd.google-apps.folder' `
+            + `and trashed = false`);
+        const response = await call(`${API}/files?q=${query}&fields=files(id)&pageSize=1`);
+        const body = await response.json();
+
+        folderId = (body.files && body.files[0] && body.files[0].id) || null;
+        if (folderId) return folderId;
+
+        // No `parents` on the create, so it lands in the root of their My Drive
+        // where they can actually find it.
+        const made = await call(`${API}/files?fields=id`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                name: cfg.folderName,
+                mimeType: 'application/vnd.google-apps.folder',
+            }),
+        });
+
+        folderId = (await made.json()).id;
+        return folderId;
+    }
+
+    /**
+     * Finds the app's file in that folder, or reports that there is not one yet.
      *
      * The query is scoped to the folder *and* the name, because a `drive.file`
      * search only ever sees files this app made — so a file you dragged in by
@@ -221,8 +285,9 @@
     async function findFile() {
         if (fileId) return fileId;
 
+        const parent = await findFolder();
         const query = encodeURIComponent(
-            `'${cfg.folderId}' in parents and name = '${cfg.filename}' and trashed = false`);
+            `'${parent}' in parents and name = '${cfg.filename}' and trashed = false`);
         const response = await call(
             `${API}/files?q=${query}&fields=files(id,name,modifiedTime)&pageSize=1`);
         const body = await response.json();
@@ -263,7 +328,8 @@
         }
 
         const boundary = 'cardverse-' + Math.random().toString(36).slice(2);
-        const metadata = { name: cfg.filename, parents: [cfg.folderId], mimeType: 'application/json' };
+        // findFile() has already resolved the folder, so this costs no call.
+        const metadata = { name: cfg.filename, parents: [await findFolder()], mimeType: 'application/json' };
         const multipart =
             `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n`
             + JSON.stringify(metadata)

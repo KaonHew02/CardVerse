@@ -37,6 +37,18 @@
             note: 'mj.fanUnitNote',
             def: 2,
             choices: (room) => [2, 5, 10].map((n) => ({ value: n, label: '🪙 ' + (n * room.bet[0]) })),
+        }, {
+            // Who takes the tile off the wall. It changes nothing about which
+            // tile that is — same wall, same order — only whether you press
+            // the button, which is most of what playing mahjong feels like.
+            key: 'manualDraw',
+            label: 'mj.drawMode',
+            note: 'mj.drawModeNote',
+            def: 0,
+            choices: () => [
+                { value: 0, label: CV.t('mj.drawAuto') },
+                { value: 1, label: CV.t('mj.drawManual') },
+            ],
         }],
 
         rules: ['mj.rule1', 'mj.rule11', 'mj.rule12', 'mj.rule2', 'mj.rule3', 'mj.rule4',

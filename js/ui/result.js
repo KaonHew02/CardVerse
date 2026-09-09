@@ -68,19 +68,37 @@
          * half of why the hand ended the way it did.
          */
         const tileFace = CV.MahjongTile;
+        const keyFace = CV.MahjongKeyTile;
         const withTiles = tileFace ? rows.filter((r) => r.tiles) : [];
 
-        /** One seat's tiles: what it melded, what it held, what it turned. */
+        /**
+         * One seat's tiles: what it melded, what it held, what it turned.
+         *
+         * **The winner's hand is drawn as it was read, not as it lay.** A
+         * hand that went out on two 飞 shows two wild tiles at the end of a
+         * row and no way to find out what they stood for — and a fly is not
+         * a tile you chose, so "what did my 飞 become" is exactly the
+         * question the recap exists to answer. `tiles.read` is the reading
+         * the engine took as the hand was declared: melds already cut apart,
+         * each fly carrying the key it was counted as and a ring round it.
+         * Everybody else's tiles are just tiles.
+         */
         const tileHand = (r) => {
             const winId = r.tiles.win && r.tiles.win.id;
             const face = (tile) => tileFace(tile, {
                 small: true, cls: winId && tile.id === winId ? 'is-win' : '',
             });
-            const melds = r.tiles.melds
-                .map((m) => `<span class="mj-meld">${m.tiles.map(face).join('')}</span>`).join('');
             const flowers = r.tiles.flowers.length
                 ? `<span class="rc-flowers">${r.tiles.flowers.map((x) => tileFace(x, { small: true })).join('')}</span>`
                 : '';
+            if (r.tiles.read && keyFace) {
+                const groups = r.tiles.read.map((g) => `<span class="mj-meld${
+                    g.open ? ' is-open' : ''}">${
+                    g.tiles.map((x) => keyFace(x.key, x.wild)).join('')}</span>`).join('');
+                return groups + flowers;
+            }
+            const melds = r.tiles.melds
+                .map((m) => `<span class="mj-meld">${m.tiles.map(face).join('')}</span>`).join('');
             return melds + `<span class="mj-meld">${r.tiles.hand.map(face).join('')}</span>` + flowers;
         };
 

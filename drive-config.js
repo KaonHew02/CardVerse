@@ -34,16 +34,26 @@ const CV_DRIVE = {
     clientId: '612843079573-ujp69s8asq895kofufsb84j372qrhl9f.apps.googleusercontent.com',
 
     /**
-     * The shared **GameHub** folder — every game writes one file into it.
-     * Taken from the folder's Drive URL, the part after `/folders/` and
-     * before any `?`:
+     * The folder every save is filed under — **a name, not an id**.
      *
-     *     https://drive.google.com/drive/folders/1AbC…XyZ?usp=sharing
-     *                                            └── this ──┘
+     * A hard-coded id was one folder in one person's Drive. That is fine for a
+     * single player and breaks the moment a second one presses the button:
+     * `drive.file` reaches only files this app made for *that* account, so
+     * another player has no permission on the first player's folder and the
+     * write is refused. Sharing the folder is worse rather than better — every
+     * save then lands in one person's Drive, on one person's quota, readable
+     * by them.
      *
-     * Keep this folder **Restricted** in Drive's Share settings.
+     * A name instead means `findFolder()` looks it up in whichever Drive just
+     * signed in, and makes it there the first time. Each player ends up with
+     * their own folder, their own file, their own storage; nobody can see
+     * anybody else's, and there is nothing to share or configure.
+     *
+     * It stays `GameHub` rather than `CardVerse` so a player who plays three
+     * of these games has one folder holding three files, not three folders.
+     * `filename` is what keeps the games apart inside it.
      */
-    folderId: '1gp4tdFod_306oTR6xQy-5eVPhAuyp_ya',
+    folderName: 'GameHub',
 
     /**
      * The one file CardVerse writes, and the thing that keeps it apart from

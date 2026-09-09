@@ -8,9 +8,11 @@ up where you left off.
 
 ## What it does, exactly
 
-- **To Drive** writes one file, `cardverse-data.json`, into one folder you
-  choose. Pressing it again overwrites that file. It is a *mirror* of this
-  browser, not an archive of every version.
+- **To Drive** writes one file, `cardverse-data.json`, into a **`GameHub`
+  folder in your own Google Drive** — the app makes that folder the first time
+  you press the button, and there is nothing to set up beforehand. Pressing it
+  again overwrites the file. It is a *mirror* of this browser, not an archive
+  of every version.
 - **From Drive** reads that file and **replaces** everything in this browser
   with it, after showing you what is in both and asking. It never merges.
 - **Auto** (off by default) sends a copy about a minute after your record
@@ -41,33 +43,41 @@ rather than a per-project origin.
 | | |
 | --- | --- |
 | GitHub Pages | ✅ live at <https://kaonhew02.github.io/CardVerse/> |
-| Drive folder | ✅ set — `1Qc4ZfqWyoQf-2_ohW1ieoebwtCWKjJOz` |
-| OAuth client ID | ⬜ **still a placeholder — the one step left, below** |
+| OAuth client ID | ✅ set — the shared GameHub client |
+| Drive folder | ✅ made per player, automatically — nothing to configure |
+| Other people signing in | ⚠️ needs one console setting — see below |
 
-Until the client ID is filled in, every Drive button says "Drive is not set up
-yet" rather than failing oddly. **Everything else already works**: the game
-saves to this browser as you play, and Export / Import need no account at all.
-Drive is the copy that survives clearing the browser or moving to another
-machine — worth having, but not load-bearing.
+## Every player keeps their own copy
 
-## The one step left — the GameHub client ID
+There is no folder id in `drive-config.js`, only the folder **name**
+`GameHub`. `findFolder()` looks that name up in whichever Drive just signed in
+and makes it there if it is missing, so each player's save goes to their own
+Drive, on their own storage, under their own account.
 
-CardVerse is the first game on the **GameHub** arrangement: one Google Cloud
-project, one OAuth client, one Drive folder, shared by every game from here on.
-**The full setup and the reasoning live in [GAMEHUB.md](GAMEHUB.md)** — make
-the project and the client there, once, then come back and paste the client ID
-into `drive-config.js`:
+That is not merely tidier than a shared folder — a shared one cannot work.
+`drive.file` reaches only the files this app created *for the account holding
+the token*, so a second player has no permission on the first player's folder
+and Drive refuses the write. Handing the folder out as Editor to get past that
+would put every player's save in one person's Drive, on one person's quota,
+readable by them. Nobody can see anybody else's save under the arrangement as
+it stands, and that is deliberate.
 
-```bash
-git add drive-config.js && git commit -m "Drive: add the GameHub client ID" && git push
-```
+## Letting somebody else play
 
-Every game after this one reuses that same client ID and the same folder, and
-needs nothing done in Google Cloud at all — only its own unique `filename` and
-envelope `format`.
+The code side needs nothing. The Google side needs one decision, because while
+the **GameHub** Cloud project's consent screen is in **Testing**, Google lets in
+only accounts on a list:
 
-A **client secret is never needed** and must never be pasted anywhere in this
-project. If the console offers one, ignore it.
+- **A few friends** — Cloud console → **Audience → Test users**, add their Gmail
+  addresses. Up to 100. Note that Testing also stops Google issuing silent
+  tokens after about 7 days, so *Auto* users need one press of *To Drive* a week.
+- **Anyone** — set the consent screen to **In production**. `drive.file` is not a
+  sensitive scope, so this does not drag the project into Google's verification
+  review, and it ends the weekly re-press.
+
+Until one of those is done, another person's sign-in is refused by Google
+before they ever reach the consent screen — the app reports that the sign-in
+did not finish and names this as the likely reason.
 
 ## Then — the first copy
 
@@ -77,17 +87,23 @@ tick. Then turn **Auto** on if you want it kept up to date without pressing
 anything — but note the first copy always has to be one you send by hand,
 because Auto deliberately never opens a sign-in window.
 
-Keep the folder's sharing set to **Restricted** in Drive. "Anyone with the
-link" would mean anyone holding that link can read your save.
+Leave the folder's sharing alone. It is yours, in your own Drive, and private
+by default; setting it to "anyone with the link" would mean anyone holding that
+link can read your save.
 
 ## If something goes wrong
 
-- *"Drive is not set up yet"* — `drive-config.js` still has the placeholder.
+- *"Drive is not set up yet"* — `drive-config.js` is missing its `clientId` or
+  `folderName`.
+- *"Google did not finish the sign-in"* on somebody else's machine — that
+  account is not on the test-user list, and the consent screen is still in
+  Testing. See *Letting somebody else play* above.
 - *A sign-in window opens and closes with an error about the origin* — the
   JavaScript origin registered in step 2 does not exactly match the address
   in the browser. Check scheme, host and that there is no path.
-- *"There is nothing in Drive yet"* on **From Drive** — this browser has never
-  sent a copy to that folder. Press *To Drive* on the machine that has your
-  record first.
+- *"There is nothing in Drive yet"* on **From Drive** — this Google account has
+  never sent a copy. Press *To Drive* on the machine that has your record
+  first, signed in as the same account: a save sent from one Google account is
+  invisible to another, by design.
 - *The stamp turned red after a week* — Google stops issuing silent tokens
   after a while. One press of *To Drive* renews it.

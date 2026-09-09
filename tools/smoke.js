@@ -1991,7 +1991,7 @@ function mjTiles(str) {
 function mjFanOf(str, opts = {}) {
     const MJ = CV.MJ;
     const tiles = mjTiles(str);
-    const shape = CV.MJWin.isWin(MJ.counts(tiles), 0);
+    const shape = CV.MJWin.isWin(MJ.counts(tiles), 0, 0, null, opts.shapes);
     if (!shape) return null;
     return CV.MJFan.calculateFan({
         shape: shape.shape,
@@ -2001,6 +2001,7 @@ function mjFanOf(str, opts = {}) {
         selfDraw: !!opts.selfDraw,
         menzen: !!opts.menzen,
         quad: !!shape.quad,
+        flowers: opts.flowers || 0,
     }, opts.table);
 }
 
@@ -2152,18 +2153,21 @@ function auditMahjong() {
         const S = e.dealer;
         const flies = [1, 2].map((n) => ({ suit: 'F', n, wild: true, dun: false, id: 'Fx' + n }));
 
-        // Seven pairs, the last of them two flies — the hand the player was
-        // handed a 胡 button for and could not read.
-        e.seats[S].hand = mjTiles('1122334455p77z').concat(flies);
-        const pairs = e.explain(S, null);
-        check(!!pairs, 'mj: seven pairs with two flies should be a win');
-        check(pairs.shape === 'sevenPairs', `mj: read as ${pairs && pairs.shape}`);
-        check(pairs.groups.length === 7, `mj: ${pairs.groups.length} groups, wanted seven pairs`);
-        let tiles = pairs.groups.flatMap((g) => g.tiles);
+        // Four melds and a pair with two of the tiles standing in — the hand
+        // the player was handed a 胡 button for and could not read. Seven
+        // pairs is deliberately not used here: this table does not play it,
+        // and a test that leans on a shape the rules do not recognise is
+        // testing the wrong engine.
+        e.seats[S].hand = mjTiles('1234567899p11z').concat(flies);
+        const wildHand = e.explain(S, null);
+        check(!!wildHand, 'mj: a standard hand with two flies should be a win');
+        check(wildHand.shape === 'standard', `mj: read as ${wildHand && wildHand.shape}`);
+        check(wildHand.groups.length === 5, `mj: ${wildHand.groups.length} groups, wanted four melds and a pair`);
+        let tiles = wildHand.groups.flatMap((g) => g.tiles);
         check(tiles.length === 14, `mj: the explanation covers ${tiles.length} tiles, wanted 14`);
         check(tiles.filter((x) => x.wild).length === 2, 'mj: the two flies are not marked in the explanation');
         check(tiles.every((x) => e.pool.includes(x.key)), 'mj: a fly was explained as a tile the set does not hold');
-        check(pairs.ok && pairs.fan.totalFan === pairs.fan.patterns.reduce((n, x) => n + x.fan, 0),
+        check(wildHand.fan.totalFan === wildHand.fan.patterns.reduce((n, x) => n + x.fan, 0),
             'mj: the explanation and its own 番 disagree');
 
         // And a fly standing in the middle of a run says which tile it is.
@@ -2226,7 +2230,7 @@ function auditMahjong() {
 
     const names = (r) => r.patterns.map((p) => p.name).sort().join(',');
     const FAN = [
-        ['123m456m789s555p99p', '平胡',            1],
+        ['123m456m789s555p99p', '鸡胡',            1],
         ['111m555s777p999m22z', '碰碰胡',          2],
         ['123m456m777m999m11z', '混一色',          3],
         ['123m456m789m555m88m', '清一色',          6],
@@ -2249,13 +2253,13 @@ function auditMahjong() {
 
     // The overlap rules, one by one, exactly as the rules set them out.
     const OVERLAP = [
-        ['111m333m555m777m99m', ['清碰'],       ['清一色', '碰碰胡', '平胡']],
-        ['11223344556677m',     ['清七对'],     ['清一色', '七对子', '豪华七对子', '平胡']],
-        ['1111m2233s4455p66z',  ['豪华七对子'], ['七对子', '平胡']],
+        ['111m333m555m777m99m', ['清碰'],       ['清一色', '碰碰胡', '鸡胡']],
+        ['11223344556677m',     ['清七对'],     ['清一色', '七对子', '豪华七对子', '鸡胡']],
+        ['1111m2233s4455p66z',  ['豪华七对子'], ['七对子', '鸡胡']],
         ['123m555z666z777z11m', ['大三元'],     ['小三元']],
         ['123m111z222z333z44z', ['小四喜'],     ['大四喜']],
         ['111z222z333z444z55m', ['大四喜'],     ['小四喜']],
-        ['555z666z111z222z33z', ['字一色'],     ['混一色', '碰碰胡', '平胡']],
+        ['555z666z111z222z33z', ['字一色'],     ['混一色', '碰碰胡', '鸡胡']],
     ];
     for (const [str, must, mustNot] of OVERLAP) {
         const r = mjFanOf(str);
@@ -2277,7 +2281,11 @@ function auditMahjong() {
         const plain = mjFanOf('123m456m789s555p99p');
         const both  = mjFanOf('123m456m789s555p99p', { selfDraw: true, menzen: true });
         check(plain.totalFan === 1, `mj: a plain hand is ${plain.totalFan}番, wanted 1`);
-        check(both.totalFan === 3, `mj: 平胡 with 自摸 and 门清 is ${both.totalFan}番, wanted 3`);
+        check(both.totalFan === 3, `mj: 鸡胡 with 自摸 and 门清 is ${both.totalFan}番, wanted 3`);
+        // 平胡 is 全顺子 and the four-seat table has no row for it, so the
+        // filter drops it there and that table is exactly what it was.
+        check(!plain.patterns.some((x) => x.name === '平胡'),
+            'mj: the four-seat table started paying for 全顺子');
     }
     // 四杠子 needs four kongs, which no fourteen concealed tiles can show.
     {
@@ -2290,6 +2298,7 @@ function auditMahjong() {
         });
         check(r.patterns.some((p) => p.name === '四杠子' && p.fan === 16), 'mj: four kongs should be 四杠子 16番');
         check(!r.patterns.some((p) => p.name === '碰碰胡'), 'mj: 四杠子 counted 碰碰胡 as well');
+        check(!r.patterns.some((p) => p.name === '鸡胡'), 'mj: 四杠子 counted the base pattern as well');
     }
 
     /* --- who pays ----------------------------------------------------------- */
@@ -2297,9 +2306,9 @@ function auditMahjong() {
     {
         const P = CV.MJPay;
 
-        // The floor. Three seats need 2番 and four seats need nothing.
+        // The floor. Three seats need 5番 and four seats need nothing.
         for (let fan = 1; fan <= 9; fan++) {
-            check(P.canWin(3, fan) === (fan >= 2), `mj: three seats at ${fan}番 should ${fan >= 2 ? '' : 'not '}win`);
+            check(P.canWin(3, fan) === (fan >= 5), `mj: three seats at ${fan}番 should ${fan >= 5 ? '' : 'not '}win`);
             check(P.canWin(4, fan) === true, `mj: four seats should have no minimum, ${fan}番 refused`);
         }
 
@@ -2380,20 +2389,34 @@ function auditMahjong() {
         const three = CV.MJFan.tableFor(3), four = CV.MJFan.tableFor(4);
         check(four['混一色'] === 3, 'mj: four seats should still pay 3番 for 混一色');
         check(three['混一色'] === undefined, 'mj: 混一色 is still on the three-seat table');
-        check(three['清一色'] === four['清一色'], 'mj: the two tables disagree about 清一色');
+        // The two tables are two games, not one game with a row crossed out:
+        // three seats re-tuned 清一色 down to 3番 and let patterns stack
+        // instead of swallowing one another.
+        check(three['清一色'] === 3 && four['清一色'] === 6,
+            'mj: the two tables should price 清一色 differently');
+        check(three['清碰'] === undefined, 'mj: 清碰 should be the sum of its parts at three seats');
+        check(three['七对子'] === undefined, 'mj: seven pairs should not be on the three-seat table');
+        check(three['平胡'] === 4 && three['鸡胡'] === 1,
+            'mj: three seats should pay 4番 for 全顺子 and 1番 for a plain hand');
 
-        const mixed = mjFanOf('123456789p111z22z', { table: three, menzen: true });
+        const noShapes = { pairs: false };
+        const mixed = mjFanOf('123456789p111z22z', { table: three, menzen: true, shapes: noShapes });
         check(!mixed.patterns.some((p) => p.name === '混一色'), 'mj: a three-seat hand scored 混一色');
-        // 混一色 swallows 平胡. Dropping it after the overlaps were resolved
-        // would take the base pattern with it and score the hand at nothing —
-        // which is why fan.js drops it before.
-        check(mixed.patterns.some((p) => p.name === '平胡'),
-            `mj: dropping 混一色 took 平胡 with it — got ${names(mixed)}`);
-        check(mixed.totalFan === 2, `mj: a concealed plain hand is ${mixed.totalFan}番 at three seats, wanted 2`);
+        // 混一色 swallows the base pattern. Dropping it after the overlaps
+        // were resolved would take 鸡胡 with it and score the hand at nothing
+        // — which is why fan.js drops it before.
+        check(mixed.patterns.some((p) => p.name === '鸡胡'),
+            `mj: dropping 混一色 took 鸡胡 with it — got ${names(mixed)}`);
+        check(mixed.totalFan === 3, `mj: a concealed plain hand is ${mixed.totalFan}番 at three seats, wanted 3`);
 
-        const pure = mjFanOf('11223344556677p', { table: three });
-        check(pure.totalFan === 8, `mj: 清七对 is ${pure.totalFan}番 at three seats, wanted 8`);
-        console.log('  ✓ three seats do not pay for the box they were handed');
+        // 全顺子 in one suit is 平胡 and 清一色, stacked, plus 无花.
+        const runs = mjFanOf('112233456789p55p', { table: three, shapes: noShapes });
+        check(runs && runs.patterns.some((p) => p.name === '平胡' && p.fan === 4),
+            `mj: an all-runs hand should be 平胡 4番 — got ${runs && names(runs)}`);
+        check(runs.patterns.some((p) => p.name === '清一色' && p.fan === 3),
+            'mj: 清一色 should stack on 平胡 rather than replace it');
+        check(runs.totalFan === 8, `mj: 平胡 清一色 无花 is ${runs.totalFan}番, wanted 8`);
+        console.log('  ✓ three seats play their own table, not the four-seat one less a row');
     }
 
     /* --- a hand that wins but may not be declared --------------------------- */
@@ -2404,23 +2427,30 @@ function auditMahjong() {
             seats: [0, 1, 2].map((i) => new CV.Seat(i, { kind: 'ai', name: 'S' + i, coins: 5000 })),
         });
         e.start();
-        check(e.minFan === 2, `mj: three seats should demand 2番, demand ${e.minFan}`);
+        check(e.minFan === 5, `mj: three seats should demand 5番, demand ${e.minFan}`);
         // The number the screen prints and the number that actually refuses a
         // declaration live in two files. They have to be the same number.
         check(e.minFan === CV.MJPay.profileFor(3).minFan,
             'mj: the mode and the pay profile disagree about the floor');
 
-        // A hand of runs that took a tile from somebody is 平胡 and nothing
-        // else — one 番, and one is not enough. That is the floor's whole job:
-        // it is what stops a claimed hand of runs racing everybody home.
         const B = (e.dealer + 1) % 3;
+        // The deal has already handed this seat whatever flowers came up, and
+        // flowers are 番 now — so every hand below is set up with none, or the
+        // test is measuring the deal rather than the hand.
+        const bare = (seat) => { e.seats[seat].flowers = []; };
+
+        // A hand with a triplet in it and nothing else going on is 鸡胡: one
+        // 番, plus 无花 for the empty flower box, and two is not five. That is
+        // the floor's whole job — it is what stops an ordinary claimed hand
+        // racing everybody home.
+        bare(B);
         e.seats[B].melds = [{ type: 'chow', key: 'p1', tiles: mjTiles('123p'),
                               concealed: false, from: e.dealer }];
         e.seats[B].hand = mjTiles('45678p111z22z');         // ten, waiting on 9筒
         const tile = mjTiles('9p')[0];
         const got = e.winFor(B, tile);
         check(!!got, 'mj: that hand plus 9筒 should be a winning shape');
-        check(got.fan.totalFan === 1, `mj: a claimed hand of runs is ${got && got.fan.totalFan}番, wanted 1`);
+        check(got.fan.totalFan === 2, `mj: 鸡胡 with no flowers is ${got && got.fan.totalFan}番, wanted 2`);
         check(got.ok === false, 'mj: a hand under the minimum was declarable');
 
         e.seats[e.dealer].discards.push(tile);
@@ -2431,27 +2461,55 @@ function auditMahjong() {
             'mj: 胡 was offered on a hand under the minimum');
         check(e.declareWin(B, e.dealer) === false, 'mj: a hand under the minimum was declared anyway');
 
-        // Self-drawn, the same hand carries 自摸 and clears it exactly.
-        e.seats[B].hand = mjTiles('456789p111z22z');
-        const drawn = e.winFor(B, null);
-        check(drawn && drawn.fan.totalFan === 2, `mj: the same hand self-drawn is ${drawn && drawn.fan.totalFan}番`);
-        check(drawn && drawn.ok, 'mj: two 番 should be enough to declare');
-
-        // Concealed, an ordinary hand clears the floor on 门清 alone — which
-        // is the hand a 5番 floor used to let through on 混一色's free three.
+        // Take the triplet out and the same tiles are 全顺子 — 平胡, 4番,
+        // and with 无花 that is exactly the floor. This is the hand the table
+        // is built around: the floor is set where an all-runs hand reaches it
+        // and an ordinary one does not.
+        // Take the melded chow back and give the seat 全顺子 — four runs and
+        // a pair, not one triplet. Honours never form a run, so at three
+        // seats an all-runs hand is all dots, which makes it 清一色 too.
+        bare(B);
         e.seats[B].melds = [];
-        e.seats[B].hand = mjTiles('12456789p111z22z');
-        const menzen = e.winFor(B, mjTiles('3p')[0]);
-        check(menzen && menzen.fan.totalFan === 2, `mj: 平胡 门清 is ${menzen && menzen.fan.totalFan}番, wanted 2`);
-        check(menzen && menzen.ok, 'mj: a concealed hand should still be declarable');
+        e.seats[B].hand = mjTiles('112233456789p55p');
+        const flat = e.winFor(B, null);
+        check(flat && flat.fan.patterns.some((x) => x.name === '平胡' && x.fan === 4),
+            `mj: 平胡 should be 全顺子 at 4番 — got ${flat && flat.fan.patterns.map((x) => x.name)}`);
+        check(flat && flat.ok, 'mj: an all-runs hand should clear the floor');
 
-        // And one suit on its own is well clear of it.
+        // Patterns stack rather than swallow one another: 清一色 and 碰碰胡
+        // are 3 and 3, and the hand is worth both. There is no 清碰 row any
+        // more — it was a name for the sum.
+        bare(B);
+        e.seats[B].melds = [];
+        e.seats[B].hand = mjTiles('111222555999p77p');
+        const stack = e.winFor(B, null);
+        const named = (n) => stack.fan.patterns.find((x) => x.name === n);
+        check(named('清一色') && named('碰碰胡'), 'mj: 清一色 and 碰碰胡 should both be counted');
+        check(!named('清碰'), 'mj: 清碰 should not exist as a pattern of its own');
+        check(named('清一色').fan + named('碰碰胡').fan === 6, 'mj: 清一色 with 碰碰胡 should be 3+3');
+
+        // Flowers pay by the tile, and holding none pays the same as holding
+        // one. Neither is ever part of the hand.
+        bare(B);
+        const none = e.winFor(B, null).fan;
+        // `mjTiles` reads suits, and a flower is not in one.
+        e.seats[B].flowers = [1, 2, 3].map((n) => ({ suit: 'f', n, id: 'fl' + n }));
+        const three = e.winFor(B, null).fan;
+        check(none.patterns.some((x) => x.name === '无花'), 'mj: an empty flower box should pay 无花');
+        check(three.patterns.some((x) => x.name === '花' && x.fan === 3),
+            'mj: three flowers should pay 3番');
+        check(!three.patterns.some((x) => x.name === '无花'), 'mj: 无花 was paid to a seat holding three');
+        check(three.totalFan === none.totalFan + 2, 'mj: three flowers should be two more than none');
+        bare(B);
+
+        // 七对子 is not a cheap hand at three seats — it is not a hand.
+        e.seats[B].melds = [];
         e.seats[B].hand = mjTiles('11223344556677p');
-        const big = e.winFor(B, null);
-        check(big && big.ok, 'mj: 清七对 should clear the minimum');
-        check(big.fan.totalFan >= 8, `mj: 清七对 came to ${big && big.fan.totalFan}番`);
+        const pairs = e.winFor(B, null);
+        check(!pairs || pairs.shape.shape !== 'sevenPairs',
+            'mj: seven pairs should not be a winning shape at three seats');
 
-        // Four seats have no floor, so a plain 平胡 stands.
+        // Four seats have no floor and still play seven pairs.
         const four = new game.Engine({
             rng: new CV.RNG(22), config: { room: 'beginner' },
             seats: [0, 1, 2, 3].map((i) => new CV.Seat(i, { kind: 'ai', name: 'S' + i, coins: 5000 })),
@@ -2460,9 +2518,13 @@ function auditMahjong() {
         check(four.minFan === 0, 'mj: four seats should have no minimum');
         four.seats[four.dealer].hand = mjTiles('123m456m789s555p99p');
         const small = four.winFor(four.dealer, null);
-        check(small && small.ok, 'mj: a 平胡 should stand at a four-seat table');
+        check(small && small.ok, 'mj: an ordinary hand should stand at a four-seat table');
         check(small.fan.totalFan < 5, 'mj: that hand was supposed to be a small one');
-        console.log('  ✓ 2番 or nothing at three seats, no floor at four');
+        four.seats[four.dealer].hand = mjTiles('11223344556677m');
+        const fourPairs = four.winFor(four.dealer, null);
+        check(fourPairs && fourPairs.shape.shape === 'sevenPairs',
+            'mj: four seats should still play seven pairs');
+        console.log('  ✓ 5番 or nothing at three seats, no floor at four');
     }
 
     /* --- a claim is not a self draw ------------------------------------------ */
@@ -2503,8 +2565,12 @@ function auditMahjong() {
         // The same fourteen tiles reached by drawing are 自摸, which is what
         // the flag is for: it is the way the tile arrived that differs, not
         // the hand. A kong's replacement counts as a draw — 杠上开花.
+        // All dots and all runs, so it is well clear of the 5番 floor — the
+        // point here is which flag the win carries, not whether it is worth
+        // enough, and a hand sitting on the floor would be measuring both.
         e.seats[B].melds = [];
-        e.seats[B].hand = mjTiles('123456789999p22z');               // 14, a win
+        e.seats[B].flowers = [];
+        e.seats[B].hand = mjTiles('112233456789p55p');               // 14, a win
         e.claimed = false;
         e.phase = 'discard';
         e.turn = B;
@@ -2533,9 +2599,13 @@ function auditMahjong() {
             e.seats[A].melds = [{ type: 'pung', key: 'p5', tiles: mjTiles('555p'),
                                   concealed: false, from: C }];
             e.seats[A].hand = mjTiles('5p1122334455z');               // 11 with the fourth 5筒
-            // B is waiting on that 5筒 to close 3-4-5.
-            e.seats[B].hand = mjTiles('34p111p666z777z99p');          // 13
+            // B is waiting on that 5筒 to close 3-4-5 — and the hand behind
+            // it has to be worth declaring, or the robbery is never offered
+            // and this tests nothing. All dots, nothing claimed, no flower:
+            // 清一色 3, 门清 1, 无花 1, which is the floor exactly.
+            e.seats[B].hand = mjTiles('34p111p999p777p22p');          // 13
             e.seats[B].melds = [];
+            e.seats[B].flowers = [];
             e.seats[C].hand = mjTiles('667788p9p123456z');
             e.seats[C].melds = [];
             e.phase = 'discard';
