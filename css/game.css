@@ -1311,6 +1311,28 @@
 /* The tile the hand went out on. Without it the recap is fourteen tiles and
  * no answer to "on what?". */
 .tile.is-win { box-shadow: 0 0 0 2px var(--good), 0 3px 8px rgba(0,0,0,.5); }
+/* **拉米's recap: the rack, with the pieces set aside.**
+ *
+ * Two settlements pull in opposite directions — the points you are caught
+ * holding, and the jokers and aces, which cost the most to hold and still
+ * pay you if you hold more of them than the next player. A single row of
+ * twenty tiles cannot show which of the two a tile landed in, so the pieces
+ * sit apart behind a rule, with both counts on their own group. */
+.rc-lami { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 10px 18px; }
+.rc-lami-part { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.rc-lami-part.is-pieces {
+    padding-left: 14px; margin-left: auto;
+    border-left: 1px solid var(--border);
+}
+.rc-lami-n { font-size: .7rem; font-weight: 700; color: var(--muted); white-space: nowrap; }
+.rc-lami-part.is-pieces .rc-lami-n { color: var(--accent); }
+.rc-lami-tiles { display: flex; gap: 2px; flex-wrap: wrap; align-items: center; }
+.rc-lami-tiles i { font-style: normal; color: var(--muted); font-size: .78rem; }
+/* Who folded, and who went out. A seat that folded on turn two and one that
+ * played to the end are the same pile of tiles and not the same story. */
+.rc-tag { font-size: .62rem; font-weight: 800; padding: 1px 7px; border-radius: 999px; white-space: nowrap; }
+.rc-tag.is-out { background: var(--good); color: #06210f; }
+.rc-tag.is-fold { background: rgba(255,255,255,.14); color: var(--muted); }
 .rc-fan { margin-top: 7px; display: flex; flex-direction: column; gap: 3px; }
 .rc-fan-row { display: flex; align-items: baseline; gap: 8px; font-size: .8rem; }
 .rc-fan-row b { min-width: 5.4em; }

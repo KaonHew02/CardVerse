@@ -134,6 +134,57 @@
                     </div>`).join('')}
             </div>` : '';
 
+        /**
+         * **拉米 — every rack, with the jokers and aces set aside.**
+         *
+         * Two settlements decide a lami hand and they pull in opposite
+         * directions: the points you are caught holding, and the jokers and
+         * aces, which are the *most* expensive tiles to hold and still pay
+         * you if you hold more of them than the next player. A row of twenty
+         * tiles cannot show which of the two a given tile landed in, so the
+         * pieces are lifted out into their own group and both numbers sit on
+         * the row. Then a player can check the money against the tiles rather
+         * than take it on trust.
+         *
+         * Who folded is on the row too. A seat that folded on turn two and
+         * one that played to the end look identical as a pile of tiles, and
+         * they are not the same story at all.
+         */
+        const lamiFace = CV.LamiTile;
+        const withLami = lamiFace ? rows.filter((r) => r.lami) : [];
+        const lamiBlock = withLami.length ? `
+            <div class="rc-board">
+                <span class="rc-label">${esc(t('res.tiles'))}</span>
+                ${withLami.map((r) => {
+                    const L = r.lami;
+                    const pieceIds = new Set(L.pieces.map((x) => x.id));
+                    const rest = L.rack.filter((x) => !pieceIds.has(x.id));
+                    const tiles = (list) => list.map((x) => lamiFace(x, { small: true })).join('');
+                    return `
+                    <div class="rc-seat${r.seat === you ? ' is-you' : ''}${
+                        r.rank === 1 && !summary.result.draw ? ' is-win' : ''}">
+                        <div class="rc-seat-head">
+                            <b>${esc(r.name)}</b>${r.seat === you ? ` <em>(${esc(t('you'))})</em>` : ''}
+                            ${L.out ? `<span class="rc-tag is-out">${esc(t('lami.wentOut'))}</span>`
+                                : L.folded ? `<span class="rc-tag is-fold">${esc(t('lami.fold'))}</span>` : ''}
+                            <span class="num ${r.coins > 0 ? 'good' : r.coins < 0 ? 'bad' : ''}">${signed(r.coins)}</span>
+                        </div>
+                        ${L.out ? '' : `
+                        <div class="rc-lami">
+                            <div class="rc-lami-part">
+                                <span class="rc-lami-n">${esc(t('lami.leftPoints', { p: L.points }))}</span>
+                                <span class="rc-lami-tiles">${tiles(rest) || `<i>${esc(t('lami.nothingLeft'))}</i>`}</span>
+                            </div>
+                            <div class="rc-lami-part is-pieces">
+                                <span class="rc-lami-n">${esc(L.count
+                                    ? t('lami.pieces', { n: L.count }) : t('lami.piecesNone'))}</span>
+                                <span class="rc-lami-tiles">${tiles(L.pieces) || `<i>—</i>`}</span>
+                            </div>
+                        </div>`}
+                    </div>`;
+                }).join('')}
+            </div>` : '';
+
         const withCards = rows.filter((r) => r.hands && r.hands.length);
         const cardsBlock = withCards.length ? `
             <div class="rc-board">
@@ -192,6 +243,7 @@
                 ${sharedBlock}
                 ${cardsBlock}
                 ${tilesBlock}
+                ${lamiBlock}
                 ${levelUp}${streak}
                 ${unlocked}${missions}
 

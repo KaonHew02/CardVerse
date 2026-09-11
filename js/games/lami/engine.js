@@ -503,7 +503,32 @@
                 note: s.rack.length
                     ? t('lami.left', { n: s.rack.length, p: s.points })
                     : t('lami.wentOut'),
-                hands: s.rack.length ? [{ tiles: s.rack.slice(), cards: [], total: null, bet: 0, payout: 0 }] : [],
+                hands: [],
+                /**
+                 * **What this seat was caught holding, and why it cost that.**
+                 *
+                 * The recap used to hand the rack over as `hands[0].tiles`,
+                 * which the shared result screen draws through `CardView` —
+                 * and a lami tile is not a card, so what it drew was nothing
+                 * at all. Every seat's row was a name and a number with an
+                 * empty space where the reason should be.
+                 *
+                 * `pieces` is split out rather than counted in place because
+                 * it is settled separately and settles *against* the points:
+                 * jokers and aces are 15 apiece, the most expensive tiles in
+                 * the box, and holding more of them than the next player pays
+                 * you. A player looking at one row of tiles cannot see which
+                 * of the two numbers each tile landed in — so they go in
+                 * their own group, and both counts are on the row.
+                 */
+                lami: {
+                    rack: L.sort(s.rack),
+                    pieces: s.rack.filter((x) => L.isJoker(x) || L.isAce(x)),
+                    points: s.points,
+                    count: s.pieces,
+                    folded: !!s.folded,
+                    out: !s.rack.length,
+                },
                 extra: {
                     lamiRounds: 1,
                     lamiWins: i === this.winner ? 1 : 0,
