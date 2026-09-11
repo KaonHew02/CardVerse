@@ -415,7 +415,6 @@
 
             const sel = this.selection;
             const asMeld = sel.length ? L.meld(sel, e.rules) : null;
-            const canAdd = this.target >= 0 && this.fits(this.target);
             const joker = options.find((o) => o.type === 'joker');
             const fold = options.find((o) => o.type === 'fold');
             // Until a seat has opened, a set it could otherwise lay is not a
@@ -427,8 +426,6 @@
             // button reading 打出 was the screen making it silently. One
             // button per reading, each drawn as the run it lays.
             const ways = (!asMeld || shut) ? [] : L.runWindows(sel, e.rules);
-            const addTiles = canAdd ? e.table[this.target].tiles.concat(sel) : null;
-            const addWays = canAdd ? L.runWindows(addTiles, e.rules) : [];
 
             const lay = (act, low, tiles, label) =>
                 `<button class="btn primary lami-run" data-act="${act}" data-lo="${low}">
@@ -440,9 +437,8 @@
                 ? ways.map((low) => lay('play', low, sel, t('lami.play'))).join('')
                 : `<button class="btn primary big" data-act="play" ${asMeld && !shut ? '' : 'disabled'}>
                         ${esc(t('lami.play'))}${asMeld ? ` · ${esc(t('lami.' + asMeld.type))}` : ''}</button>`;
-            const addBtns = addWays.length > 1
-                ? addWays.map((low) => lay('add', low, addTiles, t('lami.add'))).join('')
-                : `<button class="btn" data-act="add" ${canAdd ? '' : 'disabled'}>${esc(t('lami.add'))}</button>`;
+            // 加上去 is no longer a button at all — the meld on the table *is*
+            // the button, and clicking it puts the tiles there.
 
             // **Melds your tiles would join, that you have not aimed at yet.**
             //
@@ -456,7 +452,7 @@
                 ? e.table.map((_, i) => i).filter((i) => this.fits(i)) : [];
 
             const note = shut ? t('lami.mustRun')
-                : (ways.length > 1 || addWays.length > 1) ? t('lami.jokerPick')
+                : ways.length > 1 ? t('lami.jokerPick')
                 : openTo.length ? t('lami.pickMeld')
                 : sel.length && !asMeld && this.target < 0 ? t('lami.notAMeld')
                 : e.mustOpen(this.you) ? t('lami.mustOpen')
@@ -465,7 +461,6 @@
             host.innerHTML = `
                 <div class="btn-row lami-run-row">
                     ${playBtns}
-                    ${addBtns}
                     ${joker ? `<button class="btn ghost" data-act="joker">${esc(t('lami.jokerOut'))}</button>` : ''}
                     ${fold ? `<button class="btn ghost" data-act="fold">${esc(t('lami.fold'))}</button>` : ''}
                 </div>
@@ -506,10 +501,38 @@
             if (this.target >= 0 && !this.fits(this.target)) this.target = -1;
         }
 
+        /**
+         * **Clicking a meld you can join puts the tiles on it.**
+         *
+         * This used to only *aim* it: pick the tiles, click the meld, then
+         * press 加上去 — three steps, and the third one was a button that sat
+         * greyed out until the second had happened. Every way of saying so in
+         * the hint line failed, because the screen was showing a meld lit up
+         * green next to a dead button and that reads as a refusal however it
+         * is captioned.
+         *
+         * Nothing is decided for you: you chose the tiles, you chose the
+         * meld. It is the same commitment as dragging the tile onto it, which
+         * has always gone straight through.
+         *
+         * **And it never asks which reading of the run you meant.** Laying a
+         * new meld does — ♥J ♥Q 🃏 is 10-J-Q or J-Q-K and only you know
+         * which. Adding is not that question: the meld already has a reading
+         * and `doExtend` keeps it, so all that is ever undecided is which end
+         * a *spare* joker hangs off, which is a detail nobody is holding a
+         * tile over. Asking it turned one click back into two.
+         */
         aim(i) {
-            this.target = this.target === i ? -1 : i;
-            this.paintBoard();
-            this.paintActions();
+            if (!this.fits(i)) {
+                this.target = -1;
+                this.paintBoard();
+                this.paintActions();
+                return;
+            }
+            const ids = this.selection.map((x) => x.id);
+            this.picked.clear();
+            this.target = -1;
+            this.table.dispatch({ type: 'extend', seat: this.you, at: i, tiles: ids });
         }
 
         act(el) {
@@ -520,7 +543,6 @@
             const lo = el.dataset.lo === undefined ? undefined : Number(el.dataset.lo);
 
             if (type === 'play')  return void this.table.dispatch({ type: 'play', seat, tiles: ids, lo });
-            if (type === 'add')   return void this.table.dispatch({ type: 'extend', seat, at: this.target, tiles: ids, lo });
             if (type === 'joker') return void this.table.dispatch({ type: 'joker', seat });
             if (type === 'fold')  return void this.table.dispatch({ type: 'fold', seat });
         }
