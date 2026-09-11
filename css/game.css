@@ -1108,8 +1108,10 @@
 .lami-seat { flex: 0 1 200px; }
 .lami-count { margin-left: auto; background: rgba(0,0,0,.35); color: #fff; }
 
+/* The board is a stack of shelves — one per kind of meld — so a column,
+ * not a wrapping row of melds. `.lami-empty` still centres inside it. */
 .lami-board {
-    display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; align-content: flex-start;
+    display: flex; flex-direction: column; gap: 2px; justify-content: center;
     min-height: 96px; padding: 10px; border-radius: 14px; background: rgba(0,0,0,.16);
 }
 .lami-empty { color: rgba(255,255,255,.55); align-self: center; margin: auto; font-size: .9rem; }
@@ -1118,6 +1120,19 @@
     background: rgba(255,255,255,.05); cursor: default;
 }
 /* A meld the selection would actually go onto says so before it is tried. */
+/* **Two shelves, labelled.** A dozen melds of two kinds in the order they
+ * were laid is a pile; the question a player asks of the table is always
+ * "where could this tile go", and the answer turns on which kind it is. Both
+ * shelves stay put once anything is down, so neither moves under you. */
+.lami-shelf { display: flex; align-items: flex-start; gap: 10px; padding: 5px 2px; width: 100%; }
+.lami-shelf + .lami-shelf { border-top: 1px solid rgba(255,255,255,.1); }
+.lami-shelf-label {
+    flex: 0 0 auto; min-width: 6.5em; padding-top: 6px;
+    font-size: .68rem; font-weight: 800; letter-spacing: .03em;
+    color: rgba(255,255,255,.62); white-space: nowrap;
+}
+.lami-shelf-melds { display: flex; flex-wrap: wrap; gap: 8px; flex: 1; min-width: 0; }
+.lami-shelf-none { font-size: .7rem; color: rgba(255,255,255,.34); padding-top: 8px; }
 .lami-meld.can-take { border-color: rgba(61,220,151,.55); cursor: pointer; }
 .lami-meld.is-aimed { border-color: var(--good); background: rgba(61,220,151,.16); }
 /* A meld the tile in your hand would join, lit while you are carrying it. */

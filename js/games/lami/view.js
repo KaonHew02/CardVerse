@@ -174,6 +174,25 @@
             return !!L.extend(e.table[i].tiles, sel, e.rules);
         }
 
+        /**
+         * **Two shelves: 顺子 above, 同点 below.**
+         *
+         * The table used to be one row in the order things were laid, which
+         * by the middle of a hand is a dozen melds of two different kinds
+         * mixed together. The question a player actually asks of it is never
+         * "what was laid fourth" — it is *where could this tile go*, and the
+         * answer depends entirely on which kind of meld it is: a 6♣ looks for
+         * a ♣ run, a third 7 looks for a set of sevens. Sorting by kind puts
+         * the half you are searching in front of you and the half you are not
+         * out of the way.
+         *
+         * Both shelves stay on screen once anything is down, empty or not, so
+         * neither moves under you when the other one grows.
+         *
+         * `data-meld` carries the index into `engine.table`, which is what
+         * every click, aim and drop is addressed by — the shelves are a
+         * rearrangement of the screen and of nothing else.
+         */
         paintBoard() {
             const e = this.engine;
             const host = this.$('lamiBoard');
@@ -181,7 +200,16 @@
                 host.innerHTML = `<div class="lami-empty">${esc(t('lami.emptyTable'))}</div>`;
                 return;
             }
-            host.innerHTML = e.table.map((m, i) => {
+            host.innerHTML = this.shelfHtml('run', 'lami.shelfRuns')
+                           + this.shelfHtml('set', 'lami.shelfSets');
+        }
+
+        shelfHtml(type, label) {
+            const e = this.engine;
+            const rows = e.table
+                .map((m, i) => ({ m, i }))
+                .filter((x) => x.m.meld && x.m.meld.type === type);
+            const melds = rows.map(({ m, i }) => {
                 const can = this.fits(i);
                 const on = this.target === i;
                 return `<button class="lami-meld${can ? ' can-take' : ''}${on ? ' is-aimed' : ''}"
@@ -189,6 +217,11 @@
                     ${m.tiles.map((x) => tileHtml(x, { small: true })).join('')}
                 </button>`;
             }).join('');
+            return `<div class="lami-shelf">
+                <span class="lami-shelf-label">${esc(t(label))}</span>
+                <div class="lami-shelf-melds">${melds
+                    || `<span class="lami-shelf-none">${esc(t('lami.shelfNone'))}</span>`}</div>
+            </div>`;
         }
 
         paintStatus() {
@@ -323,11 +356,13 @@
         }
 
         markDrops(id, on) {
-            const melds = this.root.querySelectorAll('.lami-meld');
-            for (const el of melds) el.classList.remove('is-drop');
+            for (const el of this.root.querySelectorAll('.lami-meld')) el.classList.remove('is-drop');
             if (!on) return;
+            // By `data-meld`, not by position: the melds are grouped by kind
+            // on screen, so the third button is not the third meld.
             for (const i of this.dropTargets(id)) {
-                if (melds[i]) melds[i].classList.add('is-drop');
+                const el = this.root.querySelector(`.lami-meld[data-meld="${i}"]`);
+                if (el) el.classList.add('is-drop');
             }
         }
 
