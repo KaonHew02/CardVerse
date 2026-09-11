@@ -483,6 +483,25 @@
         whyNot(sel) {
             const cfg = this.engine.rules;
             const real = sel.filter((x) => !L.isJoker(x));
+
+            /**
+             * **Picking a second card adds to the selection; it does not
+             * replace it.**
+             *
+             * Which is right — you lay three at a time — and is a trap when
+             * you are adding one card to a meld. Tap the 2 you cannot place,
+             * then tap the K you can, and now you are holding *two* cards
+             * that fit nothing together, so nothing lights and the table
+             * looks like it has refused the K as well. Tapping a tile again
+             * unpicks it, and that is the one thing nobody stuck here thinks
+             * to try, so it is said out loud and the card that would have
+             * worked is named.
+             */
+            if (sel.length > 1) {
+                const loner = sel.find((x) => this.dropTargets(x.id).length);
+                if (loner) return t('lami.oneAlone', { card: L.name(loner) });
+            }
+
             // One or two tiles cannot be a meld on their own — but this only
             // runs when nothing on the table would take them either, and
             // *that* is the thing a player holding one card wants explained.
