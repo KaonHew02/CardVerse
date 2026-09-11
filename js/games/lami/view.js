@@ -63,6 +63,8 @@
             this.picked  = new Set();
             this.target  = -1;      // table meld the selection would join
             this.order   = [];      // your own arrangement of your own rack
+            this.found   = [];      // melds spotted in your rack this turn
+            this.foundAt = -1;      // which of them is picked out
             this.drag    = null;
             this.dropped = false;   // a drag just ended; swallow the click
         }
@@ -122,9 +124,50 @@
                     this.picked.clear();
                     this.target = -1;
                 }
-                if (e.type === 'turn') this.target = -1;
+                if (e.type === 'turn') {
+                    this.target = -1;
+                    if (e.seat === this.you) this.findMine();
+                }
             }
             this.paint();
+        }
+
+        /**
+         * **The melds already in your rack, picked out for you.**
+         *
+         * Twenty tiles you arranged yourself is a lot to re-read every turn,
+         * and the run that is already sitting in there is easy to look
+         * straight past — especially the ones a joker completes, which do not
+         * look like anything. So on your go the rack is searched and the best
+         * meld in it comes up selected.
+         *
+         * **It picks; it does not play.** Nothing is laid until you press
+         * 打出, and one tap on any tile is enough to disagree with it — the
+         * selection is ordinary and yours to change. 换一组 walks through the
+         * other melds it found, longest first, when there is more than one.
+         *
+         * It searches the same way the AI does, and it will not offer a set
+         * before you have opened, because that is not a move you could make.
+         */
+        findMine() {
+            const e = this.engine;
+            this.found = [];
+            this.foundAt = -1;
+            this.picked.clear();
+            if (this.you < 0 || e.over) return;
+            const s = e.seats[this.you];
+            if (!s || s.folded) return;
+            this.found = L.findMelds(s.rack, e.rules)
+                .filter((cards) => s.opened || (L.meld(cards, e.rules) || {}).type === 'run');
+            if (this.found.length) this.showFound(0);
+        }
+
+        /** Put the nth meld it found into the selection. */
+        showFound(n) {
+            if (!this.found.length) return;
+            this.foundAt = ((n % this.found.length) + this.found.length) % this.found.length;
+            this.picked = new Set(this.found[this.foundAt].map((x) => x.id));
+            this.reaim();
         }
 
         /* ---- painting -------------------------------------------------------- */
@@ -461,6 +504,9 @@
             host.innerHTML = `
                 <div class="btn-row lami-run-row">
                     ${playBtns}
+                    ${this.found.length > 1
+                        ? `<button class="btn" data-act="next-meld">${esc(t('lami.nextMeld', {
+                            n: this.foundAt + 1, of: this.found.length }))}</button>` : ''}
                     ${joker ? `<button class="btn ghost" data-act="joker">${esc(t('lami.jokerOut'))}</button>` : ''}
                     ${fold ? `<button class="btn ghost" data-act="fold">${esc(t('lami.fold'))}</button>` : ''}
                 </div>
@@ -511,13 +557,9 @@
             }
             if (!real.length) return t('lami.allJokers');
 
-            // One rank throughout: this was meant to be a set.
-            if (real.every((x) => x.r === real[0].r)) {
-                const suits = real.map((x) => x.s);
-                const twice = suits.find((x, i) => suits.indexOf(x) !== i);
-                if (twice) return t('lami.setSameSuit', { suit: L.SUIT_SYMBOL[twice] });
-                return t('lami.notAMeld');
-            }
+            // One rank throughout, and the suits do not matter — so the only
+            // thing left that can be wrong is how many there are.
+            if (real.every((x) => x.r === real[0].r)) return t('lami.setSize', { n: cfg.maxSet });
             // One suit throughout: this was meant to be a run.
             if (real.every((x) => x.s === real[0].s)) {
                 const ranks = real.map((x) => x.r).sort((a, b) => a - b);
@@ -596,6 +638,8 @@
 
         act(el) {
             const type = el.dataset.act;
+            // Walking through what it found is the screen's own business.
+            if (type === 'next-meld') { this.showFound(this.foundAt + 1); this.paint(); return; }
             const seat = this.you;
             const ids = this.selection.map((x) => x.id);
             // Which rank the run starts on, when the player picked a reading.

@@ -178,7 +178,19 @@
         return { type: 'run', suit, lo, hi, size: n, jokers };
     }
 
-    /** A set: one number, four suits at most, no suit twice. */
+    /**
+     * **A set: one number, and the suits do not matter.**
+     *
+     * A set used to want one of each suit — no suit twice — which is the
+     * ordinary rummy rule and the wrong one for this table. The box holds
+     * *two of every card*, so a rack with three of a number in it usually
+     * has two of them in the same suit, and the hand that looks exactly like
+     * a set was being refused with no way to see why: ♦2 ♥2 ♠2 sitting on
+     * the table and a ♠2 in your hand that cannot join it.
+     *
+     * Same number is the whole test now. `maxSet` still caps it at four,
+     * which is a separate rule about how big a meld gets and is unchanged.
+     */
     function asSet(tiles, cfg) {
         const real = tiles.filter((x) => !isJoker(x));
         const jokers = tiles.length - real.length;
@@ -186,7 +198,6 @@
 
         const rank = real[0].r;
         if (!real.every((x) => x.r === rank)) return null;
-        if (new Set(real.map((x) => x.s)).size !== real.length) return null;
         if (jokers > cfg.maxSet - real.length) return null;
         return { type: 'set', rank, size: tiles.length, jokers };
     }

@@ -3532,18 +3532,23 @@ function auditLami() {
         ['H8 H9 X',         'run'],      // the joker plays the ten
         ['S11 S12 S13',     'run'],
         ['S12 S13 X',       'run'],      // the joker goes below, not past the king
-        // Sets, straight from the rules.
+        // Sets, straight from the rules. The suits do not matter — the box
+        // holds two of every card, so three of a number in a rack usually
+        // has two of them in one suit, and that is a set like any other.
         ['C7 D7 H7 S7',     'set'],
         ['C13 D13 H13',     'set'],
         ['C5 D5 X',         'set'],
+        ['C7 C7 D7',        'set'],      // the same suit twice is fine
+        ['S2 S2 S2',        'set'],      // and three of one suit, which the
+                                         // box can only just supply
+        ['C7 C7 X',         'set'],      // a joker beside a matched pair
         // And the ones that are not melds at all.
         ['C3 C4',           null],       // two is not enough
         ['C3 D4 H5',        null],       // a run is one suit
         ['C3 C5 C6',        null],       // and consecutive
         ['C3 C3 C4',        null],       // with no tile twice
         ['C7 D7',           null],       // two is not enough for a set either
-        ['C7 C7 D7',        null],       // and a suit cannot appear twice
-        ['C7 D7 H7 S7 X',   null],       // five is past the four suits
+        ['C7 D7 H7 S7 X',   null],       // and five is past the cap
         ['S13 S14 S2',      null],       // a run does not wrap past the ace
         ['C2 X X',          'run'],      // two jokers still need a real tile
         ['X X X',           null],       // and three jokers are nothing at all
@@ -3596,9 +3601,12 @@ function auditLami() {
         check(!L.extend(table, lamiTiles('H7')), 'lami: a run should not take another suit');
 
         const set = lamiTiles('C7 D7 H7');
-        check(!!L.extend(set, lamiTiles('S7')), 'lami: a set of three should take the fourth suit');
-        check(!L.extend(set, lamiTiles('C7')), 'lami: a set should not take a suit it already holds');
-        console.log('  ✓ a run takes either end, a set takes the suit it is missing');
+        check(!!L.extend(set, lamiTiles('S7')), 'lami: a set of three should take a fourth');
+        check(!!L.extend(set, lamiTiles('C7')), 'lami: a set should take a suit it already holds');
+        check(!L.extend(set, lamiTiles('C8')), 'lami: a set should not take a different number');
+        const full = lamiTiles('C7 D7 H7 S7');
+        check(!L.extend(full, lamiTiles('C7')), 'lami: a set of four is full');
+        console.log('  ✓ a run takes either end, a set takes any card of its number until it is full');
     }
 
     /* --- the opening run, which is not optional ------------------------------
