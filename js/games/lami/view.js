@@ -454,7 +454,7 @@
             const note = shut ? t('lami.mustRun')
                 : ways.length > 1 ? t('lami.jokerPick')
                 : openTo.length ? t('lami.pickMeld')
-                : sel.length && !asMeld && this.target < 0 ? t('lami.notAMeld')
+                : sel.length && !asMeld && this.target < 0 ? this.whyNot(sel)
                 : e.mustOpen(this.you) ? t('lami.mustOpen')
                 : t('lami.hint');
 
@@ -468,6 +468,46 @@
         }
 
         /* ---- input ------------------------------------------------------------ */
+
+        /**
+         * **Why these tiles are not a meld** — the reason, not the verdict.
+         *
+         * "这几张凑不成顺子或同点" is true of every failed selection and
+         * useful for none of them. The two ways a player actually gets this
+         * wrong are both invisible in a row of tiles: three of one number
+         * where two share a suit, and three of one suit where two share a
+         * number. The box holds *two of every card*, so both happen
+         * constantly — and from the ranks alone J♦ J♦ J♠ looks exactly like
+         * the set it very nearly is.
+         */
+        whyNot(sel) {
+            const cfg = this.engine.rules;
+            const real = sel.filter((x) => !L.isJoker(x));
+            // One or two tiles cannot be a meld on their own — but this only
+            // runs when nothing on the table would take them either, and
+            // *that* is the thing a player holding one card wants explained.
+            // A drag that finds no home just snaps back and says nothing.
+            if (sel.length < Math.min(cfg.minRun, cfg.minSet)) {
+                return this.engine.table.length ? t('lami.noHome') : t('lami.tooFew');
+            }
+            if (!real.length) return t('lami.allJokers');
+
+            // One rank throughout: this was meant to be a set.
+            if (real.every((x) => x.r === real[0].r)) {
+                const suits = real.map((x) => x.s);
+                const twice = suits.find((x, i) => suits.indexOf(x) !== i);
+                if (twice) return t('lami.setSameSuit', { suit: L.SUIT_SYMBOL[twice] });
+                return t('lami.notAMeld');
+            }
+            // One suit throughout: this was meant to be a run.
+            if (real.every((x) => x.s === real[0].s)) {
+                const ranks = real.map((x) => x.r).sort((a, b) => a - b);
+                const twice = ranks.find((r, i) => i && r === ranks[i - 1]);
+                if (twice) return t('lami.runSameRank', { rank: L.rankLabel(twice) });
+                return t('lami.runGap');
+            }
+            return t('lami.notAMeld');
+        }
 
         pick(id) {
             const e = this.engine;

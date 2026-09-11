@@ -3190,8 +3190,12 @@ function auditBullBull() {
         ['JS QH KD JC QS',   'FIVE_PIC',      null],
         // 10 + K + Q = 30, leaving a jack and the ace of spades.
         ['10D KH QC JS AS',  'PIC_BLACK_ACE', 1],
-        // 5 + 5 + K = 20, leaving a queen and the ace of clubs.
-        ['5S 5H KD QC AC',   'PIC_BLACK_ACE', 1],
+        // 5 + 5 + K = 20, leaving a queen and the ace of *clubs* — which is
+        // an ordinary ace. 黑 here means 黑桃, the spade, not "a black card",
+        // and the two readings are one card apart on a hand that pays ×4.
+        ['5S 5H KD QC AC',   'BULL_1',        1],
+        // The same hand with the spade instead, which is the real thing.
+        ['5S 5H KD QC AS',   'PIC_BLACK_ACE', 1],
         // Nothing makes ten, twenty or thirty — not even with the swap.
         ['2S 2H 2D 2C 5S',   'NO_BULL',       null],
         // The same four twos with a 3: counted as a 6 it makes 2 + 2 + 6 = 10,

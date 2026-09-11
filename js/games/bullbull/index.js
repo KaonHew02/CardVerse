@@ -30,7 +30,7 @@
 
         extraLabels: {
             bbRounds: 'Hands played', bbWins: 'Hands won', bbBull: '牛牛',
-            bbBaby: '宝宝', bbPicAce: 'Pic + Black Ace', bbFivePic: '五个 Pic',
+            bbBaby: '宝宝', bbPicAce: 'Pic + 黑桃 A', bbFivePic: '五个 Pic',
             bbNoBull: '无牛', forfeits: 'Walked away',
         },
 
@@ -41,7 +41,7 @@
               reward: { coins: 350, xp: 80 }, check: (c) => (c.gameStats.extra.bbBull || 0) >= 1 },
             { id: 'bb-baby', name: '宝宝', icon: '👶', desc: 'Land a 宝宝 — a pair left over.',
               reward: { coins: 400, xp: 90 }, check: (c) => (c.gameStats.extra.bbBaby || 0) >= 1 },
-            { id: 'bb-picace', name: 'Pic + Black Ace', icon: '🖤', desc: 'A picture card and a black ace left over.',
+            { id: 'bb-picace', name: 'Pic + 黑桃 A', icon: '♠️', desc: 'A picture card and the ace of spades left over.',
               reward: { coins: 800, xp: 160 }, check: (c) => (c.gameStats.extra.bbPicAce || 0) >= 1 },
             { id: 'bb-fivepic', name: '五个 Pic', icon: '👑', desc: 'Five picture cards. The best hand there is.',
               reward: { coins: 2000, xp: 400 }, check: (c) => (c.gameStats.extra.bbFivePic || 0) >= 1 },

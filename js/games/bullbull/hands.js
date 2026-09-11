@@ -25,12 +25,13 @@
  * these overlap:
  *
  *     五个 Pic          five picture cards. Also a 宝宝, also 牛牛 — read first.
- *     Pic + Black Ace   a valid split leaving one picture card and A♠ or A♣.
+ *     Pic + 黑桃 A      a valid split leaving one picture card and A♠. The
+ *                       spade, not "a black card" — A♣ is an ordinary ace.
  *     宝宝              a valid split leaving two cards of the same value.
  *     牛牛 … 牛一        the last digit of the two.
  *     无牛              no three cards make a multiple of ten, under any reading.
  *
- * Ranking runs 五个 Pic > Pic + Black Ace > 牛牛 > 宝宝 > 牛九 … 牛一 > 无牛,
+ * Ranking runs 五个 Pic > Pic + 黑桃 A > 牛牛 > 宝宝 > 牛九 … 牛一 > 无牛,
  * with a higher bull ranking a 宝宝 above another 宝宝. Two hands that rank
  * the same push.
  */
@@ -57,7 +58,15 @@
     const isFlexible = (card) => SWAP[value(card)] !== undefined;
 
     const isPic = (card) => card.r >= 11 && card.r <= 13;
-    const isBlackAce = (card) => card.r === 14 && (card.s === 'S' || card.s === 'C');
+    /**
+     * **The spade ace, and only the spade ace.**
+     *
+     * This used to take A♣ as well, on the reading that 黑 means "black".
+     * At this table it means 黑桃 — the spade — and A♣ is an ordinary ace.
+     * The two readings are one card apart and the hand pays ×4, so it is not
+     * a difference anybody can afford to leave ambiguous.
+     */
+    const isSpadeAce = (card) => card.r === 14 && card.s === 'S';
 
     /** The coin table, straight from the rules. */
     const MULT = {
@@ -126,7 +135,7 @@
         const bull = vals.reduce((n, v) => n + v, 0) % 10;
 
         const pba = splits.find(({ two }) =>
-            (isPic(two[0]) && isBlackAce(two[1])) || (isPic(two[1]) && isBlackAce(two[0])));
+            (isPic(two[0]) && isSpadeAce(two[1])) || (isPic(two[1]) && isSpadeAce(two[0])));
         if (pba) return made('PIC_BLACK_ACE', bull, pba.three, pba.two, swaps);
 
         // A 宝宝 is a pair *as counted*: two threes read as two sixes are
@@ -181,7 +190,7 @@
 
     window.CV = window.CV || {};
     window.CV.BullHands = {
-        value, valuesOf, isFlexible, isPic, isBlackAce,
+        value, valuesOf, isFlexible, isPic, isSpadeAce,
         MULT, RANK, SWAP, evaluate, compare,
     };
 })();
