@@ -3892,16 +3892,33 @@ function auditLami() {
         check(plain.seats[0].net === 6 * st, `lami: the winner took ${plain.seats[0].net}, wanted ${6 * st}`);
         check(plain.seats.reduce((n, x) => n + x.net, 0) === 0, 'lami: the plain settlement is not zero-sum');
 
-        // Going out is flat: five stakes from everybody, whatever anybody is
-        // holding. The hand ended before the table had a say in it.
+        // Going out is paid flat by everybody — five stakes each, for having
+        // cleared the rack — **and the ranking runs on top of it**, so what
+        // you were caught holding still decides which of the losers pays
+        // most. It used to be flat and nothing else, which meant a seat
+        // frozen on a full rack paid exactly what a seat one tile from home
+        // paid, and being 大哥 cost nothing at all.
         const out = table((e) => {
-            e.seats.forEach((x) => { x.rack = lamiTiles('C13 D13'); });
-            e.seats[2].rack = [];
+            e.seats.forEach((x) => { x.rack = []; });
+            e.seats[2].rack = [];                          // went out
             e.winner = 2;
+            e.seats[0].rack = lamiTiles('C2 D3');          // 5  — 小哥
+            e.seats[1].rack = lamiTiles('C9 D9');          // 18 — 二哥
+            e.seats[3].rack = lamiTiles('C13 D13 H13');    // 30 — 大哥
         });
-        check(out.seats[2].net === 15 * out.stake,
-            `lami: going out collected ${out.seats[2].net}, wanted ${15 * out.stake}`);
-        check(out.seats[0].net === -5 * out.stake, 'lami: going out should cost 5 stakes each');
+        const so = out.stake;
+        check(out.seats[0].net === -(5 + 1) * so,
+            `lami: 小哥 paid ${out.seats[0].net} on a win, wanted ${-(5 + 1) * so}`);
+        check(out.seats[1].net === -(5 + 2) * so,
+            `lami: 二哥 paid ${out.seats[1].net} on a win, wanted ${-(5 + 2) * so}`);
+        check(out.seats[3].net === -(5 + 3) * so,
+            `lami: 大哥 paid ${out.seats[3].net} on a win, wanted ${-(5 + 3) * so}`);
+        check(out.seats[2].net === (15 + 6) * so,
+            `lami: going out collected ${out.seats[2].net}, wanted ${(15 + 6) * so}`);
+        check(out.seats.reduce((n, x) => n + x.net, 0) === 0, 'lami: the win settlement is not zero-sum');
+        // The order is the point: holding the most costs the most, always.
+        check(out.seats[3].net < out.seats[1].net && out.seats[1].net < out.seats[0].net,
+            'lami: the losers are not ordered by what they were holding');
 
         // The side count runs whatever the hand did: half a stake for each
         // piece of difference, head to head with everybody.

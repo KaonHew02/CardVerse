@@ -400,33 +400,49 @@
             const n = this.seats.length;
 
             /* --- the hand ---------------------------------------------------- */
+            // Going out is paid flat by everybody — it is a bonus for
+            // clearing the rack and has nothing to do with what anyone else
+            // was holding.
             const flat = this.heaven >= 0 ? this.rules.heavenRatio
                 : (this.winner >= 0 && !this.seats[this.winner].rack.length) ? this.rules.outRatio
                 : 0;
-            let ranked;
             if (flat) {
-                ranked = [];
                 for (let i = 0; i < n; i++) {
                     if (i === this.winner) continue;
                     owed[i] -= flat * this.stake;
                     owed[this.winner] += flat * this.stake;
                 }
-            } else {
-                // Fewest points wins; the rest pay by how much they are
-                // holding. A tie on points takes the earlier seat, which is
-                // arbitrary and has to be *something*.
-                ranked = this.seats.map((s) => s.index)
-                    .sort((a, b) => this.seats[a].points - this.seats[b].points || a - b);
-                this.winner = ranked[0];
-                // `ranked` runs from fewest points to most, so the seat one
-                // place behind the winner is 小哥 and the last is 大哥 — and
-                // `rankRatio` is in that same order.
-                const RATIO = this.rules.rankRatio;
-                for (let k = 1; k < ranked.length; k++) {
-                    const pay = (RATIO[k - 1] || 0) * this.stake;
-                    owed[ranked[k]] -= pay;
-                    owed[this.winner] += pay;
-                }
+            }
+
+            /**
+             * **And the ranking runs either way.**
+             *
+             * Fewest points wins; the rest pay by how much they are holding —
+             * 小哥 one stake, 二哥 two, 大哥 three. A tie on points takes the
+             * earlier seat, which is arbitrary and has to be *something*.
+             *
+             * This used to run only in a hand nobody won, so the moment
+             * somebody went out the points stopped mattering at all: a seat
+             * frozen on 131 points paid exactly what a seat on 41 paid, and
+             * being 大哥 cost nothing. The flat rate is for going out; the
+             * ranking is for what you are still holding. They are two
+             * different questions and a hand can answer both.
+             *
+             * The seat that went out has an empty rack, so it sorts first and
+             * collects — it is skipped rather than assumed to be `ranked[0]`,
+             * because 天胡 sets a winner before anybody has played.
+             */
+            const ranked = this.seats.map((s) => s.index)
+                .sort((a, b) => this.seats[a].points - this.seats[b].points || a - b);
+            if (!flat) this.winner = ranked[0];
+            const RATIO = this.rules.rankRatio;
+            let place = 0;
+            for (const i of ranked) {
+                if (i === this.winner) continue;
+                const pay = (RATIO[place] || 0) * this.stake;
+                place++;
+                owed[i] -= pay;
+                owed[this.winner] += pay;
             }
 
             /* --- the side count ---------------------------------------------- */

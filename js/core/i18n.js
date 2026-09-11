@@ -461,7 +461,7 @@
         'lami.rule4': 'Your first lay has to be a run of three, and it is compulsory: if there is a run in your rack you have to lay it — you may not fold on it or spend a joker to skip the turn. Until you have made it you are not on the table and cannot add to anybody else\'s melds.',
         'lami.rule5': 'After that, every turn you must put something down — a new run, a new set, or a tile onto a meld already on the table. Nothing to play? You may spend a joker on its own to buy the turn. If you will not do either, you fold: your rack is frozen and counted at the end, and play carries on without you.',
         'lami.rule6': 'The hand ends when everybody has folded, or the moment somebody empties their rack. Clearing your rack pays 5 stakes from every player. Being dealt twenty tiles that already lie in melds with nothing left over is 天胡, and pays 10 from everybody.',
-        'lami.rule7': 'Otherwise it is counted: face value up to the ten, 10 for J, Q and K, 15 for an ace, 15 for a joker. Fewest points wins, and the three behind pay by how much they are holding — 小哥 1 stake, 二哥 2, and 大哥, holding the most, 3.',
+        'lami.rule7': 'Then every rack is counted, whether anybody went out or not: face value up to the ten, 10 for J, Q and K, 15 for an ace, 15 for a joker. Fewest points wins, and the three behind pay by how much they are holding — 小哥 1 stake, 二哥 2, and 大哥, holding the most, 3. That is on top of anything the flat rate above already paid, so a big rack costs you whether the hand was won or not.',
         'lami.rule8': 'One more count runs underneath all of that, and it does not care who won. Jokers and aces left in your hand are pieces: one each, one more for holding both copies of the same ace, four more for one of every suit. Everybody settles head to head with everybody, and whoever holds more collects half a stake for each piece of difference. The ace you were told to throw is the ace that pays you.',
 
         /* 麻将 */
@@ -1128,7 +1128,7 @@
         'lami.rule4': '第一次打出必须是三张顺子，而且是强制的：手上有顺子就得打出来，不能不要，也不能打一张鬼混过这一轮。没打出之前你不算上桌，也不能往别人的牌组上加牌。',
         'lami.rule5': '之后每一回合都必须打出东西——新顺子、新同点，或者往桌上已有的组里加一张。实在没有，可以单打一张鬼牌换这一回合。都不行就只能不要了：手牌封住，等到最后一起算分，其他人继续打。',
         'lami.rule6': '所有人都不要了，或者有人把手牌打完，这一局就结束。打完手牌，每人赔 5 倍底。发到手的二十张本来就全部成组、一张不剩，那是天胡，每人赔 10 倍。',
-        'lami.rule7': '否则就算分：10 以下按牌面，J、Q、K 算 10，A 算 15，鬼牌也算 15。分最少的赢，后面三个人按手上剩得多少赔——小哥 1 倍，二哥 2 倍，剩最多的大哥 3 倍。',
+        'lami.rule7': '不管有没有人打完，每家的牌都要算分：10 以下按牌面，J、Q、K 算 10，A 算 15，鬼牌也算 15。分最少的赢，后面三个人按手上剩得多少赔——小哥 1 倍，二哥 2 倍，剩最多的大哥 3 倍。这一笔是加在上面那笔固定的之外的，所以手上牌多，无论这局有没有人打完都要多赔。',
         'lami.rule8': '还有一笔账在下面单算，跟谁赢没关系。手上剩的鬼牌和 A 算“只”：一张一只，同一张 A 集齐两副再加一只，四种花色的 A 集齐再加四只。所有人两两对账，只多的向只少的收，每差一只半倍底。叫你扔的那张 A，就是给你赚钱的那张。',
 
         'mj.win': '胡', 'mj.pung': '碰', 'mj.chow': '吃',
