@@ -1097,10 +1097,23 @@
 
 /* Four suits that have to be told apart at a glance, so four colours —
  * two reds and two blacks would make a run of hearts read as diamonds. */
+/* **Four suits, four hues.**
+ *
+ * A four-colour deck puts ♠ in black, and black was the problem: against
+ * ♣'s green it is a difference in *lightness*, which is the first thing a
+ * small tile throws away, and on a dark tile face it all but vanishes. So ♠
+ * takes a hue of its own. Nothing here is a shade of anything else now —
+ * green, blue, red, violet — and the pip is drawn bigger and at full
+ * strength below, because the shape should carry it even if the colour does
+ * not. */
 .lami-C { color: #1d7a45; }
 .lami-D { color: #1d4f9c; }
 .lami-H { color: #c62828; }
-.lami-S { color: #1b2430; }
+.lami-S { color: #7b2aa8; }
+/* The suit under the rank. It was 62% of the text and three-quarters
+ * transparent — decoration, when it is the half of the tile that survives
+ * being colour-blind or badly lit. */
+.tile i { font-size: .72rem; opacity: 1; }
 .tile-joker { background: linear-gradient(150deg, #ffe9b0, #e6b84a); color: #4a2c00; }
 
 .lami { display: flex; flex-direction: column; gap: 10px; min-height: 60vh; }

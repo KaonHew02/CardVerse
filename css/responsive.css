@@ -195,3 +195,29 @@
     .rl-cell { min-height: 26px; padding: 3px 1px; }
     .rl-cell b { font-size: .62rem; }
 }
+
+/* ---- room to see them ----------------------------------------------------
+ *
+ * The tile sizes are set for the narrowest screen that has to hold a rack of
+ * twenty, and then a laptop renders the same 38px tile in the middle of a
+ * 1400px felt with nothing around it. A rank and a suit at that size is a
+ * squint. The desktop gets tiles it can actually read; nothing below 1000px
+ * is touched, because that is where the room ran out in the first place.
+ */
+@media (min-width: 1000px) {
+    /* 拉米 — your rack is the thing you read all game. */
+    .lami-tiles .tile { width: 48px; height: 64px; border-radius: 6px; }
+    .lami-tiles .tile b { font-size: 1.3rem; }
+    .lami-tiles .tile i { font-size: .86rem; }
+    /* And the melds on the table, which you are searching for a home in. */
+    .lami-meld .tile-sm { width: 34px; height: 46px; border-radius: 5px; }
+    .lami-meld .tile-sm b { font-size: 1rem; }
+    .lami-meld .tile-sm i { font-size: .64rem; }
+    /* The recap, where the money is checked against the tiles. */
+    .rc-lami-tiles .tile-sm { width: 30px; height: 40px; }
+    .rc-lami-tiles .tile-sm b { font-size: .92rem; }
+
+    /* 麻将 — the hand, for the same reason. The opponents' walls stay small:
+     * a wall of backs is texture, and its job is to be countable, not read. */
+    .mj-mine .tile { width: 54px; height: 72px; }
+}
