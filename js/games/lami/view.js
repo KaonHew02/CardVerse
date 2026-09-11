@@ -375,13 +375,25 @@
             const d = this.drag;
             this.drag = null;
             if (!d) return;
+            // **Look under the pointer before letting go of the tile.**
+            //
+            // The carried tile is `pointer-events: none` only while it wears
+            // `is-dragging`, and the rack tile animates its transform back
+            // over 120ms. Restoring it first and *then* asking what is under
+            // the pointer found the tile itself — still sliding home, and
+            // now solid — so a tile dropped square on a meld it would join
+            // was never seen to land on it. It fell through to the
+            // rearrangement below and shot to the front of the rack instead,
+            // every time, which is the K♣ and the A♠ sitting first in a
+            // rack that had been sorted.
+            const over = d.moved ? document.elementFromPoint(ev.clientX, ev.clientY) : null;
             d.el.style.transform = '';
             d.el.classList.remove('is-dragging');
             this.markDrops(d.id, false);
             if (!d.moved) return;                 // a tap: let the click select it
             this.dropped = true;                  // …but a drag must not
             setTimeout(() => { this.dropped = false; }, 0);
-            this.dropAt(d.id, ev.clientX, ev.clientY);
+            this.dropAt(d.id, ev.clientX, ev.clientY, over);
         }
 
         /** Which melds on the table would take this one tile. */
@@ -416,8 +428,11 @@
          * 加上去 button sends. Anywhere else it is a rearrangement, and the
          * tile takes the place in the rack the pointer left it at.
          */
-        dropAt(id, x, y) {
-            const over = document.elementFromPoint(x, y);
+        dropAt(id, x, y, over) {
+            // `over` is what was under the pointer while the tile was still
+            // being carried — see `dragEnd` — because by now the tile is
+            // back in the rack and would be what this finds.
+            if (over === undefined) over = document.elementFromPoint(x, y);
             const meld = over && over.closest && over.closest('.lami-meld');
             if (meld) {
                 const at = Number(meld.dataset.meld);
