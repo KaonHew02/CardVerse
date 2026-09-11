@@ -32,6 +32,28 @@
             aria-label="${esc(L.name(tile))}"><b>${L.rankLabel(tile.r)}</b><i>${L.SUIT_SYMBOL[tile.s]}</i></span>`;
     }
 
+    /**
+     * A joker drawn as the card it is standing in for.
+     *
+     * `🃏` on its own is the one tile on the table that says nothing about
+     * what it is doing there, and in a run it is doing something exact. So a
+     * preview draws it as that card with a ring and a 🃏 badge, the same way
+     * the mahjong table draws a 飞 as the tile it became.
+     */
+    let ghostId = 0;
+    const ghost = (s, r, opts) => tileHtml({ s, r, id: 'g' + (ghostId++) },
+        Object.assign({}, opts, { cls: 'lami-ghost' + (opts && opts.cls ? ' ' + opts.cls : '') }));
+
+    /** A run laid out from `lo`, with every joker drawn as its rank. */
+    function runHtml(tiles, rules, lo) {
+        const laid = L.layout(tiles, rules, lo);
+        const real = laid.find((x) => !L.isJoker(x));
+        if (!real) return laid.map((x) => tileHtml(x, { small: true })).join('');
+        return laid.map((x, i) => (L.isJoker(x)
+            ? ghost(real.s, lo + i, { small: true })
+            : tileHtml(x, { small: true }))).join('');
+    }
+
     class LamiView {
         constructor(root, table, session) {
             this.root    = root;
@@ -141,8 +163,7 @@
             const host = this.$('lamiStatus');
             if (e.over) { host.innerHTML = ''; return; }
             if (e.turn === this.you) {
-                host.innerHTML = `<span class="you">${esc(e.played
-                    ? t('lami.keepGoing') : t('lami.yourTurn'))}</span>`;
+                host.innerHTML = `<span class="you">${esc(t('lami.yourTurn'))}</span>`;
                 return;
             }
             host.innerHTML = `<span class="muted">${esc(t('lami.waiting', { name: e.seats[e.turn].name }))}</span>`;
@@ -184,23 +205,45 @@
             const canAdd = this.target >= 0 && this.fits(this.target);
             const joker = options.find((o) => o.type === 'joker');
             const fold = options.find((o) => o.type === 'fold');
-            const done = options.find((o) => o.type === 'done');
             // Until a seat has opened, a set it could otherwise lay is not a
             // legal move — so the button says why rather than just refusing.
             const shut = asMeld && !e.seats[this.you].opened && asMeld.type !== 'run';
 
+            // **What is the joker?** A run that could start on more than one
+            // rank is a real choice — ♥J ♥Q 🃏 is 10-J-Q or J-Q-K — and one
+            // button reading 打出 was the screen making it silently. One
+            // button per reading, each drawn as the run it lays.
+            const ways = (!asMeld || shut) ? [] : L.runWindows(sel, e.rules);
+            const addTiles = canAdd ? e.table[this.target].tiles.concat(sel) : null;
+            const addWays = canAdd ? L.runWindows(addTiles, e.rules) : [];
+
+            const lay = (act, low, tiles, label) =>
+                `<button class="btn primary lami-run" data-act="${act}" data-lo="${low}">
+                    <span class="lami-run-tiles">${runHtml(tiles, e.rules, low)}</span>
+                    <span class="lami-run-label">${esc(label)}</span>
+                 </button>`;
+
+            const playBtns = ways.length > 1
+                ? ways.map((low) => lay('play', low, sel, t('lami.play'))).join('')
+                : `<button class="btn primary big" data-act="play" ${asMeld && !shut ? '' : 'disabled'}>
+                        ${esc(t('lami.play'))}${asMeld ? ` · ${esc(t('lami.' + asMeld.type))}` : ''}</button>`;
+            const addBtns = addWays.length > 1
+                ? addWays.map((low) => lay('add', low, addTiles, t('lami.add'))).join('')
+                : `<button class="btn" data-act="add" ${canAdd ? '' : 'disabled'}>${esc(t('lami.add'))}</button>`;
+
+            const note = shut ? t('lami.mustRun')
+                : (ways.length > 1 || addWays.length > 1) ? t('lami.jokerPick')
+                : sel.length && !asMeld && this.target < 0 ? t('lami.notAMeld')
+                : t('lami.hint');
+
             host.innerHTML = `
-                <div class="btn-row">
-                    <button class="btn primary big" data-act="play" ${asMeld && !shut ? '' : 'disabled'}>
-                        ${esc(t('lami.play'))}${asMeld ? ` · ${esc(t('lami.' + asMeld.type))}` : ''}</button>
-                    <button class="btn" data-act="add" ${canAdd ? '' : 'disabled'}>${esc(t('lami.add'))}</button>
+                <div class="btn-row lami-run-row">
+                    ${playBtns}
+                    ${addBtns}
                     ${joker ? `<button class="btn ghost" data-act="joker">${esc(t('lami.jokerOut'))}</button>` : ''}
                     ${fold ? `<button class="btn ghost" data-act="fold">${esc(t('lami.fold'))}</button>` : ''}
-                    ${done ? `<button class="btn ghost" data-act="done">${esc(t('lami.done'))}</button>` : ''}
                 </div>
-                <div class="muted small">${esc(shut ? t('lami.mustRun')
-                    : sel.length && !asMeld && this.target < 0
-                    ? t('lami.notAMeld') : t('lami.hint'))}</div>`;
+                <div class="muted small">${esc(note)}</div>`;
         }
 
         /* ---- input ------------------------------------------------------------ */
@@ -209,10 +252,31 @@
             const e = this.engine;
             if (e.over || e.turn !== this.you) return;
             if (this.picked.has(id)) this.picked.delete(id); else this.picked.add(id);
-            this.target = -1;
+            this.reaim();
             this.paintBoard();
             this.paintRack();
             this.paintActions();
+        }
+
+        /**
+         * **The meld your tiles would go onto, aimed for you.**
+         *
+         * Picking a tile used to clear the aim, so the sequence that looks
+         * obvious — tap the meld you want, then tap the tile — ended with
+         * 加上去 greyed out and a meld on the table lit up saying it would
+         * take the tile. Two things on screen disagreeing, and the only way
+         * through was to do it in the other order.
+         *
+         * So the aim survives a pick wherever it still fits, and when exactly
+         * one meld on the table would take the selection it is aimed without
+         * being asked — there is nothing to choose between. Two or more and
+         * it waits, because then it is a real question.
+         */
+        reaim() {
+            if (this.target >= 0 && this.fits(this.target)) return;
+            const fits = [];
+            for (let i = 0; i < this.engine.table.length; i++) if (this.fits(i)) fits.push(i);
+            this.target = fits.length === 1 ? fits[0] : -1;
         }
 
         aim(i) {
@@ -225,12 +289,13 @@
             const type = el.dataset.act;
             const seat = this.you;
             const ids = this.selection.map((x) => x.id);
+            // Which rank the run starts on, when the player picked a reading.
+            const lo = el.dataset.lo === undefined ? undefined : Number(el.dataset.lo);
 
-            if (type === 'play')  return void this.table.dispatch({ type: 'play', seat, tiles: ids });
-            if (type === 'add')   return void this.table.dispatch({ type: 'extend', seat, at: this.target, tiles: ids });
-            if (type === 'draw')  return void this.table.dispatch({ type: 'draw', seat });
-            if (type === 'pass')  return void this.table.dispatch({ type: 'pass', seat });
-            if (type === 'done')  return void this.table.dispatch({ type: 'done', seat });
+            if (type === 'play')  return void this.table.dispatch({ type: 'play', seat, tiles: ids, lo });
+            if (type === 'add')   return void this.table.dispatch({ type: 'extend', seat, at: this.target, tiles: ids, lo });
+            if (type === 'joker') return void this.table.dispatch({ type: 'joker', seat });
+            if (type === 'fold')  return void this.table.dispatch({ type: 'fold', seat });
         }
     }
 

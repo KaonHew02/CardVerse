@@ -23,6 +23,8 @@
     /* Suit colours, kept close to a printed set. */
     const BLUE  = '#1d4f9c';
     const GREEN = '#1d7a45';
+    /** The darker green behind the green — 一索's tail, against its body. */
+    const DEEP  = '#155c34';
     const RED   = '#c62828';
 
     /**
@@ -118,14 +120,35 @@
         }).join(''));
     }
 
-    /** A sparrow, in as few strokes as will still read as one. */
+    /**
+     * **一索 is a sparrow**, and it has to look like one.
+     *
+     * This was one closed blob with a highlight down its middle and a dot for
+     * an eye. Nothing in it said *bird* — no beak, no tail, nothing to tell a
+     * head from a body — so it read as a pear, which is a problem for the one
+     * tile on the set that is a picture instead of a count. A player who
+     * cannot name the tile in their own hand cannot plan around it.
+     *
+     * Drawn as the parts a bird is made of instead, because that is what
+     * makes a silhouette readable at 44px: a tail fanning down and back, a
+     * body, a folded wing across it, a head with a **beak** and an eye, and
+     * two feet. It faces left, the way it is printed on a set.
+     */
     function bird() {
         return `
-            <path d="M50 14 C60 20 63 32 58 42 C70 46 78 58 74 72 C68 86 52 90 42 82
-                     C32 74 32 60 40 52 C34 42 38 24 50 14 Z" fill="${GREEN}"/>
-            <path d="M50 24 C56 30 56 40 50 46 C44 40 44 30 50 24 Z" fill="#fffdf3" opacity=".8"/>
-            <circle cx="46" cy="30" r="3.4" fill="#fffdf3"/>
-            <path d="M42 82 L34 92 M56 86 L60 94" stroke="${RED}" stroke-width="4"
+            <path d="M56 58 L92 52 L74 64 L88 78 L64 72 Z" fill="${DEEP}"/>
+            <path d="M44 18 C58 18 68 30 68 46 C68 62 60 74 48 76
+                     C34 78 24 66 24 50 C24 32 32 18 44 18 Z" fill="${GREEN}"/>
+            <path d="M46 34 C58 38 64 50 60 62 C50 64 40 56 39 46 C38 40 41 35 46 34 Z"
+                  fill="#fffdf3" opacity=".34"/>
+            <path d="M30 30 C26 24 28 17 34 15 C40 13 45 17 45 23 C45 27 43 30 39 31 Z"
+                  fill="${GREEN}"/>
+            <path d="M28 26 L10 27 L27 34 Z" fill="${RED}"/>
+            <circle cx="37" cy="23" r="4.2" fill="#fffdf3"/>
+            <circle cx="36" cy="23" r="2.1" fill="#14301f"/>
+            <path d="M40 76 L36 92 M52 74 L58 89" stroke="${RED}" stroke-width="4.5"
+                  stroke-linecap="round" fill="none"/>
+            <path d="M31 92 L41 92 M53 89 L63 89" stroke="${RED}" stroke-width="4"
                   stroke-linecap="round" fill="none"/>`;
     }
 

@@ -83,7 +83,7 @@
     const FAN3 = {
         // Counted rows: these pay *per tile* or *per triplet*, not per hand,
         // so the number here is the rate. See `countedInto`.
-        '鸡胡': 1, '花': 1, '箭刻': 1, '风刻': 1,
+        '鸡胡': 1, '花': 1, '箭刻': 1, '风刻': 1, '门风': 1,
         '碰碰胡': 3, '清一色': 3, '字一色': 3, '小三元': 3,
         '平胡': 4,
         '无花': 10, '大三元': 12, '小四喜': 12,
@@ -108,26 +108,54 @@
     const honourFan = (players) => tableFor(players)['箭刻'] || 0;
 
     /**
-     * **Which winds a seat is paid for.**
+     * **Whose wind is that?** Three answers, and they stack.
      *
-     * A triplet of honours is not one thing. 中, 发 and 白 pay everybody —
-     * they belong to nobody, so there is no seat they could belong to. A
-     * wind pays the seat sitting on it and nobody else: a 南 triplet in
-     * East's hand is three tiles that happen to match.
+     * 中, 发 and 白 pay everybody — they belong to nobody, so there is no
+     * seat they could belong to. Winds are not so simple:
      *
-     * And a wind **no seat is sitting on** pays whoever collects it, for the
-     * same reason the flowers do: at three seats there is no North, and a
-     * North triplet that could never be worth anything to anybody is four
-     * tiles the box carries for nothing.
+     *   **圈风** — the round wind, which at this table is always 东. It is
+     *   nobody's private property, so a 东 triplet pays whoever collects it.
+     *   1番.
+     *   **门风** — the wind of the seat you are sitting in. 1番, and it is
+     *   *on top* of the above: 东东东 in the 东 seat is 圈风 and 门风 both,
+     *   and pays 2番.
+     *   **A wind nobody is sitting on** — 北 at three seats. Nobody can ever
+     *   claim it as their own, so like the round wind it pays whoever
+     *   collects it, for the same reason the flowers do.
+     *
+     * So at three seats: 东东东 pays 1番 to 南 and 西 and 2番 to 东; 北北北
+     * pays 1番 to anybody; 南南南 and 西西西 pay 1番, and only to the seat
+     * sitting on them.
+     *
+     * This replaced a rule where a 风刻 paid *only* the seat sitting on it,
+     * which made 东东东 in the West seat three tiles that happened to match —
+     * and read as a broken counter every time a player laid one down.
      *
      * @param {string} key       the meld's key, e.g. 'z4'
      * @param {number} seatWind  0=东 1=南 2=西 3=北, or -1 when unknown
-     * @param {number} players   how many seats, so how many winds are sat on
      */
-    function windPays(key, seatWind, players) {
-        const owner = Number(key.slice(1)) - 1;
-        return owner >= (players || 4) || owner === seatWind;
+    function isOwnWind(key, seatWind) {
+        return Number(key.slice(1)) - 1 === seatWind;
     }
+
+    /**
+     * Winds that are nobody's to own: the round wind, and any wind with no
+     * seat behind it. Both pay whoever collects them.
+     *
+     * @param {string} key      the meld's key
+     * @param {number} players  how many seats, so how many winds are sat on
+     */
+    function windPaysAll(key, players) {
+        const owner = Number(key.slice(1)) - 1;
+        return owner === ROUND_WIND || owner >= (players || 4);
+    }
+
+    /**
+     * The round wind. 东 — and it does not rotate here: a CardVerse table is
+     * hand after hand rather than four rounds of four, so there is no lap for
+     * the round to turn on. One number to change if that ever arrives.
+     */
+    const ROUND_WIND = 0;
 
     /**
      * Which patterns each one swallows, per table. Applied until nothing
@@ -315,8 +343,11 @@
         const sets = (hand.melds || []).filter((m) => m.type === 'pung' || m.type === 'kong');
         const wind = hand.seatWind === undefined ? -1 : hand.seatWind;
         add('箭刻', sets.filter((m) => isDragonKey(m.key)).length);
-        add('风刻', sets.filter((m) => isWindKey(m.key)
-            && windPays(m.key, wind, hand.players)).length);
+        // Two rows rather than one at a doubled rate, so the recap can say
+        // *why* 东东东 is worth 2番 to the East seat and 1番 to 南 and 西.
+        const winds = sets.filter((m) => isWindKey(m.key));
+        add('风刻', winds.filter((m) => windPaysAll(m.key, hand.players)).length);
+        add('门风', winds.filter((m) => isOwnWind(m.key, wind)).length);
     }
 
     /**
@@ -397,6 +428,6 @@
     }
 
     CV.MJFan = { FAN, FAN3, TABLES, REPLACES, REPLACES3, FLOWER_FAN,
-        tableFor, flowerFan, honourFan, windPays, overlapsFor,
+        tableFor, flowerFan, honourFan, isOwnWind, windPaysAll, overlapsFor,
         calculateFan, progress, countedInto };
 })();

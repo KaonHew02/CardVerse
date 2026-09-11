@@ -591,6 +591,26 @@
 .pk-raise input[type="range"] { width: 100%; }
 .pk-raise .chips { margin: 0; gap: 6px; }
 
+/* **A joker drawn as the card it is standing in for.**
+ *
+ * A run on the table is the one place a 🃏 is doing something exact, and a
+ * 🃏 face is the one thing that cannot say what. Ringed, with the badge, so
+ * it is never mistaken for the real card. */
+.tile.lami-ghost { position: relative; box-shadow: inset 0 -3px 0 rgba(0,0,0,.14), 0 0 0 2px var(--accent); }
+.tile.lami-ghost::after {
+    content: '🃏'; position: absolute; top: -6px; right: -5px; z-index: 2;
+    background: var(--accent); color: var(--accent-ink);
+    font-size: .5rem; font-weight: 900; line-height: 1.6; border-radius: 999px; padding: 0 3px;
+}
+/* One button per way the run could be read, each drawn as the run it lays.
+ * Two buttons both reading 打出 would be the bug this is fixing. */
+.lami-run-row { flex-wrap: wrap; justify-content: center; }
+.lami-run { display: inline-flex; flex-direction: column; align-items: center; gap: 3px;
+    padding: 6px 10px; height: auto; line-height: 1.1; }
+.lami-run-tiles { display: inline-flex; gap: 3px; }
+.lami-run-tiles .tile-sm { width: 26px; height: 36px; border-radius: 5px; }
+.lami-run-label { font-size: .64rem; font-weight: 700; opacity: .8; }
+
 /* ---- 麻将 --------------------------------------------------------------- */
 
 /* Tiles are drawn, not sprited: an ivory face with a lip, a number and a
@@ -714,7 +734,28 @@
 .mj-seat { display: flex; flex-direction: column; gap: 4px; padding: 6px 8px;
     border-radius: 12px; background: rgba(0,0,0,.22); border: 1px solid transparent; }
 .mj-seat.at-top { align-items: center; }
-.mj-seat.is-turn { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(245,185,66,.28); }
+/* **Whose go it is, said loudly enough to find without looking for it.**
+ *
+ * A 1px border in the accent and a 2px ring is a difference you can only see
+ * by comparing two seats side by side — which is exactly what a player is not
+ * doing while they read their own hand. The seat the table is waiting on now
+ * lifts off the felt, breathes, and says so in words. */
+.mj-seat.is-turn {
+    border-color: var(--accent);
+    background: rgba(245,185,66,.1);
+    box-shadow: 0 0 0 2px var(--accent), 0 0 22px rgba(245,185,66,.45);
+    animation: mj-turn-pulse 1.8s ease-in-out infinite;
+}
+@keyframes mj-turn-pulse {
+    0%, 100% { box-shadow: 0 0 0 2px var(--accent), 0 0 14px rgba(245,185,66,.3); }
+    50%      { box-shadow: 0 0 0 2px var(--accent), 0 0 26px rgba(245,185,66,.6); }
+}
+/* The word, because a glow says "something about this seat" and not what. */
+.mj-turn-tag {
+    font-size: .62rem; font-weight: 900; letter-spacing: .04em;
+    padding: 1px 7px; border-radius: 999px; white-space: nowrap;
+    background: var(--accent); color: var(--accent-ink);
+}
 .mj-seat.is-winner { border-color: var(--good); }
 .mj-seat-head { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: .8rem; }
 .mj-seat-head .avatar { font-size: 1.1rem; }
@@ -852,7 +893,17 @@
 
 /* ---- your side ---------------------------------------------------------- */
 
-.mj-you { display: flex; flex-direction: column; align-items: center; gap: 8px; margin-top: auto; }
+.mj-you { display: flex; flex-direction: column; align-items: center; gap: 8px; margin-top: auto;
+    padding: 6px 8px; border-radius: 14px; border: 1px solid transparent; transition: background 180ms; }
+/* Your side of the felt is not a seat box, so the marker that tells an
+ * opponent's box "it is your go" had nowhere to land on yours — the one seat
+ * where knowing it matters most. It lands here. */
+.mj-you.is-turn {
+    border-color: rgba(245,185,66,.55);
+    background: radial-gradient(120% 140% at 50% 100%, rgba(245,185,66,.14), transparent 70%);
+}
+/* Mid-吃 the hand is a set of choices rather than a row of throws. */
+.mj-you.is-picking { border-color: rgba(245,185,66,.85); }
 .mj-you .hand-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: center; }
 .mj-you .mj-melds { justify-content: center; }
 /* Your flowers, as flowers. They are set aside from the hand, so they sit
@@ -930,6 +981,39 @@
 /* The tile you just drew, marked where it lies. Sorting it into place would
  * hide the one tile the decision is actually about. */
 .mj-pick.is-drawn .tile { box-shadow: inset 0 -3px 0 rgba(0,0,0,.14), 0 0 0 2px var(--good); }
+/* A tile taken into a 吃 is held up out of the row, which is what picking a
+ * tile up off a rack looks like — and is the one mark that must not be
+ * confused with the ring meaning "this one would work". */
+.mj-pick.is-picked { transform: translateY(-10px); }
+.mj-pick.is-picked .tile {
+    box-shadow: inset 0 -3px 0 rgba(0,0,0,.14), 0 0 0 3px var(--good), 0 6px 14px rgba(0,0,0,.5);
+}
+.mj-pick.is-picked:not(.is-locked):hover { transform: translateY(-14px); }
+
+/* **The runs your two tiles make, drawn as runs.**
+ *
+ * Three buttons all reading 吃 was the bug. A button that shows the three
+ * tiles going down — with the one on offer ringed, since which rung it lands
+ * on is the whole difference between 3-4-5 and 4-5-6 — is a button you can
+ * tell from the one beside it without pressing either. */
+.mj-chow-row { flex-wrap: wrap; justify-content: center; }
+.mj-chow-run { display: inline-flex; flex-direction: column; align-items: center; gap: 3px;
+    padding: 6px 10px; height: auto; line-height: 1.1; }
+.mj-chow-run-tiles { display: inline-flex; gap: 3px; }
+.mj-chow-run-tiles .tile-sm { width: 30px; height: 40px; border-radius: 5px; }
+.mj-chow-run-label { font-size: .64rem; font-weight: 700; opacity: .8; }
+.mj-chow-rung { display: inline-flex; }
+/* The thrown tile inside the run — the rung that is not coming out of your
+ * hand. Without it two runs over the same three numbers read identically.
+ *
+ * Green, not the accent: the accent ring on a tile in this table already
+ * means "this one is a 飞 standing in", and a run can hold both at once.
+ * Green is what the felt uses for a tile that arrived from outside the
+ * hand, which is exactly what the thrown one is. */
+.mj-chow-rung.is-taken .tile { box-shadow: inset 0 -3px 0 rgba(0,0,0,.14), 0 0 0 2px var(--good); }
+.mj-chow-note { font-size: .72rem; color: rgba(255,255,255,.72); text-align: center; }
+.mj-chow-note.is-bad { color: var(--warn); font-weight: 700; }
+
 .mj-drag-hint { opacity: .75; }
 /* 摸牌. The one button on the table that is a *moment* rather than a choice,
  * so it breathes on its own until it is pressed. */

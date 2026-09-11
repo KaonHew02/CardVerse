@@ -85,6 +85,8 @@
     :root { --anim: 1ms; }
     .card-fresh, .screen, .dialog, .result { animation: none; }
     .mj-shuffle-tile, .mj-pick.is-fresh { animation: none; }
+    /* The seat the table is waiting on still rings; it just stops breathing. */
+    .mj-seat.is-turn, .mj-draw-btn { animation: none; }
 }
 
 @media (max-width: 900px) {

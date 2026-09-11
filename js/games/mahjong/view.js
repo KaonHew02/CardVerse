@@ -238,6 +238,12 @@
         }
 
         paint() {
+            // A half-made 吃 belongs to one thrown tile and dies with it: the
+            // claim was passed, taken by somebody else, or answered, and the
+            // two tiles picked against it mean nothing against the next one.
+            const e0 = this.engine;
+            if (this.pick && (e0.over || e0.phase !== 'claim' || e0.turn !== this.you
+                || !e0.lastDiscard || e0.lastDiscard.tile.id !== this.pick.sig)) this.pick = null;
             this.paintSeats();
             // Before the pool: `paintSpot` decides which tile is out in the
             // middle, and the pool has to leave that one blank in the row.
@@ -312,6 +318,8 @@
             return `
                 <div class="mj-seat at-${place}${turn ? ' is-turn' : ''}${open ? ' is-winner' : ''}">
                     <div class="mj-seat-head">
+                        ${turn ? `<span class="mj-turn-tag">${
+                            esc(t(e.phase === 'claim' ? 'mj.seatClaim' : 'mj.seatTurn'))}</span>` : ''}
                         <span class="avatar">${s.avatar}</span>
                         <span class="who">
                             <span class="name">${esc(s.name)}</span>
@@ -548,6 +556,13 @@
                 return;
             }
             if (e.phase === 'claim' && e.turn === this.you) {
+                // Mid-吃 the question on the screen is no longer "take it or
+                // leave it" — it is which two tiles, and that is what the
+                // line has to ask.
+                if (this.pick) {
+                    host.innerHTML = `<span class="you">${esc(t('mj.chowPick'))}</span>`;
+                    return;
+                }
                 // 抢杠 is not a discard, and the tile is not in the pool: it
                 // is on its way into somebody's kong. Saying so is the only
                 // way the moment reads as anything but a stray claim.
@@ -675,6 +690,10 @@
             const e = this.engine;
             const out = new Map();
             if (this.you < 0 || e.over || e.turn !== this.you) return out;
+            // Picking the tiles for a 吃 is its own question, and the answer
+            // is not "every tile any claim could use" — it is "what still
+            // makes a run with what you have already chosen".
+            if (this.pick) return this.chowMarks();
             const s = e.seats[this.you];
             // A tile can serve more than one offer at once — two 中 and a fly
             // are a 碰 and a 杠 — so the marks add up rather than replace one
@@ -724,6 +743,71 @@
                 }
             }
             return out;
+        }
+
+        /* ---- 吃, picked by hand ------------------------------------------------
+         *
+         * **One thrown tile is not one 吃.**
+         *
+         * A 5筒 thrown at a hand sitting on 3筒 4筒 6筒 7筒 is three runs —
+         * 3-4-5, 4-5-6, 5-6-7 — and a 飞 in that hand is several more. The
+         * table used to put one button on the screen for each of them, all
+         * of them reading 吃 and nothing else: three identical buttons, and
+         * the only way to find out which was which was to press one and look
+         * at what went down.
+         *
+         * So there is one 吃 button, and pressing it asks the question the
+         * buttons were failing to ask — *which two of your tiles?* The tiles
+         * that would make a run are ringed, because a hand is thirteen tiles
+         * and finding the run in it is work the screen can do. But the ring
+         * is a hint and not a rail: **any** two tiles can be picked, and what
+         * comes back is either the run they make or a line saying they do not
+         * make one. A player who can see a run the screen did not ring is
+         * right more often than the ring is.
+         *
+         * The tiles travel with the claim — see `doClaim` — so the meld that
+         * goes down is the one that was on the screen.
+         */
+
+        /** The runs `ids` could still be part of, given what was thrown. */
+        chowRuns(ids) {
+            const e = this.engine;
+            if (!this.pick || this.you < 0) return [];
+            const thrown = e.lastDiscard && e.lastDiscard.tile;
+            if (!thrown) return [];
+            const hand = e.seats[this.you].hand;
+            const mine = ids.map((id) => hand.find((x) => x.id === id)).filter(Boolean);
+            if (mine.length !== ids.length) return [];
+            // Under two tiles the run is still being built, so a rung with
+            // nothing on it yet is not a failure.
+            return this.pick.lows.filter((low) => MJ.chowFill(low, mine, thrown, ids.length < 2));
+        }
+
+        /** Which tiles would still make a run if you added them to the pick. */
+        chowMarks() {
+            const out = new Map();
+            const s = this.engine.seats[this.you];
+            for (const tile of s.hand) {
+                if (this.pick.ids.includes(tile.id)) continue;
+                if (this.chowRuns(this.pick.ids.concat([tile.id])).length) out.set(tile.id, MARK.chow);
+            }
+            return out;
+        }
+
+        /** A run drawn as three tiles, with the one on offer ringed. */
+        chowRunHtml(low) {
+            const e = this.engine;
+            const thrown = e.lastDiscard && e.lastDiscard.tile;
+            const hand = e.seats[this.you].hand;
+            const mine = this.pick.ids.map((id) => hand.find((x) => x.id === id)).filter(Boolean);
+            const tiles = MJ.chowFill(low, mine, thrown) || [];
+            const suit = low[0], lo = Number(low.slice(1));
+            // The thrown tile is marked inside the run, so two runs that
+            // share the same three numbers still read differently: which
+            // rung the tile on offer lands on is the whole difference.
+            return tiles.map((tile, i) =>
+                `<span class="mj-chow-rung${tile === thrown ? ' is-taken' : ''}">${
+                    keyTile(suit + (lo + i), MJ.isFly(tile))}</span>`).join('');
         }
 
         /**
@@ -853,6 +937,13 @@
             const mine = e.turn === this.you && e.phase === 'discard' && !e.over;
             const deal = this.fresh;
             const hint = this.hints();
+            // **The table waits on somebody, and the screen says who.** An
+            // opponent's box lights up on their go; your own side of the felt
+            // is not a box, so it lights up here — otherwise the one state
+            // the table never marked was the one where it was waiting on you.
+            const yours = e.turn === this.you && !e.over;
+            host.className = 'mj-you' + (yours ? ' is-turn' : '')
+                + (this.pick ? ' is-picking' : '');
             // The tile you have just drawn, marked rather than moved: with a
             // hand you have arranged yourself, sorting it into place would
             // hide the one tile the decision is about.
@@ -878,14 +969,17 @@
                 <div class="mj-melds mine">${s.melds.map((m) => this.meldHtml(m)).join('')}</div>
                 <div class="mj-mine">
                     ${this.mine(s).map((tile, i) => `<button class="mj-pick${deal ? ' is-fresh' : ''}${
-                            hint.has(tile.id) ? ' can-act' : ''}${mine ? '' : ' is-locked'}${
+                            hint.has(tile.id) ? ' can-act' : ''}${
+                            mine || this.pick ? '' : ' is-locked'}${
+                            this.pick && this.pick.ids.includes(tile.id) ? ' is-picked' : ''}${
                             drew && drew.id === tile.id ? ' is-drawn' : ''}"
                         ${deal ? `style="animation-delay:${i * 40}ms"` : ''}
                         data-tile="${tile.id}">${tileHtml(tile)}${
                             hint.has(tile.id) ? `<span class="mj-hint">${hint.get(tile.id)}</span>` : ''
                         }</button>`).join('')}
                 </div>
-                <div class="muted small mj-drag-hint">${esc(t('mj.dragHint'))}</div>`;
+                <div class="muted small mj-drag-hint">${esc(t(
+                    this.pick ? 'mj.chowPick' : 'mj.dragHint'))}</div>`;
         }
 
         /* ---- your tiles, in your order ---------------------------------------- */
@@ -995,12 +1089,28 @@
         paintActions() {
             const e = this.engine;
             const host = this.$('mjActions');
+            if (this.pick) { host.innerHTML = this.chowPickHtml(); return; }
             const options = (e.turn === this.you && !e.over) ? e.legalActions(this.you) : [];
             if (!options.length) { host.innerHTML = ''; return; }
 
+            // Every 吃 on offer is one button. More than one run means the
+            // question is *which two of your tiles*, and that is asked with
+            // the tiles rather than with a row of buttons all reading 吃.
+            const lows = options.filter((o) => o.type === 'chow').map((o) => o.low);
             const buttons = [];
+            let chowDone = false;
             for (const o of options) {
                 if (o.type === 'discard') continue;      // tiles are the buttons
+                if (o.type === 'chow') {
+                    if (chowDone) continue;
+                    chowDone = true;
+                    // One way to make it is not a choice — take it on the tap.
+                    buttons.push(lows.length === 1
+                        ? `<button class="btn" data-act="chow" data-low="${lows[0]}">${
+                            esc(t('mj.chow'))}</button>`
+                        : `<button class="btn" data-act="chow-pick">${esc(t('mj.chow'))}</button>`);
+                    continue;
+                }
                 const cls = o.type === 'win' ? 'btn primary big'
                     : o.type === 'draw' ? 'btn primary big mj-draw-btn' : 'btn';
                 const data = o.type === 'kong' && o.key ? ` data-key="${o.key}"` : '';
@@ -1014,20 +1124,82 @@
                 ? `<div class="btn-row">${buttons.join('')}</div>${hint}` : hint;
         }
 
+        /**
+         * The 吃 picker's own buttons: the runs the two picked tiles make,
+         * drawn as runs, and a way back out.
+         *
+         * Under two tiles there is nothing to confirm yet — the hand is where
+         * the picking happens — so the row holds only 返回 and the line saying
+         * the rings are a suggestion.
+         */
+        chowPickHtml() {
+            const ids = this.pick.ids;
+            const runs = ids.length === 2 ? this.chowRuns(ids) : [];
+            const note = ids.length < 2 ? t('mj.chowHintOnly')
+                : !runs.length ? t('mj.chowNone')
+                : runs.length > 1 ? t('mj.chowMany') : '';
+            const bad = ids.length === 2 && !runs.length;
+            const go = runs.map((low) =>
+                `<button class="btn primary mj-chow-run" data-act="chow" data-low="${low}"
+                         data-tiles="${esc(ids.join(','))}">
+                    <span class="mj-chow-run-tiles">${this.chowRunHtml(low)}</span>
+                    <span class="mj-chow-run-label">${esc(t('mj.chowGo'))}</span>
+                 </button>`).join('');
+            return `<div class="btn-row mj-chow-row">${go}
+                <button class="btn" data-act="chow-back">${esc(t('mj.chowBack'))}</button>
+                </div>${note ? `<div class="mj-chow-note${bad ? ' is-bad' : ''}">${
+                    esc(note)}</div>` : ''}`;
+        }
+
         /* ---- input ------------------------------------------------------------ */
 
         discard(id) {
             const e = this.engine;
             if (this.dropped) return;             // that was a drag, not a throw
+            // Mid-吃 a tap is a choice, not a throw. Any tile may be chosen,
+            // ringed or not: the ring is the screen's reading of the hand,
+            // and the player's is allowed to win.
+            if (this.pick) return this.pickTile(id);
             if (e.over || e.turn !== this.you || e.phase !== 'discard') return;
             this.table.dispatch({ type: 'discard', seat: this.you, tile: id });
         }
 
+        /** Take a tile into the 吃, or back out of it. Two is the most. */
+        pickTile(id) {
+            const ids = this.pick.ids;
+            const at = ids.indexOf(id);
+            if (at >= 0) ids.splice(at, 1);
+            else {
+                ids.push(id);
+                // A third tap is a change of mind about the first, not a
+                // dead button — the oldest choice makes room for the newest.
+                if (ids.length > 2) ids.shift();
+            }
+            this.paint();
+        }
+
         act(el) {
             const type = el.dataset.act;
+            const e = this.engine;
+            // 吃 is picked on this screen and only the finished claim is
+            // dispatched, so these two never reach the engine.
+            if (type === 'chow-pick') {
+                const lows = e.legalActions(this.you)
+                    .filter((o) => o.type === 'chow').map((o) => o.low);
+                if (!lows.length || !e.lastDiscard) return;
+                this.pick = { lows, ids: [], sig: e.lastDiscard.tile.id };
+                this.paint();
+                return;
+            }
+            if (type === 'chow-back') { this.pick = null; this.paint(); return; }
+
             const out = { type, seat: this.you };
             if (el.dataset.key) out.key = el.dataset.key;
             if (el.dataset.low) out.low = el.dataset.low;
+            // The two tiles the player put down, carried with the claim: the
+            // meld that lands on the table is the one that was on the screen.
+            if (el.dataset.tiles) out.tiles = el.dataset.tiles.split(',');
+            this.pick = null;
             this.table.dispatch(out);
         }
     }

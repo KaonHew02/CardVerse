@@ -2411,7 +2411,13 @@ function auditMahjong() {
         check(mixed.patterns.some((p) => p.name === '鸡胡'),
             `mj: dropping 混一色 took 鸡胡 with it — got ${names(mixed)}`);
         check(!mixed.patterns.some((p) => p.name === '门清'), 'mj: three seats paid for 门清');
-        check(mixed.totalFan === 2, `mj: a plain hand with a flower is ${mixed.totalFan}番, wanted 2`);
+        // 鸡胡 1, the flower 1, and the 东 triplet 1 — every wind triplet pays,
+        // and this hand is read with no seat, so it is nobody's 门风.
+        check(mixed.totalFan === 3, `mj: a plain hand with a flower is ${mixed.totalFan}番, wanted 3`);
+        check(mixed.patterns.some((p) => p.name === '风刻' && p.fan === 1),
+            `mj: a 东 triplet paid no 风刻 — got ${names(mixed)}`);
+        check(!mixed.patterns.some((p) => p.name === '门风'),
+            'mj: a hand read with no seat was paid 门风');
 
         // 全顺子 in one suit is 平胡 and 清一色, stacked, plus 无花.
         const runs = mjFanOf('112233456789p55p', { table: three, shapes: noShapes, flowers: 1 });
@@ -2463,7 +2469,14 @@ function auditMahjong() {
         const tile = mjTiles('9p')[0];
         const got = e.winFor(B, tile);
         check(!!got, 'mj: that hand plus 9筒 should be a winning shape');
-        check(got.fan.totalFan === 2, `mj: 鸡胡 with one flower is ${got && got.fan.totalFan}番, wanted 2`);
+        // 鸡胡 1, 花 1, and 1 for the 东 triplet — B is sitting 南, so 东 is
+        // not B's 门风 and pays once rather than twice. Three is still not
+        // five, which is the point: the floor stops an ordinary claimed hand.
+        check(got.fan.totalFan === 3, `mj: 鸡胡 with one flower is ${got && got.fan.totalFan}番, wanted 3`);
+        check(got.fan.patterns.some((x) => x.name === '风刻' && x.fan === 1),
+            'mj: 东东东 in the 南 seat paid no 风刻');
+        check(!got.fan.patterns.some((x) => x.name === '门风'),
+            'mj: 东东东 in the 南 seat was paid 门风');
         check(got.ok === false, 'mj: a hand under the minimum was declarable');
 
         e.seats[e.dealer].discards.push(tile);
@@ -2489,7 +2502,60 @@ function auditMahjong() {
             `mj: 平胡 should be 全顺子 at 4番 — got ${flat && flat.fan.patterns.map((x) => x.name)}`);
         check(flat && flat.ok, 'mj: an all-runs hand should clear the floor');
 
-        // Patterns stack rather than swallow one another: 清一色 and 碰碰胡
+        // **Whose wind is that?** The whole table, seat by seat.
+        //
+        // 东 is the round wind (圈风) and pays whoever collects it; the 东
+        // seat also holds it as their own, so it pays them twice. 北 has no
+        // seat behind it at three players and pays anybody. 南 and 西 pay
+        // only the seat sitting on them. The dragons pay everybody.
+        //
+        // Every cell matters: the old rule paid *only* your own wind, which
+        // made 东东东 in the 西 seat three tiles that happened to match and
+        // read as a broken counter every time somebody laid one down.
+        {
+            const three = CV.MJFan.tableFor(3);
+            const WINDS = ['东', '南', '西', '北'];
+            const worth = (key, seatWind, row) => {
+                const got = CV.MJFan.calculateFan({
+                    shape: 'normal', melds: [{ type: 'pung', key }], pair: 'p1', keys: [],
+                    seatWind, players: 3, flowers: 0, flowersHeld: 1,
+                }, three);
+                return (got.patterns.find((x) => x.name === row) || {}).fan || 0;
+            };
+            const wind = (key, seat) => worth(key, seat, '风刻') + worth(key, seat, '门风');
+            //           东 seat  南 seat  西 seat
+            const WANT = {
+                z1: [2, 1, 1],        // 东 — 圈风 to everybody, and 门风 as well to 东
+                z2: [0, 1, 0],        // 南 — only the seat sitting on it
+                z3: [0, 0, 1],        // 西
+                z4: [1, 1, 1],        // 北 — no seat behind it at three players
+            };
+            for (const [key, want] of Object.entries(WANT)) {
+                for (let seat = 0; seat < 3; seat++) {
+                    const got = wind(key, seat);
+                    check(got === want[seat], `mj: ${WINDS[Number(key.slice(1)) - 1].repeat(3)} pays `
+                        + `${got}番 to the ${WINDS[seat]} seat, wanted ${want[seat]}番`);
+                }
+            }
+            for (const key of ['z5', 'z6', 'z7']) {
+                for (let seat = 0; seat < 3; seat++) {
+                    check(worth(key, seat, '箭刻') === 1,
+                        `mj: a dragon triplet did not pay the ${WINDS[seat]} seat`);
+                }
+            }
+            // And through the engine, not just the calculator.
+            const E = e.dealer;                   // the dealer is always 东
+            bare(E);
+            e.seats[E].melds = [];
+            e.seats[E].hand = mjTiles('111z22z123456789p');
+            const own = e.winFor(E, null).fan;
+            const row = (n) => own.patterns.find((x) => x.name === n);
+            check(!!row('风刻') && row('风刻').fan === 1, 'mj: the 东 seat was paid no 风刻 for 东东东');
+            check(!!row('门风') && row('门风').fan === 1, 'mj: the 东 seat was paid no 门风 for 东东东');
+            console.log('  ✓ 圈风 and an empty wind pay anybody, 门风 pays the seat, and 东 pays 东 twice');
+        }
+
+        // Patterns stack rather than swallow one another: 清一色 和 碰碰胡
         // are 3 and 3, and the hand is worth both. There is no 清碰 row any
         // more — it was a name for the sum.
         bare(B);
@@ -2679,6 +2745,97 @@ function auditMahjong() {
                 'mj: the kong left the hand the wrong size');
         }
         console.log('  ✓ 加杠 is offered around before it is made, and stands when nobody wants it');
+    }
+
+    /* --- 吃, with the tiles named by the player -------------------------------
+     *
+     * One thrown tile is several runs, and the screen now asks which two
+     * tiles rather than putting one 吃 button on the table for each. The
+     * claim carries the ids, so the engine has to lay down those tiles and
+     * nothing else — and refuse, changing nothing, when they are not a run.
+     */
+    {
+        const run = (low, mine, thrown, partial) => {
+            const out = MJ.chowFill(low, mjTiles(mine), thrown ? mjTiles(thrown)[0] : null, partial);
+            return out && out.map((x) => (x ? (MJ.isFly(x) ? '飞' : MJ.key(x)) : '_')).join(' ');
+        };
+        const fly = () => ({ suit: 'F', n: 1, id: 'fly' + (mjUid++) });
+        const runFly = (low, mine, thrownFly) => {
+            const out = MJ.chowFill(low, mine.map((k) => (k === 'F' ? fly() : mjTiles(k)[0])),
+                thrownFly === 'F' ? fly() : mjTiles(thrownFly)[0]);
+            return out && out.map((x) => (MJ.isFly(x) ? '飞' : MJ.key(x))).join(' ');
+        };
+
+        check(run('p3', '4p5p', '3p') === 'p3 p4 p5', 'mj: 4筒 5筒 do not take a thrown 3筒');
+        check(run('p3', '3p5p', '4p') === 'p3 p4 p5', 'mj: a thrown 4筒 does not land in the middle');
+        check(run('p3', '3p3p', '5p') === null, 'mj: two 3筒 filled two different rungs');
+        check(run('z1', '1z1z', '1z') === null, 'mj: honours were allowed to run');
+        check(run('p8', '9p9p', '8p') === null, 'mj: a run ran off the end of the suit');
+        check(run('p3', '4p', '3p', true) === 'p3 p4 _', 'mj: a half-made pick is not a partial run');
+        check(run('p3', '4p', '3p') === null, 'mj: a half-made pick was taken for a finished run');
+        // Real tiles take their own rung before any fly is spent on it.
+        check(runFly('p3', ['3p', 'F'], '4p') === 'p3 p4 飞', 'mj: a fly took the rung the 3筒 was filling');
+        check(runFly('p3', ['F', '3p'], '4p') === 'p3 p4 飞', 'mj: the order the tiles were picked in changed the run');
+        check(runFly('p3', ['4p', '5p'], 'F') === '飞 p4 p5', 'mj: a thrown 飞 did not fill the missing rung');
+        check(runFly('p3', ['4p', 'F'], 'F') === null, 'mj: a thrown 飞 paired with a held one');
+
+        const build = () => {
+            const e = new game.Engine({
+                rng: new CV.RNG(31337),
+                config: { room: 'beginner', shoe: { dealer: 0 } },
+                seats: [0, 1, 2].map((i) => new CV.Seat(i, { kind: 'ai', name: 'S' + i, coins: 5000 })),
+            });
+            e.start();
+            const from = 0, me = 1;              // 吃 belongs to the seat after the thrower
+            // Half a suit: a thrown 5筒 is 3-4-5, 4-5-6 and 5-6-7 all at once.
+            e.seats[me].hand = mjTiles('2334667p1234z99p');
+            e.seats[me].melds = [];
+            const tile = mjTiles('5p')[0];
+            e.seats[from].discards.push(tile);
+            e.lastDiscard = { tile, from };
+            e.phase = 'claim';
+            e.turn = me;
+            e.pending = [{ seat: me, options: e.findClaims(tile, from).find((x) => x.seat === me).options,
+                           rank: 1, step: 1 }];
+            e.claimAt = 0;
+            return { e, me, from, tile };
+        };
+
+        {
+            const { e, me } = build();
+            const lows = e.legalActions(me).filter((o) => o.type === 'chow').map((o) => o.low).sort();
+            check(lows.join() === 'p3,p4,p5', `mj: a thrown 5筒 offered ${lows.join()}, wanted three runs`);
+
+            // 6筒 and 7筒 — the top run, which is not the one the engine would
+            // have picked for itself.
+            const want = ['p6', 'p7'].map((k) => e.seats[me].hand.find((x) => MJ.key(x) === k).id);
+            check(e.apply({ type: 'chow', seat: me, low: 'p5', tiles: want }), 'mj: a named 吃 was refused');
+            const meld = e.seats[me].melds[0];
+            check(meld.tiles.map(MJ.key).join(' ') === 'p5 p6 p7', 'mj: the meld is not the run that was named');
+            check(meld.tiles[1].id === want[0] && meld.tiles[2].id === want[1],
+                'mj: the meld is not made of the tiles that were named');
+            check(!e.seats[me].hand.some((x) => want.includes(x.id)), 'mj: the named tiles are still in the hand');
+            check(e.seats[me].hand.length === 11, `mj: ${e.seats[me].hand.length} tiles left, wanted 11`);
+        }
+
+        {
+            // Two tiles that are not a run change nothing at all.
+            const { e, me, from } = build();
+            const bad = ['z1', 'z2'].map((k) => e.seats[me].hand.find((x) => MJ.key(x) === k).id);
+            check(!e.apply({ type: 'chow', seat: me, low: 'p5', tiles: bad }), 'mj: two honours were taken for a run');
+            check(e.seats[me].hand.length === 13, 'mj: a refused 吃 took tiles out of the hand');
+            check(e.seats[me].melds.length === 0, 'mj: a refused 吃 put a meld down');
+            check(e.seats[from].discards.length === 1, 'mj: a refused 吃 took the tile out of the pool');
+        }
+
+        {
+            // A bare 吃 — what the AI sends, and an older screen — still works.
+            const { e, me } = build();
+            check(e.apply({ type: 'chow', seat: me, low: 'p3' }), 'mj: a 吃 naming no tiles was refused');
+            check(e.seats[me].melds[0].tiles.map(MJ.key).join(' ') === 'p3 p4 p5',
+                'mj: a bare 吃 did not pick the run itself');
+        }
+        console.log('  ✓ 吃 lays down the two tiles the player named, and refuses two that are not a run');
     }
 
     /* --- the rules hold under random legal play ------------------------------ */
@@ -3391,6 +3548,38 @@ function auditLami() {
         check(read(str) === want, `lami: "${str}" read as ${read(str)}, wanted ${want}`);
     }
     console.log(`  ${MELDS.length} melds read, the ones that are not melds included`);
+
+    /* --- how a meld is laid out on the table --------------------------------- *
+     *
+     * A joker parked on the end of a run is a joker nobody can read: ♦2 ♦4 ♦5
+     * 🃏 is a 3 in the hole two places to its left, and the meld whose job is
+     * to say so does not. A run goes down by rank with each joker in the slot
+     * it fills; see `L.layout`.
+     */
+    {
+        const laid = (str) => L.layout(lamiTiles(str)).map(L.name).join(' ');
+        const LAYOUTS = [
+            ['D2 D4 D5 X',   '2♦ 🃏 4♦ 5♦'],       // the hole in the middle
+            ['C7 C9 C10 X',  '7♣ 🃏 9♣ 10♣'],
+            ['S2 S5 X X',    '2♠ 🃏 🃏 5♠'],        // two holes, two jokers
+            ['H2 H3 H4',     '2♥ 3♥ 4♥'],           // nothing to move
+            ['S2 S3 S4 X',   '2♠ 3♠ 4♠ 🃏'],        // no hole: the spare rides on top
+            ['S12 S13 S14 X', '🃏 Q♠ K♠ A♠'],       // …unless the run is on the ace
+            ['C5 D5 X',      '5♣ 5♦ 🃏'],           // a set has no order to get wrong
+        ];
+        for (const [str, want] of LAYOUTS) {
+            check(laid(str) === want, `lami: "${str}" laid out as ${laid(str)}, wanted ${want}`);
+        }
+        // Whatever it does with the order, it does not lose or copy a tile.
+        for (const [str] of LAYOUTS) {
+            const tiles = lamiTiles(str);
+            const out = L.layout(tiles);
+            const ids = new Set(out.map((x) => x.id));
+            check(out.length === tiles.length && ids.size === tiles.length
+                && tiles.every((x) => ids.has(x.id)), `lami: the layout of "${str}" lost a tile`);
+        }
+        console.log(`  ${LAYOUTS.length} melds laid out — a joker sits in the hole it fills`);
+    }
 
     /* --- adding to what is on the table -------------------------------------- */
 

@@ -54,7 +54,6 @@
             this.table = [];        // [{ tiles, meld, by }]
             this.spent = [];        // jokers laid alone to buy a turn
             this.dice = null;       // [{ seat, roll }] from the opening throw
-            this.played = 0;        // tiles this seat has put down this turn
             this.passes = 0;
             this.winner = -1;
             this.cached = null;
@@ -163,14 +162,10 @@
                     out.push({ type: 'extend', at: i, label: t('lami.add') });
                 }
             }
-            if (!this.played) {
-                // A lone joker buys the turn. It is the one tile that can be
-                // spent on nothing, and spending it is better than folding.
-                if (s.rack.some(L.isJoker)) out.push({ type: 'joker', label: t('lami.jokerOut') });
-                out.push({ type: 'fold', label: t('lami.fold') });
-            } else {
-                out.push({ type: 'done', label: t('lami.done') });
-            }
+            // A lone joker buys the turn. It is the one tile that can be
+            // spent on nothing, and spending it is better than folding.
+            if (s.rack.some(L.isJoker)) out.push({ type: 'joker', label: t('lami.jokerOut') });
+            out.push({ type: 'fold', label: t('lami.fold') });
             return out;
         }
 
@@ -218,11 +213,10 @@
 
         handle(action) {
             const seat = action.seat;
-            if (action.type === 'play')   return this.doPlay(seat, action.tiles);
-            if (action.type === 'extend') return this.doExtend(seat, action.at, action.tiles);
+            if (action.type === 'play')   return this.doPlay(seat, action.tiles, action.lo);
+            if (action.type === 'extend') return this.doExtend(seat, action.at, action.tiles, action.lo);
             if (action.type === 'joker')  return this.doJoker(seat);
             if (action.type === 'fold')   return this.doFold(seat);
-            if (action.type === 'done')   return this.endTurn(seat, false);
             return false;
         }
 
@@ -235,31 +229,49 @@
             return tiles;
         }
 
-        doPlay(seat, ids) {
+        /**
+         * **One meld a turn.** Laying it *is* the turn — a seat used to be
+         * able to keep going until it pressed 不要了, and a rack that opened
+         * with a run could empty half of itself before anybody else had
+         * moved. Everything a seat does now passes the turn on: a meld, an
+         * add, a joker spent, a fold.
+         *
+         * `lo` is the rank the run starts on when the player has chosen one
+         * — see `L.runWindows`. It decides nothing about whether the meld is
+         * legal; it decides what the joker in it is standing for.
+         */
+        doPlay(seat, ids, lo) {
             const shape = this.validPlay(seat, ids);
             if (!shape) return false;
             // The first thing a seat lays has to be a run. Sets come after.
             if (!this.seats[seat].opened && shape.type !== 'run') return false;
             this.seats[seat].opened = true;
             const tiles = this.pull(seat, ids);
-            this.table.push({ tiles: L.sort(tiles), meld: shape, by: seat });
-            this.played += tiles.length;
+            // Laid out as the meld reads, not as a rack sorts — a joker sits
+            // in the hole it is filling. See `L.layout`.
+            this.table.push({ tiles: L.layout(tiles, this.rules, lo), meld: shape, by: seat, lo });
             this.seats[seat].lastAction = 'play';
             this.emit('play', { seat, tiles, meld: shape, left: this.seats[seat].rack.length });
-            return this.checkOut(seat);
+            if (!this.seats[seat].rack.length) return this.checkOut(seat);
+            return this.endTurn(seat, false);
         }
 
-        doExtend(seat, at, ids) {
+        doExtend(seat, at, ids, lo) {
             const shape = this.validExtend(seat, at, ids);
             if (!shape) return false;
             const tiles = this.pull(seat, ids);
             const spot = this.table[at];
-            spot.tiles = L.sort(spot.tiles.concat(tiles));
+            // The meld keeps the reading it was laid down with wherever the
+            // new tiles still allow it, so adding a tile never quietly slides
+            // somebody else's joker to the other end of the run.
+            const want = lo === undefined ? spot.lo : lo;
+            spot.tiles = L.layout(spot.tiles.concat(tiles), this.rules, want);
             spot.meld = shape;
-            this.played += tiles.length;
+            spot.lo = want;
             this.seats[seat].lastAction = 'extend';
             this.emit('extend', { seat, at, tiles, meld: shape, left: this.seats[seat].rack.length });
-            return this.checkOut(seat);
+            if (!this.seats[seat].rack.length) return this.checkOut(seat);
+            return this.endTurn(seat, false);
         }
 
         /**
@@ -313,7 +325,6 @@
          * not sit there passing, it folds and stops being asked.
          */
         endTurn(seat, folded) {
-            this.played = 0;
             const next = this.nextLive(seat);
             if (next < 0) {
                 this.emit('stalled', {});
@@ -474,7 +485,7 @@
 
         snapshot() {
             return Object.assign(super.snapshot(), {
-                table: this.table.map((m) => ({ tiles: m.tiles.slice(), meld: m.meld, by: m.by })),
+                table: this.table.map((m) => ({ tiles: m.tiles.slice(), meld: m.meld, by: m.by, lo: m.lo })),
                 pool: this.pool.length,
                 dice: this.dice,
                 starter: this.starter,

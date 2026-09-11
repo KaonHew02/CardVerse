@@ -164,6 +164,54 @@
         return `${tile.n} ${{ m: 'Characters', s: 'Bamboo', p: 'Dots' }[tile.suit]}`;
     }
 
+    /**
+     * **吃, laid out rung by rung.**
+     *
+     * A run is three rungs — `low`, `low+1`, `low+2` — and the tiles that
+     * fill them come from two places: the ones the claiming seat puts down
+     * and the one that was thrown. Which tile lands on which rung is not a
+     * free choice once a 飞 is in the picture, so the answer is worked out
+     * here rather than at the two places that need it — the engine, making
+     * the meld, and the table, deciding whether the tiles a player has
+     * picked are a run at all. Two readings of that question that disagree
+     * is a 吃 button that refuses the tiles it is lit for.
+     *
+     * **Real tiles are placed before wilds, always.** A hand holding the
+     * rung never spends a fly on it, and a fly never takes a rung out from
+     * under the real tile that was going to fill it: 3筒 4筒 and a 飞 taking
+     * a thrown 5筒 is 3-4-5 with the fly spare, not a fly parked on the 3.
+     *
+     * Returns the three tiles in run order, or null if they are not a run.
+     * `partial` leaves unfilled rungs as nulls instead of failing, which is
+     * what a half-made selection looks like while a player is still picking.
+     */
+    function chowFill(low, mine, thrown, partial) {
+        if (typeof low !== 'string' || !SUIT_MARK[low[0]]) return null;
+        const suit = low[0], lo = Number(low.slice(1));
+        if (!(lo >= 1 && lo + 2 <= 9)) return null;
+        const rungs = [lo, lo + 1, lo + 2].map((x) => suit + x);
+        const slot = [null, null, null];
+        const put = (tile) => {
+            const at = rungs.indexOf(key(tile));
+            if (at >= 0 && !slot[at]) { slot[at] = tile; return true; }
+            if (!isFly(tile)) return false;
+            const free = slot.indexOf(null);
+            if (free < 0) return false;
+            slot[free] = tile;
+            return true;
+        };
+        const all = mine.concat(thrown ? [thrown] : []);
+        // A thrown 飞 is a wild lying in the pool, and the rest of the run
+        // has to be real: a meld made of a thrown wild and a held wild is
+        // two wild cards buying one meld, and both were worth more as the
+        // tiles the hand was actually missing.
+        if (thrown && isFly(thrown) && mine.some(isFly)) return null;
+        for (const tile of all) if (!isFly(tile) && !put(tile)) return null;
+        for (const tile of all) if (isFly(tile) && !put(tile)) return null;
+        if (!partial && !slot.every(Boolean)) return null;
+        return slot;
+    }
+
     /** The 13 tiles 十三幺 is built from. Four of them are absent at three seats. */
     const ORPHAN_KEYS = ['m1', 'm9', 's1', 's9', 'p1', 'p9', 'z1', 'z2', 'z3', 'z4', 'z5', 'z6', 'z7'];
 
@@ -173,6 +221,6 @@
         FLY_COUNT, FLOWER_COUNT,
         key, parse, isHonour, isWind, isDragon, isTerminal, isOrphan,
         isFlower, isFly, isPlaying, isDun,
-        keysFor, build, sort, cmp, counts, split, name, nameEn,
+        keysFor, build, sort, cmp, counts, split, name, nameEn, chowFill,
     };
 })();

@@ -184,6 +184,80 @@
         return { type: 'set', rank, size: tiles.length, jokers };
     }
 
+    /**
+     * **A meld, in the order it should be looked at.**
+     *
+     * `sort` arranges a *rack* — suit, then rank, jokers pushed to the end —
+     * and a meld on the table was being laid out the same way. That is wrong
+     * for a run: `♦2 ♦4 ♦5 🃏` went down exactly like that, with the joker
+     * parked on the end, and the tile it was standing in for was the 3 in the
+     * hole two places to its left. Every player at the table then has to work
+     * out what the joker is, on a meld whose whole job is to say so — and the
+     * next person wanting to extend it cannot see which end is open.
+     *
+     * So a run is laid out **by rank, with each joker in the slot it fills**.
+     * Spare jokers — the ones not plugging a hole — hang off the top, because
+     * that is the end a run usually grows from; a run already touching the
+     * ace can only take them at the bottom, and does.
+     *
+     * A set has no order to get wrong: one rank, one tile per suit. It keeps
+     * `sort`'s arrangement, jokers last.
+     */
+    function layout(tiles, opts, at) {
+        const cfg = Object.assign({}, RULES, opts || {});
+        const run = asRun(tiles, cfg);
+        if (!run) return sort(tiles);
+
+        const real = tiles.filter((x) => !isJoker(x)).sort((a, b) => a.r - b.r);
+        const jokers = tiles.filter(isJoker);
+        const n = tiles.length;
+        // Where the run starts. The player may have said — `♥J ♥Q 🃏` is
+        // 10-J-Q or J-Q-K and only they know which — and otherwise the spare
+        // jokers ride on top, which is the end a run usually grows from.
+        const windows = runWindows(tiles, cfg);
+        const lo = windows.includes(at) ? at : windows[windows.length - 1];
+        if (lo === undefined) return sort(tiles);
+
+        const out = [];
+        let j = 0;
+        for (let r = lo; r < lo + n; r++) {
+            const idx = real.findIndex((x) => x.r === r);
+            if (idx >= 0) out.push(real[idx]);
+            else if (j < jokers.length) out.push(jokers[j++]);
+            else return sort(tiles);          // cannot happen; never lose a tile
+        }
+        return out.length === n ? out : sort(tiles);
+    }
+
+    /**
+     * **Every rank a joker in this run could be standing for.**
+     *
+     * Returned as the ranks the run could *start* on, lowest first. A run of
+     * `n` tiles has to cover every real tile it holds, so its bottom sits
+     * somewhere between "as high as the top tile allows" and "as low as the
+     * bottom tile allows", clipped to the 2 and the ace at either end.
+     *
+     * One entry means the joker has only one thing it can be and there is
+     * nothing to ask. More than one and the choice is the player's: `♥J ♥Q
+     * 🃏` is 10-J-Q or J-Q-K, the meld is worth the same either way, and
+     * which one it is decides what can be added to it later and what the
+     * rest of the table is reading. The screen used to pick for them.
+     *
+     * Empty for anything that is not a run — a joker in a set has no
+     * position, only a missing suit, and a set takes any suit it is short.
+     */
+    function runWindows(tiles, opts) {
+        const cfg = Object.assign({}, RULES, opts || {});
+        const run = asRun(tiles, cfg);
+        if (!run) return [];
+        const n = run.size;
+        const from = Math.max(LOW, run.hi - n + 1);
+        const to = Math.min(run.lo, TOP - n + 1);
+        const out = [];
+        for (let lo = from; lo <= to; lo++) out.push(lo);
+        return out;
+    }
+
     /** What these tiles are, or null. A run is tried first; both are checked. */
     function meld(tiles, opts) {
         const cfg = Object.assign({}, RULES, opts || {});
@@ -289,6 +363,7 @@
     window.CV.Lami = {
         RULES, SUITS, SUIT_SYMBOL, LOW, TOP, RANKS,
         isJoker, isAce, rankLabel, name, points, handPoints, pieces,
-        build, sort, meld, asRun, asSet, findMelds, partition, extend: extends_,
+        build, sort, layout, runWindows, meld, asRun, asSet, findMelds, partition,
+        extend: extends_,
     };
 })();

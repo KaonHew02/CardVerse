@@ -55,7 +55,7 @@
             const add = this.extension(seat);
             if (add) return { type: 'extend', seat, at: add.at, tiles: [add.tile.id] };
 
-            if (options.some((o) => o.type === 'done')) return { type: 'done', seat };
+            // 'done' is gone — a turn ends with the one thing the seat did.
             // Nothing to lay and nothing to add to. A joker spent on nothing
             // buys another turn, and another turn is worth more than the
             // fifteen points the joker costs sitting in the rack — so it goes

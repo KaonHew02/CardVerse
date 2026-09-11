@@ -595,26 +595,53 @@
                 meld = { type: action.type, key, tiles: mine.concat([tile]),
                          concealed: false, from };
             } else if (action.type === 'chow') {
+                /**
+                 * **The two tiles that go down are the player's to name.**
+                 *
+                 * One thrown tile can be the bottom, the middle or the top
+                 * of a run, and with a 飞 in hand it can be several of each
+                 * — which is why a hand sitting on half a suit used to be
+                 * offered three identical 吃 buttons and no way to tell them
+                 * apart. The screen now asks for the tiles instead, and the
+                 * claim arrives carrying them: `tiles` is two ids out of
+                 * this seat's hand, and they are the two that are spent.
+                 *
+                 * A bare 吃 with no ids still works and is taken the way it
+                 * always was — own copies first, a fly for anything short.
+                 * The AI sends one, and so does a screen that predates this.
+                 */
+                // The claim names the run it is for, and it can arrive from
+                // a guest's screen — so it is read, not trusted.
+                if (typeof action.low !== 'string') return false;
                 const suit = action.low[0], lo = Number(action.low.slice(1));
-                const tiles = [];
-                let stood = false;
-                for (let x = lo; x <= lo + 2; x++) {
-                    const k = suit + x;
-                    if (!wild && k === MJ.key(tile)) { tiles.push(tile); continue; }
-                    // Real copies only while a wild is on offer: the fly in
-                    // the pool takes the one rung the seat is missing, and a
-                    // second wild has no rung left to take.
-                    const got = (take(k, 1, !wild) || [])[0];
-                    if (got) { tiles.push(got); continue; }
-                    if (wild && !stood) { stood = true; tiles.push(tile); continue; }
-                    tiles.push(undefined);
+                const want = Array.isArray(action.tiles) ? action.tiles : null;
+                const idx = [];
+                if (want) {
+                    if (want.length !== 2) return false;
+                    for (const id of want) {
+                        const at = s.hand.findIndex((x, j) => x.id === id && !idx.includes(j));
+                        if (at < 0) return false;
+                        idx.push(at);
+                    }
+                } else {
+                    for (let x = lo; x <= lo + 2; x++) {
+                        const k = suit + x;
+                        if (!wild && k === MJ.key(tile)) continue;
+                        // Real copies only while a wild is on offer: the fly
+                        // in the pool takes the one rung the seat is missing,
+                        // and a second wild has no rung left to take.
+                        let at = s.hand.findIndex((y, j) => MJ.key(y) === k && !idx.includes(j));
+                        if (at < 0 && !wild) {
+                            at = s.hand.findIndex((y, j) => MJ.isFly(y) && !idx.includes(j));
+                        }
+                        if (at >= 0) idx.push(at);
+                    }
                 }
-                if (tiles.some((x) => !x) || (wild && !stood)) {
-                    // Hand back anything already taken for a claim that
-                    // cannot be completed.
-                    for (const x of tiles) if (x && x !== tile) s.hand.push(x);
-                    return false;
-                }
+                // Nothing has left the hand yet, so a run that does not come
+                // out needs nothing put back.
+                const tiles = MJ.chowFill(action.low, idx.map((j) => s.hand[j]), tile);
+                if (!tiles) return false;
+                for (const j of idx.slice().sort((a, b) => b - a)) s.hand.splice(j, 1);
                 meld = { type: 'chow', key: action.low, tiles, concealed: false, from };
             } else return false;
 

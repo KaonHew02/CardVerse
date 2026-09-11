@@ -128,6 +128,45 @@
         }
     }
 
+    /**
+     * **The room code, onto the clipboard.**
+     *
+     * Six digits get read out loud, and they get mistyped — 0 for 8, 5 for
+     * 6 — so the code has always been click-to-copy. Nothing on the screen
+     * said so except one line of grey text under it, which is not where a
+     * player looks for a control, so there is a button now as well. Both
+     * ends call this.
+     *
+     * `navigator.clipboard` only exists in a secure context, and a table
+     * opened from a LAN address over plain http is not one — so there is the
+     * old `execCommand` path behind it, and a toast either way. A copy
+     * button that does nothing at all is worse than no button.
+     */
+    function copyCode() {
+        const done = () => CV.UI.toast(t('room.copied'), 'ok', 1200);
+        const failed = () => CV.UI.toast(t('room.copyFail'), 'warn');
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(room.code).then(done).catch(() => { if (!legacyCopy()) failed(); });
+            return;
+        }
+        if (legacyCopy()) done(); else failed();
+    }
+
+    /** Clipboard-less browsers and plain-http pages: select a scratch field. */
+    function legacyCopy() {
+        try {
+            const box = document.createElement('textarea');
+            box.value = room.code;
+            box.setAttribute('readonly', '');
+            box.style.cssText = 'position:fixed;top:-1000px;opacity:0';
+            document.body.appendChild(box);
+            box.select();
+            const ok = document.execCommand('copy');
+            box.remove();
+            return ok;
+        } catch (_) { return false; }
+    }
+
     function paintLobby() {
         if (!host || !room.code) return;
         const game = CV.Registry.get(room.gameCode);
@@ -137,7 +176,8 @@
         $('rmLobby').innerHTML = `
             <div class="card-panel">
                 <h3>${esc(t('room.code'))}</h3>
-                <div class="room-code" id="rmCode" title="Click to copy">${room.code.split('').map((d) => `<span>${d}</span>`).join('')}</div>
+                <div class="room-code" id="rmCode" title="${esc(t('room.copy'))}">${room.code.split('').map((d) => `<span>${d}</span>`).join('')}</div>
+                <div class="btn-row center"><button class="btn" id="rmCopy">📋 ${esc(t('room.copy'))}</button></div>
                 <p class="muted small center">${esc(t('room.codeNote'))}</p>
             </div>
             <div class="card-panel">
@@ -157,11 +197,8 @@
                 </div>
             </div>`;
 
-        $('rmCode').addEventListener('click', () => {
-            navigator.clipboard && navigator.clipboard.writeText(room.code)
-                .then(() => CV.UI.toast(t('room.copied'), 'ok', 1200))
-                .catch(() => CV.UI.toast(t('room.copyFail'), 'warn'));
-        });
+        $('rmCode').addEventListener('click', copyCode);
+        $('rmCopy').addEventListener('click', copyCode);
         $('rmStart').addEventListener('click', startHosted);
         $('rmClose').addEventListener('click', () => {
             CV.UI.confirm(t('room.closeTitle'), t('room.closeBody'),
@@ -351,10 +388,15 @@
         $('roomBody').innerHTML = `
             <div class="card-panel center">
                 <h3>${esc(t('room.youAreIn'))}</h3>
-                <div class="room-code">${room.code.split('').map((d) => `<span>${d}</span>`).join('')}</div>
+                <div class="room-code" id="rmCode" title="${esc(t('room.copy'))}">${room.code.split('').map((d) => `<span>${d}</span>`).join('')}</div>
                 <p class="muted">${esc(t('room.waitHost'))}</p>
-                <div class="btn-row"><button class="btn ghost" id="rmLeave">${esc(t('table.leaveGo'))}</button></div>
+                <div class="btn-row center">
+                    <button class="btn" id="rmCopy">📋 ${esc(t('room.copy'))}</button>
+                    <button class="btn ghost" id="rmLeave">${esc(t('table.leaveGo'))}</button>
+                </div>
             </div>`;
+        $('rmCode').addEventListener('click', copyCode);
+        $('rmCopy').addEventListener('click', copyCode);
         $('rmLeave').addEventListener('click', () => { teardown(); CV.UI.go('home'); });
     }
 
