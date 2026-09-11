@@ -30,6 +30,9 @@
         code: 'bigtwo',
         name: '锄大D',
         icon: ICON,
+        // The same, for the places markup cannot go. A playing card rather
+        // than ♠, which 德州扑克 already wears in those lists.
+        iconText: '🂡',
         blurb: 'Big Two. The 3♦ opens, suits decide, first hand empty wins.',
         category: 'cards',
         players: [4, 4],

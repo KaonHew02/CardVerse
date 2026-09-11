@@ -61,9 +61,16 @@
             }, game);
             // Most icons are an emoji, which any context can take. A drawn one
             // is markup, and a <select> option or a textContent assignment
-            // would print its source — so those places get a blank instead and
-            // show the name alone.
-            entry.iconText = /^\s*</.test(String(entry.icon)) ? '' : entry.icon;
+            // would print its source — so a game whose icon is drawn names a
+            // plain-text stand-in for those places instead.
+            //
+            // It used to fall back to a blank, which put the two drawn-icon
+            // games in a dropdown where every other row carried an icon and
+            // theirs did not. A missing icon in a list of icons does not read
+            // as "this one has no icon", it reads as a bug.
+            if (entry.iconText === undefined) {
+                entry.iconText = /^\s*</.test(String(entry.icon)) ? '' : entry.icon;
+            }
             games.set(entry.code, entry);
             if (!order.includes(entry.code)) order.push(entry.code);
             return entry;

@@ -69,9 +69,41 @@
 
     /* ---- hosting -------------------------------------------------------- */
 
+    /**
+     * **How many seats, and the game's own settings.**
+     *
+     * An online room used to open at `game.players[1]` and nothing else was
+     * asked, which is fine for a game with one table size and wrong for the
+     * ones that have two. **麻将 at three seats is a different game**: a
+     * different box — dots, winds, dragons, flowers and the 飞, 72 tiles
+     * instead of 136 — a 5番 floor, and a fan table of its own. Opening a
+     * four-seat room and filling it with AI was the only mahjong a friend
+     * could be invited to.
+     *
+     * The same call brings the game's own options across — 一番 is worth
+     * whatever the host says, the same as it is offline.
+     */
+    function hostDefaults(game) {
+        const opts = {};
+        for (const opt of (game.setupOptions || [])) opts[opt.key] = opt.def;
+        return { seats: game.players[1], opts };
+    }
+
+    /** Keep the seat count inside the game's range when the game changes. */
+    function clampSeats(game) {
+        const [lo, hi] = game.players;
+        if (!Number.isInteger(room.seats)) room.seats = hi;
+        room.seats = Math.min(hi, Math.max(lo, room.seats));
+    }
+
     function paintHost() {
         const games = CV.Registry.playable();
-        room = room || { gameCode: games[0].code, roomId: 'beginner', fill: true };
+        room = room || Object.assign({ gameCode: games[0].code, roomId: 'beginner', fill: true },
+                                     hostDefaults(games[0]));
+        const game = CV.Registry.get(room.gameCode);
+        clampSeats(game);
+        const [lo, hi] = game.players;
+        const roomDef = CV.Registry.room(room.roomId);
 
         $('roomBody').innerHTML = `
             <div class="card-panel">
@@ -82,6 +114,20 @@
                 <label class="row-opt"><span>${esc(t('setup.room'))}</span>
                     <select id="rmRoom">${CV.Registry.ROOMS.map((r) => `<option value="${r.id}" ${room.roomId === r.id ? 'selected' : ''}>${r.icon} ${esc(r.name)} — ${esc(t('setup.bets', { lo: fmt(r.bet[0]), hi: fmt(r.bet[1]) }))}</option>`).join('')}</select>
                 </label>
+                ${lo === hi ? '' : `
+                <label class="row-opt"><span>${esc(t('room.seats'))}</span>
+                    <select id="rmSeats">${Array.from({ length: hi - lo + 1 }, (_, i) => lo + i).map((n) =>
+                        `<option value="${n}" ${room.seats === n ? 'selected' : ''}>${
+                            esc(t('room.seatsN', { n }))}</option>`).join('')}</select>
+                </label>
+                <p class="muted small">${esc(t('room.seatsNote'))}</p>`}
+                ${(game.setupOptions || []).map((opt) => `
+                <label class="row-opt"><span>${esc(t(opt.label))}</span>
+                    <select data-ropt="${opt.key}">${opt.choices(roomDef, room).map((c) =>
+                        `<option value="${c.value}" ${room.opts[opt.key] === c.value ? 'selected' : ''}>${
+                            esc(c.label)}</option>`).join('')}</select>
+                </label>
+                ${opt.note ? `<p class="muted small">${esc(t(opt.note))}</p>` : ''}`).join('')}
                 <label class="row-opt"><span>${esc(t('room.fillAI'))}</span>
                     <input type="checkbox" id="rmFill" ${room.fill ? 'checked' : ''}>
                 </label>
@@ -89,8 +135,20 @@
             </div>
             <div id="rmLobby"></div>`;
 
-        $('rmGame').addEventListener('change', (e) => { room.gameCode = e.target.value; });
-        $('rmRoom').addEventListener('change', (e) => { room.roomId = e.target.value; });
+        // Changing the game changes what the rest of the panel is even
+        // asking, so it repaints: a mahjong seat count means nothing to 斗牛,
+        // and a 番 is not a thing 轮盘 has.
+        $('rmGame').addEventListener('change', (e) => {
+            room.gameCode = e.target.value;
+            Object.assign(room, hostDefaults(CV.Registry.get(room.gameCode)));
+            paintHost();
+        });
+        $('rmRoom').addEventListener('change', (e) => { room.roomId = e.target.value; paintHost(); });
+        const seatSel = $('rmSeats');
+        if (seatSel) seatSel.addEventListener('change', (e) => { room.seats = Number(e.target.value); });
+        for (const el of $('roomBody').querySelectorAll('[data-ropt]')) {
+            el.addEventListener('change', (e) => { room.opts[el.dataset.ropt] = Number(e.target.value); });
+        }
         $('rmFill').addEventListener('change', (e) => { room.fill = e.target.checked; });
         $('rmOpen').addEventListener('click', openTable);
     }
@@ -109,7 +167,7 @@
         CV.UI.flash(btn, t('room.opening'), 25000);
         try {
             host = new CV.Net.Host();
-            const code = await host.open(game.players[1]);
+            const code = await host.open(room.seats);
             room.code = code;
             room.started = false;
             btn.disabled = true;
@@ -171,7 +229,7 @@
         if (!host || !room.code) return;
         const game = CV.Registry.get(room.gameCode);
         const people = host.roster();
-        const max = game.players[1];
+        const max = room.seats || game.players[1];
 
         $('rmLobby').innerHTML = `
             <div class="card-panel">
@@ -230,8 +288,8 @@
 
         // Seat 0 is the host; guests keep the seat they were given; the rest are AI.
         const seats = [];
-        const bots = CV.AIPlayer.personas(game.players[1], new CV.RNG());
-        for (let i = 0; i < game.players[1]; i++) {
+        const bots = CV.AIPlayer.personas(room.seats, new CV.RNG());
+        for (let i = 0; i < room.seats; i++) {
             const person = people.find((pl) => pl.seat === i);
             if (i === 0) {
                 seats.push({ kind: 'human', isYou: true, name: p.name, avatar: p.avatar, coins: p.coins });
@@ -243,7 +301,8 @@
         }
 
         room.started = true;
-        room.session = room.session || { game, gameCode: room.gameCode, room: roomDef, seats, shoe: null, lastBet: null, hands: 0 };
+        room.session = room.session || { game, gameCode: room.gameCode, room: roomDef, seats, shoe: null,
+                                         lastBet: null, hands: 0, opts: room.opts };
         room.session.seats = seats;
 
         host.broadcast({ t: 'start', game: room.gameCode, room: room.roomId });
@@ -266,7 +325,8 @@
         table = new CV.Table({
             gameCode: room.gameCode,
             seats: session.seats.map((s, i) => new CV.Seat(i, s)),
-            config: { room: room.roomId, shoe: session.shoe },
+            // The host's own settings, the same shape the solo table passes.
+            config: Object.assign({ room: room.roomId, shoe: session.shoe }, session.opts || {}),
         });
         table.speed = CV.Settings.speed();
 

@@ -51,6 +51,11 @@
         code: 'lami',
         name: 'Lami',
         icon: ICON,
+        // Somewhere a drawn icon cannot go — a <select> option, a header set
+        // by textContent. 🧩 because the game is about finding the pieces
+        // that fit together, and because it is what this repo already calls
+        // Lami everywhere it needs one character.
+        iconText: '🧩',
         blurb: 'Rummy on mahjong tiles. Runs, sets, jokers — empty your rack.',
         category: 'tiles',
         // Four seats and twenty tiles each, fixed: the whole shape of this
