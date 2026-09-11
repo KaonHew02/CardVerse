@@ -3597,6 +3597,68 @@ function auditLami() {
         console.log('  ✓ a run takes either end, a set takes the suit it is missing');
     }
 
+    /* --- the opening run, which is not optional ------------------------------
+     *
+     * Your first lay has to be a run, and a seat holding one has to lay it:
+     * no folding on it, no spending a joker to buy the turn. Until it is down
+     * you are not on the table and may add nothing to anybody else's meld.
+     */
+    {
+        const build = (rack) => {
+            const e = new game.Engine({
+                rng: new CV.RNG(9001), config: { room: 'beginner' },
+                seats: [0, 1, 2, 3].map((i) => new CV.Seat(i, { kind: 'ai', name: 'S' + i, coins: 5000 })),
+            });
+            e.start();
+            const me = e.turn;
+            e.seats[me].opened = false;
+            e.seats[me].folded = false;
+            e.seats[me].rack = lamiTiles(rack);
+            e.table = [{ tiles: lamiTiles('S3 S4 S5'), meld: { type: 'run' }, by: (me + 1) % 4 }];
+            return { e, me };
+        };
+        const types = (e, seat) => e.legalActions(seat).map((o) => o.type).sort().join();
+
+        {
+            // A run in the rack — and a joker, and a set, neither of which is a way out.
+            const { e, me } = build('C3 C4 C5 D7 H7 S7 X');
+            check(e.mustOpen(me) === true, 'lami: a rack holding a run was not made to open');
+            check(types(e, me) === 'play', `lami: a seat that must open was offered ${types(e, me)}`);
+            check(!e.apply({ type: 'fold', seat: me }), 'lami: a seat holding a run was allowed to fold');
+            check(!e.seats[me].folded, 'lami: the refused fold folded the seat anyway');
+            check(!e.apply({ type: 'joker', seat: me }),
+                'lami: a seat holding a run bought the turn with a joker');
+            check(e.seats[me].rack.length === 7, 'lami: the refused joker left the rack');
+            // The set is in the rack and is still not a legal opening.
+            const set = e.seats[me].rack.filter((x) => x.r === 7).map((x) => x.id);
+            check(!e.apply({ type: 'play', seat: me, tiles: set }), 'lami: a set opened a seat');
+            // Nor may it touch the meld already on the table.
+            check(!e.validExtend(me, 0, [e.seats[me].rack.find((x) => x.r === 3 && x.s === 'C').id]),
+                'lami: an unopened seat added to somebody else\'s meld');
+            // The run itself goes down, and that is the whole turn.
+            const run = e.seats[me].rack.filter((x) => x.s === 'C').map((x) => x.id);
+            check(e.apply({ type: 'play', seat: me, tiles: run }), 'lami: the opening run was refused');
+            check(e.seats[me].opened, 'lami: laying the run did not open the seat');
+            check(e.turn !== me, 'lami: the turn did not pass after the opening run');
+        }
+
+        {
+            // No run anywhere — now folding and the joker are back on offer.
+            const { e, me } = build('C3 D7 H9 S11 C13 X');
+            check(e.mustOpen(me) === false, 'lami: a rack with no run was made to open');
+            check(types(e, me) === 'fold,joker,play', `lami: a stuck seat was offered ${types(e, me)}`);
+            check(e.apply({ type: 'fold', seat: me }), 'lami: a seat with no run could not fold');
+        }
+
+        {
+            // A run that only exists because of a joker still has to be laid.
+            const { e, me } = build('C3 C5 X D7 H9');
+            check(e.mustOpen(me) === true, 'lami: a run made with a joker did not count as a run');
+            check(types(e, me) === 'play', 'lami: a joker-run seat was offered a way out');
+        }
+        console.log('  ✓ the opening run is compulsory, and an unopened seat touches nobody else\'s melds');
+    }
+
     /* --- what a tile costs when it is left over ------------------------------ */
 
     {

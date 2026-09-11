@@ -1120,14 +1120,28 @@
 /* A meld the selection would actually go onto says so before it is tried. */
 .lami-meld.can-take { border-color: rgba(61,220,151,.55); cursor: pointer; }
 .lami-meld.is-aimed { border-color: var(--good); background: rgba(61,220,151,.16); }
+/* A meld the tile in your hand would join, lit while you are carrying it. */
+.lami-meld.is-drop { border-color: var(--accent); background: rgba(245,185,66,.18);
+    box-shadow: 0 0 0 2px rgba(245,185,66,.35); }
 
 .lami-rack { display: flex; flex-direction: column; align-items: center; gap: 8px; margin-top: auto; }
 .lami-tiles { display: flex; gap: 3px; flex-wrap: wrap; justify-content: center; padding-top: 14px; }
-.lami-pick { background: none; border: 0; padding: 0; line-height: 0; cursor: pointer; transition: transform 120ms; }
+/* A rack you arrange yourself. Hold a tile to carry it: along the rack to
+ * reorder, or out onto a meld to add it there. It drags on somebody else's
+ * turn too — waiting for the other three is when you tidy your tiles — so
+ * the rack is never `disabled`, which would eat the pointer. */
+.lami-pick { background: none; border: 0; padding: 0; line-height: 0; cursor: grab;
+    transition: transform 120ms; touch-action: pan-y; }
 .lami-pick.is-on { transform: translateY(-12px); }
 .lami-pick.is-on .tile { box-shadow: 0 0 0 2px var(--accent), 0 6px 12px rgba(0,0,0,.5); }
 .lami-pick:disabled { cursor: default; }
 .lami-pick:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* The tile being carried follows the pointer and stops animating under it.
+ * `pointer-events: none` so the drop can see what is *underneath* it. */
+.lami-pick.is-dragging { z-index: 5; cursor: grabbing; transition: none; opacity: .92;
+    pointer-events: none; }
+.lami-pick.is-dragging .tile { box-shadow: 0 8px 18px rgba(0,0,0,.55); }
+.lami-drag-hint { opacity: .75; text-align: center; }
 
 /* ---- 骰子 --------------------------------------------------------------- */
 

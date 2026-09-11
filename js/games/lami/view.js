@@ -62,6 +62,9 @@
             this.session = session;
             this.picked  = new Set();
             this.target  = -1;      // table meld the selection would join
+            this.order   = [];      // your own arrangement of your own rack
+            this.drag    = null;
+            this.dropped = false;   // a drag just ended; swallow the click
         }
 
         get you() { return this.engine.youSeat; }
@@ -80,11 +83,38 @@
             CV.UI.on(this.root, '[data-act]', (el) => this.act(el));
             CV.UI.on(this.root, '[data-pick]', (el) => this.pick(el.dataset.pick));
             CV.UI.on(this.root, '[data-meld]', (el) => this.aim(Number(el.dataset.meld)));
+
+            /**
+             * **Carrying a tile, rather than selecting it.**
+             *
+             * Half of playing rummy is keeping the tiles you are working on
+             * next to each other, and the rack was sorted by the engine and
+             * stuck that way. It drags now, exactly like the mahjong hand:
+             * hold a tile and move it along the rack to reorder, or carry it
+             * out onto a meld on the table to add it there.
+             *
+             * Dropping onto a meld is the same move as 加上去 and goes
+             * through the same engine action — it is a second way to say it,
+             * not a second rule.
+             */
+            this.onDown = (ev) => this.dragStart(ev);
+            this.onMove = (ev) => this.dragMove(ev);
+            this.onUp   = (ev) => this.dragEnd(ev);
+            this.root.addEventListener('pointerdown', this.onDown);
+            window.addEventListener('pointermove', this.onMove, { passive: false });
+            window.addEventListener('pointerup', this.onUp);
+            window.addEventListener('pointercancel', this.onUp);
+
             this.table.onChange((events) => this.onChange(events));
             this.paint();
         }
 
-        unmount() { this.root.innerHTML = ''; }
+        unmount() {
+            window.removeEventListener('pointermove', this.onMove);
+            window.removeEventListener('pointerup', this.onUp);
+            window.removeEventListener('pointercancel', this.onUp);
+            this.root.innerHTML = '';
+        }
 
         onChange(events) {
             for (const e of events) {
@@ -136,9 +166,12 @@
 
         /** Would the current selection go onto meld `i`? */
         fits(i) {
+            const e = this.engine;
             const sel = this.selection;
-            if (!sel.length || this.engine.turn !== this.you || this.engine.over) return false;
-            return !!L.extend(this.engine.table[i].tiles, sel, this.engine.rules);
+            if (!sel.length || e.turn !== this.you || e.over) return false;
+            // Not on the table yet, so nothing goes onto anybody else's meld.
+            if (!e.seats[this.you].opened) return false;
+            return !!L.extend(e.table[i].tiles, sel, e.rules);
         }
 
         paintBoard() {
@@ -163,7 +196,10 @@
             const host = this.$('lamiStatus');
             if (e.over) { host.innerHTML = ''; return; }
             if (e.turn === this.you) {
-                host.innerHTML = `<span class="you">${esc(t('lami.yourTurn'))}</span>`;
+                // A seat that has to open has one move and no way out of it,
+                // and a line telling it it may fold would be a lie.
+                const must = e.mustOpen(this.you);
+                host.innerHTML = `<span class="you">${esc(t(must ? 'lami.mustOpen' : 'lami.yourTurn'))}</span>`;
                 return;
             }
             host.innerHTML = `<span class="muted">${esc(t('lami.waiting', { name: e.seats[e.turn].name }))}</span>`;
@@ -179,7 +215,6 @@
             const host = this.$('lamiRack');
             if (this.you < 0) { host.innerHTML = ''; return; }
             const s = e.seats[this.you];
-            const mine = e.turn === this.you && !e.over;
 
             host.innerHTML = `
                 <div class="hand-head">
@@ -189,9 +224,152 @@
                         : t('lami.piecesNone'))}</span>
                 </div>
                 <div class="lami-tiles">
-                    ${s.rack.map((tile) => `<button class="lami-pick${this.picked.has(tile.id) ? ' is-on' : ''}"
-                        ${mine ? '' : 'disabled'} data-pick="${tile.id}">${tileHtml(tile)}</button>`).join('')}
-                </div>`;
+                    ${this.rack(s).map((tile) => `<button class="lami-pick${this.picked.has(tile.id) ? ' is-on' : ''}"
+                        data-pick="${tile.id}">${tileHtml(tile)}</button>`).join('')}
+                </div>
+                <div class="muted small lami-drag-hint">${esc(t('lami.dragHint'))}</div>`;
+        }
+
+        /* ---- your rack, in your order ----------------------------------------- */
+
+        /**
+         * **Your rack in the order you put it in.**
+         *
+         * The engine sorts by suit then rank, which is the right default and
+         * the wrong thing to be stuck with — the whole game is noticing that
+         * three tiles belong together, and they are easier to notice next to
+         * each other. Anything you have not moved keeps the sorted order, and
+         * a tile that was not there last time slides into the place it would
+         * have sorted to, so a rack you have arranged is not disturbed by one
+         * arriving.
+         *
+         * Ids, not indexes: the rack is rebuilt on every paint.
+         */
+        rack(seat) {
+            const byId = new Map(seat.rack.map((x) => [x.id, x]));
+            const out = [];
+            for (const id of this.order) {
+                const tile = byId.get(id);
+                if (tile) { out.push(tile); byId.delete(id); }
+            }
+            for (const tile of seat.rack) {
+                if (!byId.has(tile.id)) continue;
+                const at = out.findIndex((x) => L.cmp(x, tile) > 0);
+                if (at < 0) out.push(tile); else out.splice(at, 0, tile);
+            }
+            this.order = out.map((x) => x.id);
+            return out;
+        }
+
+        /* ---- dragging ---------------------------------------------------------- */
+
+        /**
+         * Dragging a tile moves it; tapping one selects it. The two live on
+         * the same tile and are told apart by distance — nothing happens
+         * until the pointer has moved further than a tap could, and once it
+         * has, the click that follows on release is swallowed.
+         *
+         * A rack drags on somebody else's turn too. Waiting for the other
+         * three is exactly when you tidy your tiles.
+         */
+        dragStart(ev) {
+            if (ev.button > 0 || this.engine.over) return;
+            const el = ev.target.closest && ev.target.closest('.lami-pick');
+            if (!el) return;
+            this.drag = { id: el.dataset.pick, el, x: ev.clientX, y: ev.clientY, moved: false };
+        }
+
+        dragMove(ev) {
+            const d = this.drag;
+            if (!d) return;
+            const dx = ev.clientX - d.x, dy = ev.clientY - d.y;
+            if (!d.moved && Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
+            if (!d.moved) {
+                d.moved = true;
+                d.el.classList.add('is-dragging');
+                // Light the melds this one tile would join, so carrying it
+                // out onto the table is aimed rather than hopeful.
+                this.markDrops(d.id, true);
+            }
+            d.el.style.transform = `translate(${dx}px, ${dy}px)`;
+            if (ev.cancelable) ev.preventDefault();
+        }
+
+        dragEnd(ev) {
+            const d = this.drag;
+            this.drag = null;
+            if (!d) return;
+            d.el.style.transform = '';
+            d.el.classList.remove('is-dragging');
+            this.markDrops(d.id, false);
+            if (!d.moved) return;                 // a tap: let the click select it
+            this.dropped = true;                  // …but a drag must not
+            setTimeout(() => { this.dropped = false; }, 0);
+            this.dropAt(d.id, ev.clientX, ev.clientY);
+        }
+
+        /** Which melds on the table would take this one tile. */
+        dropTargets(id) {
+            const e = this.engine;
+            const out = [];
+            if (this.you < 0 || e.over || e.turn !== this.you) return out;
+            if (!e.seats[this.you].opened) return out;     // not on the table yet
+            const tile = e.seats[this.you].rack.find((x) => x.id === id);
+            if (!tile) return out;
+            for (let i = 0; i < e.table.length; i++) {
+                if (L.extend(e.table[i].tiles, [tile], e.rules)) out.push(i);
+            }
+            return out;
+        }
+
+        markDrops(id, on) {
+            const melds = this.root.querySelectorAll('.lami-meld');
+            for (const el of melds) el.classList.remove('is-drop');
+            if (!on) return;
+            for (const i of this.dropTargets(id)) {
+                if (melds[i]) melds[i].classList.add('is-drop');
+            }
+        }
+
+        /**
+         * Where the tile was let go.
+         *
+         * Over a meld it would join, that is the move — the same action the
+         * 加上去 button sends. Anywhere else it is a rearrangement, and the
+         * tile takes the place in the rack the pointer left it at.
+         */
+        dropAt(id, x, y) {
+            const over = document.elementFromPoint(x, y);
+            const meld = over && over.closest && over.closest('.lami-meld');
+            if (meld) {
+                const at = Number(meld.dataset.meld);
+                if (this.dropTargets(id).includes(at)) {
+                    this.picked.clear();
+                    this.target = -1;
+                    this.table.dispatch({ type: 'extend', seat: this.you, at, tiles: [id] });
+                }
+                // Dropped on a meld it does not join: the tile goes back
+                // where it came from. Falling through to the rearrangement
+                // below would read the pointer — which is up on the board,
+                // above every tile in the rack — and fling the tile to the
+                // front of the rack for missing.
+                return;
+            }
+
+            const host = this.root.querySelector('.lami-tiles');
+            if (!host) return;
+            const picks = [...host.querySelectorAll('.lami-pick')].filter((p) => p.dataset.pick !== id);
+            const ids = picks.map((p) => p.dataset.pick);
+            // Reading order, because the rack wraps: a tile on a row below
+            // the pointer comes after it whatever the x.
+            let insert = ids.length;
+            for (let i = 0; i < picks.length; i++) {
+                const r = picks[i].getBoundingClientRect();
+                if (y < r.top || (y <= r.bottom && x < r.left + r.width / 2)) { insert = i; break; }
+            }
+            ids.splice(insert, 0, id);
+            this.order = ids;
+            this.paint();
         }
 
         paintActions() {
@@ -234,6 +412,7 @@
             const note = shut ? t('lami.mustRun')
                 : (ways.length > 1 || addWays.length > 1) ? t('lami.jokerPick')
                 : sel.length && !asMeld && this.target < 0 ? t('lami.notAMeld')
+                : e.mustOpen(this.you) ? t('lami.mustOpen')
                 : t('lami.hint');
 
             host.innerHTML = `
@@ -250,6 +429,7 @@
 
         pick(id) {
             const e = this.engine;
+            if (this.dropped) return;             // that was a drag, not a tap
             if (e.over || e.turn !== this.you) return;
             if (this.picked.has(id)) this.picked.delete(id); else this.picked.add(id);
             this.reaim();
@@ -259,24 +439,24 @@
         }
 
         /**
-         * **The meld your tiles would go onto, aimed for you.**
+         * **The meld you aimed at stays aimed.**
          *
          * Picking a tile used to clear the aim, so the sequence that looks
          * obvious — tap the meld you want, then tap the tile — ended with
-         * 加上去 greyed out and a meld on the table lit up saying it would
-         * take the tile. Two things on screen disagreeing, and the only way
-         * through was to do it in the other order.
+         * 加上去 greyed out beside a meld lit up saying it would take the
+         * tile. Two things on screen disagreeing, and the only way through
+         * was to do it in the other order.
          *
-         * So the aim survives a pick wherever it still fits, and when exactly
-         * one meld on the table would take the selection it is aimed without
-         * being asked — there is nothing to choose between. Two or more and
-         * it waits, because then it is a real question.
+         * So an aim survives a pick for as long as it still fits. It is
+         * **never made for you**: the screen briefly aimed the only meld that
+         * fit, on the grounds that there was nothing to choose between — but
+         * a target you did not set is a target you did not notice, and 加上去
+         * lighting up pointing at somebody else's meld is the game playing
+         * your tile for you. You pick the tiles, you pick the meld, you press
+         * the button. The table only ever says what *would* work.
          */
         reaim() {
-            if (this.target >= 0 && this.fits(this.target)) return;
-            const fits = [];
-            for (let i = 0; i < this.engine.table.length; i++) if (this.fits(i)) fits.push(i);
-            this.target = fits.length === 1 ? fits[0] : -1;
+            if (this.target >= 0 && !this.fits(this.target)) this.target = -1;
         }
 
         aim(i) {

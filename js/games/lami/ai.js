@@ -67,6 +67,12 @@
         /** The first tile in hand that legally joins a meld on the table. */
         extension(seat) {
             const e = this.engine;
+            // **Not before you have opened.** A seat that has not laid its
+            // own run is not on the table and may add nothing to anybody
+            // else's meld — rule 4. The AI was doing it anyway, because the
+            // engine only stopped it by not offering the button, which an
+            // AI does not press.
+            if (!e.seats[seat].opened) return null;
             const rack = e.seats[seat].rack;
             for (let at = 0; at < e.table.length; at++) {
                 const spot = e.table[at];

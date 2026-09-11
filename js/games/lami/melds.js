@@ -135,11 +135,18 @@
 
     /** Suit order, then rank — the way a rack is arranged before you look at it. */
     const ORDER = { C: 0, D: 1, H: 2, S: 3 };
-    const sort = (tiles) => tiles.slice().sort((a, b) => {
+    /**
+     * Where one tile sits against another in a sorted rack. Exported because
+     * a rack you have arranged yourself still has to put a *new* tile
+     * somewhere, and "where it would have sorted" is the only answer that
+     * does not disturb the arrangement.
+     */
+    const cmp = (a, b) => {
         if (isJoker(a) !== isJoker(b)) return isJoker(a) ? 1 : -1;
         if (isJoker(a)) return 0;
         return ORDER[a.s] - ORDER[b.s] || a.r - b.r;
-    });
+    };
+    const sort = (tiles) => tiles.slice().sort(cmp);
 
     /* ---- what is a meld ---------------------------------------------------- */
 
@@ -265,6 +272,25 @@
         return asRun(tiles, cfg) || asSet(tiles, cfg);
     }
 
+    /**
+     * **Is there a run in this rack?** — the question the opening turn
+     * turns on.
+     *
+     * Your first lay has to be a run, and it is not optional: a seat holding
+     * one has to put it down rather than folding or buying the turn with a
+     * joker. So the engine has to be able to answer "could you have opened?"
+     * before it will let a seat do anything else.
+     *
+     * It answers with **the same search the AI plays from**, deliberately.
+     * If the engine believed a run was there and the AI could not find it,
+     * the AI would offer 不要了, have it refused, and the table would stop
+     * with nobody able to move. One search, one answer.
+     */
+    function canOpen(tiles, opts) {
+        const cfg = Object.assign({}, RULES, opts || {});
+        return findMelds(tiles, cfg).some((cards) => (meld(cards, cfg) || {}).type === 'run');
+    }
+
     /** Points left in a hand, which is what a round is scored on. */
     const handPoints = (tiles) => tiles.reduce((n, x) => n + points(x), 0);
 
@@ -363,7 +389,7 @@
     window.CV.Lami = {
         RULES, SUITS, SUIT_SYMBOL, LOW, TOP, RANKS,
         isJoker, isAce, rankLabel, name, points, handPoints, pieces,
-        build, sort, layout, runWindows, meld, asRun, asSet, findMelds, partition,
-        extend: extends_,
+        build, sort, cmp, layout, runWindows, meld, asRun, asSet, findMelds, canOpen,
+        partition, extend: extends_,
     };
 })();

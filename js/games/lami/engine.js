@@ -162,10 +162,17 @@
                     out.push({ type: 'extend', at: i, label: t('lami.add') });
                 }
             }
-            // A lone joker buys the turn. It is the one tile that can be
-            // spent on nothing, and spending it is better than folding.
-            if (s.rack.some(L.isJoker)) out.push({ type: 'joker', label: t('lami.jokerOut') });
-            out.push({ type: 'fold', label: t('lami.fold') });
+            // **The opening run is compulsory.** A seat holding a run has to
+            // lay it — it cannot fold on it, and it cannot buy the turn with
+            // a joker. Everybody is on the table by the end of their first
+            // playable turn, which is what makes the opening a race rather
+            // than a thing you sit out while your rack gets cheaper.
+            if (!this.mustOpen(seat)) {
+                // A lone joker buys the turn. It is the one tile that can be
+                // spent on nothing, and spending it is better than folding.
+                if (s.rack.some(L.isJoker)) out.push({ type: 'joker', label: t('lami.jokerOut') });
+                out.push({ type: 'fold', label: t('lami.fold') });
+            }
             return out;
         }
 
@@ -196,14 +203,33 @@
             return out;
         }
 
+        /**
+         * A seat that has not opened and is holding a run. It has exactly one
+         * legal move — lay the run — and `legalActions` offers nothing else.
+         */
+        mustOpen(seat) {
+            const s = this.seats[seat];
+            return !s.opened && !s.folded && L.canOpen(s.rack, this.rules);
+        }
+
         validPlay(seat, ids) {
             if (this.over || seat !== this.turn) return null;
             const tiles = this.take(seat, ids);
-            return tiles ? L.meld(tiles, this.rules) : null;
+            const shape = tiles ? L.meld(tiles, this.rules) : null;
+            // The first thing a seat lays has to be a run. Sets come after —
+            // and the answer lives here rather than only in `doPlay`, so the
+            // legality check, the screen and the move all agree.
+            if (shape && !this.seats[seat].opened && shape.type !== 'run') return null;
+            return shape;
         }
 
         validExtend(seat, at, ids) {
             if (this.over || seat !== this.turn) return null;
+            // **Until you have opened you are not on the table.** Nothing of
+            // yours goes onto anybody else's meld — rule 4, and it was only
+            // being enforced by `legalActions` not offering the button, which
+            // `isLegal` goes around.
+            if (!this.seats[seat].opened) return null;
             const spot = this.table[at];
             if (!spot) return null;
             const tiles = this.take(seat, ids);
@@ -281,6 +307,10 @@
          * table where everybody can see what it cost.
          */
         doJoker(seat) {
+            // Not instead of the opening run. A joker that could be the
+            // missing rung of that run is not a joker you may throw away to
+            // avoid laying it.
+            if (this.mustOpen(seat)) return false;
             const s = this.seats[seat];
             const idx = s.rack.findIndex(L.isJoker);
             if (idx < 0) return false;
@@ -294,6 +324,7 @@
 
         /** Nothing to play. The rack is frozen and counted at the end. */
         doFold(seat) {
+            if (this.mustOpen(seat)) return false;      // lay the run first
             const s = this.seats[seat];
             s.folded = true;
             s.lastAction = 'fold';
