@@ -444,8 +444,20 @@
                 ? addWays.map((low) => lay('add', low, addTiles, t('lami.add'))).join('')
                 : `<button class="btn" data-act="add" ${canAdd ? '' : 'disabled'}>${esc(t('lami.add'))}</button>`;
 
+            // **Melds your tiles would join, that you have not aimed at yet.**
+            //
+            // They light up green on the board; 加上去 stays dead until one of
+            // them is chosen, which is correct — the screen must not pick a
+            // meld for you — but the line underneath was saying "这几张凑不成
+            // 顺子或同点", which is about laying a *new* meld and reads, next
+            // to two lit melds and a dead button, as a flat refusal. It is
+            // the one place the table says two opposite things at once.
+            const openTo = (sel.length && this.target < 0)
+                ? e.table.map((_, i) => i).filter((i) => this.fits(i)) : [];
+
             const note = shut ? t('lami.mustRun')
                 : (ways.length > 1 || addWays.length > 1) ? t('lami.jokerPick')
+                : openTo.length ? t('lami.pickMeld')
                 : sel.length && !asMeld && this.target < 0 ? t('lami.notAMeld')
                 : e.mustOpen(this.you) ? t('lami.mustOpen')
                 : t('lami.hint');
