@@ -32,11 +32,13 @@
      */
     const RULES = {
         copies: 2,        // how many of each tile in the box
-        jokers: 12,       // how many jokers
+        jokers: 8,        // how many jokers — 104 numbered tiles + 8 = the 112-tile box
         hand: 20,         // tiles dealt to each player
         minRun: 3,        // shortest run
         minSet: 3,        // shortest set
-        maxSet: 4,        // a set cannot outgrow the four suits
+        maxSet: 0,        // how big a set may get; 0 is no limit — the box
+                          // holds two of every tile, so eight of a number
+                          // is real, and the table does not cap it
         wrap: false,      // may a run pass A and come back to 2
         jokerPoints: 15,  // what a joker left in hand costs — an ace's worth
         openWith: 0,      // points needed for a first meld; 0 turns it off
@@ -188,17 +190,22 @@
      * a set was being refused with no way to see why: ♦2 ♥2 ♠2 sitting on
      * the table and a ♠2 in your hand that cannot join it.
      *
-     * Same number is the whole test now. `maxSet` still caps it at four,
-     * which is a separate rule about how big a meld gets and is unchanged.
+     * Same number is the whole test now — and there is **no ceiling**. A
+     * set used to stop at four, one per suit, and a K♠ in hand was refused
+     * by K♣ K♣ K♦ K♥ on the table with nothing to say but "full". The box
+     * holds two of every tile, so eight of a number is a real thing to
+     * hold, and a set takes as many as anyone has. `maxSet` is kept as a
+     * rule for a table that wants the cap back; 0 is off.
      */
     function asSet(tiles, cfg) {
         const real = tiles.filter((x) => !isJoker(x));
         const jokers = tiles.length - real.length;
-        if (!real.length || tiles.length < cfg.minSet || tiles.length > cfg.maxSet) return null;
+        if (!real.length || tiles.length < cfg.minSet) return null;
+        if (cfg.maxSet && tiles.length > cfg.maxSet) return null;
 
         const rank = real[0].r;
         if (!real.every((x) => x.r === rank)) return null;
-        if (jokers > cfg.maxSet - real.length) return null;
+        if (cfg.maxSet && jokers > cfg.maxSet - real.length) return null;
         return { type: 'set', rank, size: tiles.length, jokers };
     }
 
@@ -308,12 +315,20 @@
     /* ---- finding melds ------------------------------------------------------ */
 
     /**
-     * Every meld worth playing out of `tiles`, longest first.
+     * Every meld worth playing out of `tiles`, **thriftiest first**.
      *
      * Not every subset — that is 2^14 — but every run inside each suit and
      * every set of each rank, which is where melds actually live. Jokers are
      * offered to a meld only when it cannot be made without them, so they
      * are not spent on a hand that did not need them.
+     *
+     * Longest first was the old order, and it was a joker sink: a rack of
+     * 8♣ J♣ A♣ and five jokers had "8 🃏 🃏 J 🃏 🃏 A" come up as its best
+     * meld, every turn, with 8♣ 8♦ 8♠ sitting right there costing nothing.
+     * A joker is the most useful tile in the box and the last one you want
+     * to spend, so the order is now: fewest jokers, then most real tiles.
+     * And a meld that is more joker than tile is not offered at all — it is
+     * still legal to lay by hand, it is just never the suggestion.
      */
     function findMelds(tiles, opts) {
         const cfg = Object.assign({}, RULES, opts || {});
@@ -329,7 +344,7 @@
                 for (let j = i + 1; j < bySuit.length; j++) {
                     if (bySuit[j].r === picked[picked.length - 1].r) continue;   // a duplicate copy
                     picked.push(bySuit[j]);
-                    for (let w = 0; w <= jokers.length; w++) {
+                    for (let w = 0; w <= Math.min(jokers.length, picked.length); w++) {
                         const cards = picked.concat(jokers.slice(0, w));
                         if (meld(cards, cfg)) { out.push(cards.slice()); break; }
                     }
@@ -337,20 +352,30 @@
             }
         }
 
-        // Sets: one rank at a time, one tile per suit.
+        // Sets: one rank at a time, every copy of it — a set has no cap
+        // and the suits do not matter, so both K♣ go in.
         for (let r = LOW; r <= TOP; r++) {
-            const bySuit = new Map();
-            for (const x of real) if (x.r === r && !bySuit.has(x.s)) bySuit.set(x.s, x);
-            const picked = [...bySuit.values()];
-            for (let take = cfg.minSet; take <= Math.min(cfg.maxSet, picked.length + jokers.length); take++) {
+            const picked = real.filter((x) => x.r === r).sort((a, b) => ORDER[a.s] - ORDER[b.s]);
+            const cap = cfg.maxSet || Infinity;
+            for (let take = cfg.minSet; take <= Math.min(cap, picked.length + jokers.length); take++) {
                 const useReal = Math.min(picked.length, take);
+                if (take - useReal > useReal) break;      // more joker than tile
                 const cards = picked.slice(0, useReal).concat(jokers.slice(0, take - useReal));
                 if (cards.length === take && meld(cards, cfg)) out.push(cards);
             }
         }
 
-        return out.sort((a, b) => b.length - a.length
-            || a.filter(isJoker).length - b.filter(isJoker).length);
+        // Two copies of a tile make the same meld twice; show it once.
+        const seen = new Set();
+        const once = out.filter((cards) => {
+            const key = cards.map(name).sort().join(' ');
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+        });
+        const jokersIn = (cards) => cards.filter(isJoker).length;
+        return once.sort((a, b) => jokersIn(a) - jokersIn(b)
+            || (b.length - jokersIn(b)) - (a.length - jokersIn(a)));
     }
 
     /**
@@ -391,9 +416,156 @@
         return walk(sort(tiles));
     }
 
-    /** Could `tiles` be added to `existing` and still be a meld? */
+    /**
+     * **The rank a laid run starts on**, read off the tiles as they sit.
+     *
+     * `layout` puts a run down by rank with each joker in the slot it
+     * fills, so the first real tile, less its position, is the bottom of
+     * the run — whatever the run was told when it went down. Undefined for
+     * a set, or for anything with no real tile in it.
+     */
+    function readingOf(tiles) {
+        const i = tiles.findIndex((x) => !isJoker(x));
+        return i < 0 ? undefined : tiles[i].r - i;
+    }
+
+    /**
+     * Could `tiles` be added to `existing` and still be a meld?
+     *
+     * **A joker on the table stays what it is.** `2♠ 🃏 4♠ 5♠ 6♠ 7♠` has a
+     * joker standing for the 3, and dropping a real 3♠ on it used to be
+     * accepted — the meld still read as a run — with the joker then shoved
+     * to the far end to become an 8. That is replacing a joker, which is
+     * not adding to a meld, and it rewrites what somebody else laid. So a
+     * run takes new tiles only *past its ends*: any real tile whose rank the
+     * run already covers, joker or not, is refused. A set has no slots to
+     * hold, and takes anything of its number.
+     */
     function extends_(existing, tiles, opts) {
-        return meld(existing.concat(tiles), opts);
+        const cfg = Object.assign({}, RULES, opts || {});
+        const before = meld(existing, cfg);
+        const after = meld(existing.concat(tiles), cfg);
+        if (!after) return null;
+        if (before && before.type === 'run' && after.type === 'run') {
+            const lo = readingOf(existing);
+            const hi = lo + existing.length - 1;
+            // The new real tiles have to run straight on from an end —
+            // 7 under an 8, or 7 6 under it — never into the run, and never
+            // leaving a hole that a joker already on the table would have
+            // to move over and fill. 6♦ under 8♦ 9♦ 10♦ 🃏 Q♦ K♦ 🃏 reads
+            // as a run only by turning the top joker into a 7, and that is
+            // the slide this is here to stop.
+            const ranks = tiles.filter((x) => !isJoker(x)).map((x) => x.r);
+            const below = ranks.filter((r) => r < lo).sort((a, b) => b - a);
+            const above = ranks.filter((r) => r > hi).sort((a, b) => a - b);
+            if (below.length + above.length !== ranks.length) return null;
+            if (below.some((r, i) => r !== lo - 1 - i)) return null;
+            if (above.some((r, i) => r !== hi + 1 + i)) return null;
+            // New jokers hang off the top, or off the bottom once the top
+            // is at the ace.
+            const spare = tiles.length - ranks.length;
+            let top = hi + above.length + spare;
+            let bottom = lo - below.length;
+            if (top > TOP) { bottom -= top - TOP; top = TOP; }
+            if (bottom < LOW) return null;
+            after.reading = bottom;      // where the run now starts
+        }
+        return after;
+    }
+
+    /* ---- what to play ------------------------------------------------------- */
+
+    /**
+     * **Every move worth making, in the order worth making them.**
+     *
+     * The scanner used to answer only "what melds are in this rack", and
+     * both the AI and the on-screen suggestion took the first of those —
+     * which had a rack holding 5♦ 6♦ lay a set of aces while 2♦ 3♦ 4♦ sat
+     * on the table waiting for exactly those two tiles. Adding to what is
+     * already down is the cheaper move: it spends fewer tiles of yours to
+     * shed the same count, keeps your own melds intact for later, and
+     * leaves the jokers alone.
+     *
+     * So the order is:
+     *
+     *     1. add to a meld on the table, no joker — most tiles first
+     *     2. a new run, no joker
+     *     3. a new set, no joker
+     *     4. a new run that needs a joker — fewest jokers first
+     *     5. a new set that needs a joker
+     *     6. a joker onto a meld on the table
+     *
+     * A joker is the last thing to spend. Any move that does without one
+     * ranks above every move that needs one, whatever it sheds — the AI
+     * that lays 8 🃏 🃏 J 🃏 🃏 A on its first turn has nothing left for the
+     * three turns after.
+     *
+     * Before a seat has opened only new runs are moves at all, so `opened`
+     * false leaves just 2 and 4. Each entry is `{ tiles, at }` — `at` is the
+     * table index to add to, or -1 for a new meld — which is exactly what
+     * `extend` and `play` take.
+     */
+    function plan(rack, table, opts, opened) {
+        const cfg = Object.assign({}, RULES, opts || {});
+        const out = [];
+        const jokersIn = (cards) => cards.filter(isJoker).length;
+        const realIn = (cards) => cards.length - jokersIn(cards);
+        const real = rack.filter((x) => !isJoker(x));
+        const spare = rack.find(isJoker);
+
+        // 1 and 6: onto the table. Gather everything of yours a meld would
+        // take, and take it in one go — 5♦ and 6♦ both onto 2♦ 3♦ 4♦.
+        const adds = [];
+        const jokerAdds = [];
+        if (opened) {
+            (table || []).forEach((spot, at) => {
+                const laid = spot.tiles || spot;
+                const shape = meld(laid, cfg);
+                if (!shape) return;
+                let tiles = [];
+                if (shape.type === 'set') {
+                    tiles = real.filter((x) => x.r === shape.rank);
+                } else {
+                    const lo = readingOf(laid), hi = lo + laid.length - 1;
+                    const inSuit = real.filter((x) => x.s === shape.suit);
+                    const up = [], down = [];
+                    for (let r = hi + 1; r <= TOP; r++) {
+                        const x = inSuit.find((y) => y.r === r);
+                        if (!x) break;
+                        up.push(x);
+                    }
+                    for (let r = lo - 1; r >= LOW; r--) {
+                        const x = inSuit.find((y) => y.r === r);
+                        if (!x) break;
+                        down.push(x);
+                    }
+                    tiles = up.concat(down);
+                    if (tiles.length && !extends_(laid, tiles, cfg)) tiles = up.length ? up : down;
+                }
+                if (tiles.length && extends_(laid, tiles, cfg)) adds.push({ tiles, at });
+                else for (const x of real) {
+                    if (extends_(laid, [x], cfg)) { adds.push({ tiles: [x], at }); break; }
+                }
+                if (spare && extends_(laid, [spare], cfg)) jokerAdds.push({ tiles: [spare], at });
+            });
+        }
+        adds.sort((a, b) => b.tiles.length - a.tiles.length);
+        out.push(...adds);
+
+        // 2 to 5: out of the rack. `findMelds` already runs fewest-jokers
+        // first; this splits it by whether a joker is needed at all, and
+        // puts runs before sets inside each half.
+        const melds = findMelds(rack, cfg)
+            .map((tiles) => ({ tiles, at: -1, shape: meld(tiles, cfg) }))
+            .filter((m) => m.shape && (opened || m.shape.type === 'run'));
+        const tier = (m) => (jokersIn(m.tiles) ? 2 : 0) + (m.shape.type === 'run' ? 0 : 1);
+        melds.sort((a, b) => tier(a) - tier(b)
+            || jokersIn(a.tiles) - jokersIn(b.tiles)
+            || realIn(b.tiles) - realIn(a.tiles));
+        out.push(...melds.map(({ tiles, at }) => ({ tiles, at })));
+
+        out.push(...jokerAdds);
+        return out;
     }
 
     window.CV = window.CV || {};
@@ -401,6 +573,6 @@
         RULES, SUITS, SUIT_SYMBOL, LOW, TOP, RANKS,
         isJoker, isAce, rankLabel, name, points, handPoints, pieces,
         build, sort, cmp, layout, runWindows, meld, asRun, asSet, findMelds, canOpen,
-        partition, extend: extends_,
+        partition, extend: extends_, readingOf, plan,
     };
 })();

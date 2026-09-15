@@ -144,7 +144,8 @@
          * **It picks; it does not play.** Nothing is laid until you press
          * 打出, and one tap on any tile is enough to disagree with it — the
          * selection is ordinary and yours to change. 换一组 walks through the
-         * other melds it found, longest first, when there is more than one.
+         * other moves it found — tiles that join the table first, then new
+         * runs, then sets, jokers last — when there is more than one.
          *
          * It searches the same way the AI does, and it will not offer a set
          * before you have opened, because that is not a move you could make.
@@ -157,16 +158,19 @@
             if (this.you < 0 || e.over) return;
             const s = e.seats[this.you];
             if (!s || s.folded) return;
-            this.found = L.findMelds(s.rack, e.rules)
-                .filter((cards) => s.opened || (L.meld(cards, e.rules) || {}).type === 'run');
+            // Moves, not melds: the first thing offered is a tile that goes
+            // onto the table — the meld it joins lights up, and one tap on
+            // it is the move. New melds come after, jokers last. See
+            // `L.plan` for the order and why.
+            this.found = L.plan(s.rack, e.table, e.rules, s.opened);
             if (this.found.length) this.showFound(0);
         }
 
-        /** Put the nth meld it found into the selection. */
+        /** Put the nth move it found into the selection. */
         showFound(n) {
             if (!this.found.length) return;
             this.foundAt = ((n % this.found.length) + this.found.length) % this.found.length;
-            this.picked = new Set(this.found[this.foundAt].map((x) => x.id));
+            this.picked = new Set(this.found[this.foundAt].tiles.map((x) => x.id));
             this.reaim();
         }
 
@@ -574,7 +578,7 @@
 
             // One rank throughout, and the suits do not matter — so the only
             // thing left that can be wrong is how many there are.
-            if (real.every((x) => x.r === real[0].r)) return t('lami.setSize', { n: cfg.maxSet });
+            if (real.every((x) => x.r === real[0].r)) return t('lami.setSize');
             // One suit throughout: this was meant to be a run.
             if (real.every((x) => x.s === real[0].s)) {
                 const ranks = real.map((x) => x.r).sort((a, b) => a - b);

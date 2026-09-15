@@ -290,7 +290,14 @@
             // The meld keeps the reading it was laid down with wherever the
             // new tiles still allow it, so adding a tile never quietly slides
             // somebody else's joker to the other end of the run.
-            const want = lo === undefined ? spot.lo : lo;
+            // `L.extend` works out where the run starts once the new tiles
+            // are on — the old bottom, or lower by exactly the tiles added
+            // under it — so every joker already down keeps its rank. A
+            // reading the player chose wins; `reading` is undefined for a
+            // set, and a set has no order to keep.
+            const kept = shape.reading !== undefined ? shape.reading
+                : spot.lo === undefined ? L.readingOf(spot.tiles) : spot.lo;
+            const want = lo === undefined ? kept : lo;
             spot.tiles = L.layout(spot.tiles.concat(tiles), this.rules, want);
             spot.meld = shape;
             spot.lo = want;
