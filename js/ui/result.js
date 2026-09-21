@@ -135,16 +135,22 @@
             </div>` : '';
 
         /**
-         * **拉米 — every rack, with the jokers and aces set aside.**
+         * **拉米 — every rack, and beside it the jokers and aces dealt.**
          *
-         * Two settlements decide a lami hand and they pull in opposite
-         * directions: the points you are caught holding, and the jokers and
-         * aces, which are the *most* expensive tiles to hold and still pay
-         * you if you hold more of them than the next player. A row of twenty
-         * tiles cannot show which of the two a given tile landed in, so the
-         * pieces are lifted out into their own group and both numbers sit on
-         * the row. Then a player can check the money against the tiles rather
-         * than take it on trust.
+         * Two settlements decide a lami hand and they do not look at the
+         * same tiles at all: the points are what you were **caught holding**
+         * at the end, and the pieces are the jokers and aces you were
+         * **dealt**, which pay whatever you did with them. So the two groups
+         * on a row are two different piles — a joker laid on turn two is in
+         * the right-hand one and not the left — and both numbers sit on the
+         * row so the money can be checked against the tiles.
+         *
+         * The left group used to be the rack *minus* its jokers and aces,
+         * which read as a contradiction in the one case that mattered: a
+         * seat holding two aces and nothing else had both of them moved
+         * across, and the row said 剩牌 · 30 分 beside the word "nothing"
+         * while the table had said 2 tiles all round. The rack goes down
+         * whole.
          *
          * Who folded is on the row too. A seat that folded on turn two and
          * one that played to the end look identical as a pile of tiles, and
@@ -157,8 +163,6 @@
                 <span class="rc-label">${esc(t('res.tiles'))}</span>
                 ${withLami.map((r) => {
                     const L = r.lami;
-                    const pieceIds = new Set(L.pieces.map((x) => x.id));
-                    const rest = L.rack.filter((x) => !pieceIds.has(x.id));
                     const tiles = (list) => list.map((x) => lamiFace(x, { small: true })).join('');
                     return `
                     <div class="rc-seat${r.seat === you ? ' is-you' : ''}${
@@ -169,18 +173,21 @@
                                 : L.folded ? `<span class="rc-tag is-fold">${esc(t('lami.fold'))}</span>` : ''}
                             <span class="num ${r.coins > 0 ? 'good' : r.coins < 0 ? 'bad' : ''}">${signed(r.coins)}</span>
                         </div>
-                        ${L.out ? '' : `
                         <div class="rc-lami">
+                            ${L.out ? '' : `
                             <div class="rc-lami-part">
                                 <span class="rc-lami-n">${esc(t('lami.leftPoints', { p: L.points }))}</span>
-                                <span class="rc-lami-tiles">${tiles(rest) || `<i>${esc(t('lami.nothingLeft'))}</i>`}</span>
-                            </div>
+                                <span class="rc-lami-tiles">${tiles(L.rack) || `<i>${esc(t('lami.nothingLeft'))}</i>`}</span>
+                            </div>`}
+                            <!-- Dealt, not held — so it is on the row of a
+                                 seat that went out too, which is where it
+                                 pays the most and used to be missing. -->
                             <div class="rc-lami-part is-pieces">
                                 <span class="rc-lami-n">${esc(L.count
-                                    ? t('lami.pieces', { n: L.count }) : t('lami.piecesNone'))}</span>
+                                    ? t('lami.piecesDealt', { n: L.count }) : t('lami.piecesNone'))}</span>
                                 <span class="rc-lami-tiles">${tiles(L.pieces) || `<i>—</i>`}</span>
                             </div>
-                        </div>`}
+                        </div>
                     </div>`;
                 }).join('')}
             </div>` : '';

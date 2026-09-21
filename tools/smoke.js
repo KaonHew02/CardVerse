@@ -3722,6 +3722,77 @@ function auditLami() {
         console.log(`  ${offered.toLocaleString('en-US')} melds suggested from ${held / 14} racks, every one legal`);
     }
 
+    /* --- what to play, in the order worth playing it -------------------------- */
+
+    /**
+     * **The order the whole table is played in**, and the one thing about
+     * this game that is a strategy rather than a rule:
+     *
+     *     add to a meld already down → a new run → a set → and a joker last
+     *
+     * Adding is the cheapest move there is — it sheds tiles without
+     * breaking up anything of your own — and a joker is the most useful
+     * tile in the box, so *any* move that does without one comes before
+     * *every* move that needs one, whatever it would shed. The screen's
+     * suggestion and the AI both read this one list, so a regression here
+     * is a regression in both at once.
+     */
+    {
+        const rack = lamiTiles('C13 C14 D5 D6 D14 D14 H3 H6 H8 H14 S4 S7 S11 S11 X X');
+        const down = [
+            { tiles: lamiTiles('D8 D9 D10 X D12 D13 X') },
+            { tiles: lamiTiles('C9 C10 X C12') },
+            { tiles: lamiTiles('H7 H8 H9') },
+            { tiles: lamiTiles('D2 D3 D4') },       // and D5 D6 are in the rack
+        ];
+        // 0 add · 1 run · 2 set · 3 joker-run · 4 joker-set · 5 joker onto the table.
+        const grade = (m) => {
+            const joker = m.tiles.some(L.isJoker);
+            if (m.at >= 0) return joker ? 5 : 0;
+            return (L.meld(m.tiles).type === 'run' ? 1 : 2) + (joker ? 2 : 0);
+        };
+        const moves = L.plan(rack, down, {}, true);
+        const say = (m) => (m.at >= 0 ? 'add ' : 'lay ') + m.tiles.map(L.name).join(' ');
+
+        check(moves.length > 0, 'lami: a rack with a move in it was offered nothing');
+        check(moves[0].at >= 0, `lami: the first move offered was "${say(moves[0])}", wanted a tile onto the table`);
+        for (let i = 1; i < moves.length; i++) {
+            check(grade(moves[i]) >= grade(moves[i - 1]),
+                `lami: "${say(moves[i])}" was offered after "${say(moves[i - 1])}" — out of order`);
+        }
+        // Said again as the rule rather than as the sort, because this is the
+        // one a rack full of jokers breaks: nothing that spends a joker may
+        // be offered while anything that does not is still on the list.
+        const free = moves.filter((m) => !m.tiles.some(L.isJoker));
+        const spent = moves.filter((m) => m.tiles.some(L.isJoker));
+        check(free.length && spent.length, 'lami: the joker test rack stopped testing the joker');
+        check(moves.indexOf(spent[0]) > moves.indexOf(free[free.length - 1]),
+            `lami: "${say(spent[0])}" spends a joker while joker-free moves were still to come`);
+
+        // Before a seat has opened there is exactly one kind of move.
+        const shut = L.plan(rack, down, {}, false);
+        check(shut.length > 0, 'lami: a rack holding a run was given no way to open');
+        check(shut.every((m) => m.at < 0), 'lami: a seat that has not opened was offered the table');
+        check(shut.every((m) => L.meld(m.tiles).type === 'run'),
+            'lami: a seat that has not opened was offered something that is not a run');
+        console.log(`  ✓ ${moves.length} moves ranked — the table first, jokers last`);
+    }
+
+    /* --- a rack arranges two ways --------------------------------------------- */
+
+    {
+        // By suit, a run is next to itself; by number, a set is. Jokers sit
+        // at the end of either, having no place in either order.
+        const hand = lamiTiles('H7 C9 D7 C5 X');
+        check(L.sortBy(hand, 'run').map(L.name).join(' ') === '5♣ 9♣ 7♦ 7♥ 🃏',
+            `lami: sorted by run as ${L.sortBy(hand, 'run').map(L.name).join(' ')}`);
+        check(L.sortBy(hand, 'set').map(L.name).join(' ') === '5♣ 7♦ 7♥ 9♣ 🃏',
+            `lami: sorted by number as ${L.sortBy(hand, 'set').map(L.name).join(' ')}`);
+        check(L.sortBy(hand).map(L.name).join(' ') === L.sort(hand).map(L.name).join(' '),
+            'lami: sortBy with no order asked for did not fall back to the rack order');
+        check(L.sortBy(hand, 'set').length === hand.length, 'lami: a sort lost a tile');
+    }
+
     /* --- the throw ------------------------------------------------------------ */
 
     {
@@ -3889,7 +3960,9 @@ function auditLami() {
         // one place behind the winner is 小哥 and pays 1, then 二哥 2, and
         // 大哥 — the one holding the most — pays 3.
         const plain = table((e) => {
-            e.seats.forEach((x) => { x.rack = []; });
+            // `dealt` is what the side count reads; emptied here so this
+            // table is only about the hand.
+            e.seats.forEach((x) => { x.rack = []; x.dealt = []; });
             e.seats[0].rack = lamiTiles('C2 D3');          // 5  — winner
             e.seats[1].rack = lamiTiles('C9 D9');          // 18 — 小哥
             e.seats[2].rack = lamiTiles('C13 D13 H13');    // 30 — 二哥
@@ -3911,7 +3984,7 @@ function auditLami() {
         // frozen on a full rack paid exactly what a seat one tile from home
         // paid, and being 大哥 cost nothing at all.
         const out = table((e) => {
-            e.seats.forEach((x) => { x.rack = []; });
+            e.seats.forEach((x) => { x.rack = []; x.dealt = []; });
             e.seats[2].rack = [];                          // went out
             e.winner = 2;
             e.seats[0].rack = lamiTiles('C2 D3');          // 5  — 小哥
@@ -3935,8 +4008,10 @@ function auditLami() {
         // The side count runs whatever the hand did: half a stake for each
         // piece of difference, head to head with everybody.
         const side = table((e) => {
-            e.seats.forEach((x) => { x.rack = lamiTiles('C2'); });   // 2 points, 0 pieces
-            e.seats[0].rack = lamiTiles('C2 X');                     // one joker — 1 piece
+            // Dealt plain tiles all round — 2 points, 0 pieces.
+            e.seats.forEach((x) => { x.rack = lamiTiles('C2'); x.dealt = lamiTiles('C2'); });
+            e.seats[0].dealt = lamiTiles('C2 X');                    // dealt a joker — 1 piece
+            e.seats[0].rack = lamiTiles('C2 X');                     // and still holding it
         });
         // Seat 0 is holding a joker: one piece against three seats holding
         // none, so it collects half a stake three times over. It also has the
@@ -3947,8 +4022,35 @@ function auditLami() {
         check(sideNet === -3 * side.stake + Math.round(1.5 * side.stake),
             `lami: the side count paid ${sideNet}, wanted 3 stakes out and 1.5 in`);
         check(side.seats.reduce((n, x) => n + x.net, 0) === 0, 'lami: the side count is not zero-sum');
+
+        /**
+         * **And it counts the deal, not the rack.**
+         *
+         * A joker laid on the table is still a joker you were dealt. Counting
+         * what was left at the end made the side count a reason not to play:
+         * the joker is the most useful tile in the box and the ace is the top
+         * of every run, and a seat that used either one watched its pieces go
+         * with them. Here seat 0 was dealt a joker and an ace and played both
+         * away, and is holding the same 2♣ as everybody else.
+         */
+        const played = table((e) => {
+            e.seats.forEach((x) => { x.rack = lamiTiles('C2'); x.dealt = lamiTiles('C2'); });
+            e.seats[0].dealt = lamiTiles('C2 X C14');
+        });
+        check(played.seats[0].pieces === 2,
+            `lami: a joker and an ace that were dealt and then played counted ${played.seats[0].pieces} pieces, wanted 2`);
+        check(played.seats[0].net > 0,
+            'lami: the seat dealt the pieces did not collect for them once it had played them');
+        check(played.seats.reduce((n, x) => n + x.net, 0) === 0, 'lami: the dealt side count is not zero-sum');
+
+        // And the recap row says the same thing: the rack whole on one side,
+        // what was dealt on the other — two piles, not one pile split in two.
+        const row = played.result().ranks.find((r) => r.seat === 0);
+        check(row.lami.rack.length === 1, `lami: the recap showed ${row.lami.rack.length} tiles of a one-tile rack`);
+        check(row.lami.pieces.length === 2 && row.lami.count === 2,
+            'lami: the recap did not show the pieces that were dealt');
     }
-    console.log('  ✓ 3:2:1 on the hand, flat on a win, and the joker/ace count settles apart from both');
+    console.log('  ✓ 3:2:1 on the hand, flat on a win, and the dealt joker/ace count settles apart from both');
 
     /* --- 天胡: twenty tiles that already lie in melds ------------------------- */
 

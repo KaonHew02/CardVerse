@@ -1170,6 +1170,10 @@
     pointer-events: none; }
 .lami-pick.is-dragging .tile { box-shadow: 0 8px 18px rgba(0,0,0,.55); }
 .lami-drag-hint { opacity: .75; text-align: center; }
+/* 排序 — by run, or by number. Two buttons rather than one toggle: the rack
+ * is already in one of the two orders and a button has to say which. */
+.lami-arrange { display: inline-flex; align-items: center; gap: 4px; }
+.lami-arrange .btn.tiny { padding: 3px 8px; }
 
 /* ---- 骰子 --------------------------------------------------------------- */
 

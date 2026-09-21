@@ -63,6 +63,7 @@
             this.picked  = new Set();
             this.target  = -1;      // table meld the selection would join
             this.order   = [];      // your own arrangement of your own rack
+            this.arrange = 'run';   // which order 排序 last put it in
             this.found   = [];      // melds spotted in your rack this turn
             this.foundAt = -1;      // which of them is picked out
             this.drag    = null;
@@ -295,13 +296,28 @@
             const host = this.$('lamiRack');
             if (this.you < 0) { host.innerHTML = ''; return; }
             const s = e.seats[this.you];
+            // **The pieces are the ones you were dealt**, so this number is
+            // fixed the moment the tiles land and does not move when you
+            // play a joker or an ace out. See `Lami.pieces`.
+            const dealt = (s.dealt && s.dealt.length ? s.dealt : s.rack).filter(Boolean);
+            const pcs = L.pieces(dealt);
+            // 排序 — the rack by suit, or the rack by number. One button each,
+            // the one you are in lit, because a toggle that says only what it
+            // will do next never says which order you are looking at.
+            const sorter = (mode, label) =>
+                `<button class="btn tiny${this.arrange === mode ? ' is-on' : ''}"
+                    data-act="arrange" data-mode="${mode}">${esc(t(label))}</button>`;
 
             host.innerHTML = `
                 <div class="hand-head">
                     <span class="seat-count">${esc(t('lami.yours', { n: s.rack.length, p: L.handPoints(s.rack) }))}</span>
-                    <span class="seat-count">${esc(L.pieces(s.rack)
-                        ? t('lami.pieces', { n: L.pieces(s.rack) })
+                    <span class="seat-count">${esc(pcs
+                        ? t('lami.pieces', { n: pcs })
                         : t('lami.piecesNone'))}</span>
+                    <span class="lami-arrange">
+                        <span class="muted small">${esc(t('lami.arrange'))}</span>
+                        ${sorter('run', 'lami.arrangeRun')}${sorter('set', 'lami.arrangeSet')}
+                    </span>
                 </div>
                 <div class="lami-tiles">
                     ${this.rack(s).map((tile) => `<button class="lami-pick${this.picked.has(tile.id) ? ' is-on' : ''}"
@@ -321,7 +337,8 @@
          * each other. Anything you have not moved keeps the sorted order, and
          * a tile that was not there last time slides into the place it would
          * have sorted to, so a rack you have arranged is not disturbed by one
-         * arriving.
+         * arriving — by the order **排序 is currently in**, which is the one
+         * you are reading the rack in.
          *
          * Ids, not indexes: the rack is rebuilt on every paint.
          */
@@ -332,13 +349,35 @@
                 const tile = byId.get(id);
                 if (tile) { out.push(tile); byId.delete(id); }
             }
+            const cmp = L.ORDERS[this.arrange] || L.cmp;
             for (const tile of seat.rack) {
                 if (!byId.has(tile.id)) continue;
-                const at = out.findIndex((x) => L.cmp(x, tile) > 0);
+                const at = out.findIndex((x) => cmp(x, tile) > 0);
                 if (at < 0) out.push(tile); else out.splice(at, 0, tile);
             }
             this.order = out.map((x) => x.id);
             return out;
+        }
+
+        /**
+         * **排序 — the rack by run, or the rack by number.**
+         *
+         * A rack can only be in one order, and the two halves of this game
+         * want opposite ones: a run is visible when the suits are together,
+         * a set is visible when the numbers are. Reading twenty tiles for
+         * the other one every turn is the work the screen is here to save,
+         * so both orders are one button away and neither is imposed.
+         *
+         * It **throws away the hand arrangement**, which is the point — you
+         * press it when the tiles you dragged into place have stopped
+         * helping. Dragging still works after, and the next press sorts over
+         * whatever you did.
+         */
+        arrangeBy(mode) {
+            if (this.you < 0) return;
+            this.arrange = L.ORDERS[mode] ? mode : 'run';
+            this.order = L.sortBy(this.engine.seats[this.you].rack, this.arrange).map((x) => x.id);
+            this.paint();
         }
 
         /* ---- dragging ---------------------------------------------------------- */
@@ -657,8 +696,10 @@
 
         act(el) {
             const type = el.dataset.act;
-            // Walking through what it found is the screen's own business.
+            // Walking through what it found, and the order your own rack is
+            // in, are the screen's own business — no move is being made.
             if (type === 'next-meld') { this.showFound(this.foundAt + 1); this.paint(); return; }
+            if (type === 'arrange') { this.arrangeBy(el.dataset.mode); return; }
             const seat = this.you;
             const ids = this.selection.map((x) => x.id);
             // Which rank the run starts on, when the player picked a reading.

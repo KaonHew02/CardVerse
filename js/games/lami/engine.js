@@ -66,6 +66,7 @@
                 s.startCoins = s.coins;
                 s.net = 0;
                 s.rack = [];
+                s.dealt = [];       // the twenty it was dealt, kept for the side count
                 s.points = 0;
                 s.pieces = 0;       // the joker/ace side count
                 s.opened = false;   // has laid its first run
@@ -113,7 +114,14 @@
             const box = L.build(this.rules);
             this.rng.shuffle(box);
 
-            for (const s of this.seats) s.rack = L.sort(box.splice(0, this.rules.hand));
+            for (const s of this.seats) {
+                s.rack = L.sort(box.splice(0, this.rules.hand));
+                // **What you were dealt, kept as it was dealt.** The rack is
+                // played away over the round; the joker/ace side count is
+                // settled on this instead, so spending a joker never costs
+                // you a piece. See `Lami.pieces` and `finishRound`.
+                s.dealt = s.rack.slice();
+            }
             this.pool = box;
 
             this.turn = this.starter >= 0 ? this.starter : this.rollForStart();
@@ -387,12 +395,15 @@
          * anybody's points, because neither gave the table a chance to play.
          *
          * The **side count** pays the other way, and it runs whatever the
-         * hand did: jokers and aces are counted in pieces (see
-         * `Lami.pieces`), every player settles head to head with every
-         * other, and whoever holds more collects half a stake for each piece
-         * of difference. Somebody can win the hand and lose money on the
-         * side, which is the point of it — the ace you were told to throw is
-         * the ace that pays you.
+         * hand did: the jokers and aces in the twenty you were **dealt** are
+         * counted in pieces (see `Lami.pieces`), every player settles head to
+         * head with every other, and whoever was dealt more collects half a
+         * stake for each piece of difference. Somebody can win the hand and
+         * lose money on the side, which is the point of it.
+         *
+         * It reads `dealt`, not `rack`, and that is the whole rule: playing
+         * an ace out into a run must not cost you what the deal already paid
+         * you, or nobody would ever play one.
          *
          * Nobody ever hands over more than they are sitting on, so the whole
          * thing is trimmed to what is there before a coin moves.
@@ -400,7 +411,8 @@
         finishRound() {
             for (const s of this.seats) {
                 s.points = L.handPoints(s.rack);
-                s.pieces = L.pieces(s.rack);
+                // A hand from before `dealt` existed still has to settle.
+                s.pieces = L.pieces(s.dealt && s.dealt.length ? s.dealt : s.rack);
             }
 
             const owed = this.seats.map(() => 0);   // negative = pays
@@ -520,17 +532,23 @@
                  * at all. Every seat's row was a name and a number with an
                  * empty space where the reason should be.
                  *
-                 * `pieces` is split out rather than counted in place because
-                 * it is settled separately and settles *against* the points:
-                 * jokers and aces are 15 apiece, the most expensive tiles in
-                 * the box, and holding more of them than the next player pays
-                 * you. A player looking at one row of tiles cannot see which
-                 * of the two numbers each tile landed in — so they go in
-                 * their own group, and both counts are on the row.
+                 * `pieces` is a **different pile of tiles**, not a subset of
+                 * this one: the points are what you were caught holding and
+                 * the pieces are what you were *dealt*, so a joker you laid
+                 * on turn two is in one and not the other.
+                 *
+                 * It used to be the jokers and aces lifted *out* of the rack
+                 * and shown beside it, and the row then contradicted itself
+                 * in the one case it mattered: a seat holding two aces and
+                 * nothing else had them both moved to the pieces group,
+                 * leaving 剩牌 · 30 分 next to the word "nothing" — against
+                 * a seat count that had said 2 all round. The rack goes down
+                 * whole now, and the pieces are their own row of tiles.
                  */
                 lami: {
                     rack: L.sort(s.rack),
-                    pieces: s.rack.filter((x) => L.isJoker(x) || L.isAce(x)),
+                    pieces: (s.dealt && s.dealt.length ? s.dealt : s.rack)
+                        .filter((x) => L.isJoker(x) || L.isAce(x)),
                     points: s.points,
                     count: s.pieces,
                     folded: !!s.folded,
@@ -572,10 +590,18 @@
             });
         }
 
-        /** Everyone's rack but yours is a count. The table is public. */
+        /**
+         * Everyone's rack but yours is a count. The table is public.
+         *
+         * `dealt` goes with it — it is the rack as it was twenty tiles ago,
+         * and handing it over would post every opponent's opening hand.
+         */
         redactSeat(seat, index, viewer) {
             if (index === viewer || this.over) return seat;
-            return Object.assign({}, seat, { rack: seat.rack.map(() => null) });
+            return Object.assign({}, seat, {
+                rack: seat.rack.map(() => null),
+                dealt: (seat.dealt || []).map(() => null),
+            });
         }
     }
 

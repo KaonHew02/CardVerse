@@ -106,10 +106,18 @@
      * **The side count: jokers and aces, in pieces.**
      *
      * Settled apart from the hand and apart from the ranking, head to head
-     * with every other player — whoever is holding more collects the
-     * difference from whoever is holding fewer, at half a stake a piece. It
-     * is its own little game running underneath the round, and it is why an
-     * ace is worth hanging on to even when the points say throw it.
+     * with every other player — whoever has more collects the difference
+     * from whoever has fewer, at half a stake a piece. It is its own little
+     * game running underneath the round.
+     *
+     * **Counted on the twenty you were dealt, not the ones you are caught
+     * with.** It used to be the rack at the end, and that made the whole
+     * side count a reason not to play: a joker is the most useful tile in
+     * the box and an ace is the top of every run, and a seat that used
+     * either one watched its pieces — and its money — go with them. The
+     * luck of the deal pays; what you do with it is the rest of the game.
+     * `engine.finishRound` reads `seat.dealt`, and nothing that happens
+     * after the deal can move this number.
      *
      *     a joker or an ace          1 piece each
      *     both copies of one ace     1 piece on top, per pair
@@ -149,6 +157,30 @@
         return ORDER[a.s] - ORDER[b.s] || a.r - b.r;
     };
     const sort = (tiles) => tiles.slice().sort(cmp);
+
+    /**
+     * **The other arrangement: by number, with the suits mixed.**
+     *
+     * `cmp` puts a rack in suit order, which is the order a *run* is visible
+     * in — ♦4 ♦5 ♦6 come to rest beside each other and the hole in the
+     * middle is a hole you can see. It is the worst possible order for
+     * seeing a **set**: a set is one number across different suits, so the
+     * three sevens it is made of sit in three different corners of the rack
+     * with a dozen tiles in between, and the only way to find them is to
+     * read all twenty.
+     *
+     * Both halves of this game are melds and a rack can only be in one
+     * order at a time, so which one is the player's to pick rather than the
+     * screen's to decide. Jokers stay at the end of either.
+     */
+    const cmpRank = (a, b) => {
+        if (isJoker(a) !== isJoker(b)) return isJoker(a) ? 1 : -1;
+        if (isJoker(a)) return 0;
+        return a.r - b.r || ORDER[a.s] - ORDER[b.s];
+    };
+    /** The two arrangements, named for the meld each one makes visible. */
+    const ORDERS = { run: cmp, set: cmpRank };
+    const sortBy = (tiles, mode) => tiles.slice().sort(ORDERS[mode] || cmp);
 
     /* ---- what is a meld ---------------------------------------------------- */
 
@@ -572,7 +604,8 @@
     window.CV.Lami = {
         RULES, SUITS, SUIT_SYMBOL, LOW, TOP, RANKS,
         isJoker, isAce, rankLabel, name, points, handPoints, pieces,
-        build, sort, cmp, layout, runWindows, meld, asRun, asSet, findMelds, canOpen,
+        build, sort, sortBy, cmp, cmpRank, ORDERS,
+        layout, runWindows, meld, asRun, asSet, findMelds, canOpen,
         partition, extend: extends_, readingOf, plan,
     };
 })();
