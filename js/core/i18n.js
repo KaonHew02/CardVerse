@@ -198,6 +198,7 @@
         'save.noChangeBody': 'The browser refused one of the writes, so the previous record was put back in full.',
         'save.exported': '✅ Exported',
         'storage.failing': 'This browser is refusing to save. Your progress will be lost on reload — export it from Settings now.',
+        'storage.tampered': 'A saved record was edited outside the game, so it was not loaded. The edited copy is kept aside — export from Settings if you need it back.',
         'drive.offer': 'This browser has no CardVerse record. Restore your player from Google Drive?',
         'drive.offerYes': 'From Drive', 'drive.offerNo': 'Start fresh',
 
@@ -890,6 +891,7 @@
         'save.noChangeBody': '浏览器拒绝了其中一次写入，原有记录已完整恢复。',
         'save.exported': '✅ 已导出',
         'storage.failing': '这个浏览器拒绝保存。刷新后进度会丢失 — 请立刻到设置里导出。',
+        'storage.tampered': '有存档在游戏之外被改动过，因此没有载入。被改动的副本已另行保留 — 需要的话到设置里导出。',
         'drive.offer': '这个浏览器没有 CardVerse 记录。要从 Google Drive 恢复吗？',
         'drive.offerYes': '从 Drive 恢复', 'drive.offerNo': '重新开始',
 

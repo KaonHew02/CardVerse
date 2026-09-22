@@ -36,9 +36,50 @@
             strip.hidden = false;
             strip.textContent = CV.t('storage.failing');
         });
+
+        // A record that was edited outside the game says so, rather than
+        // silently reverting and leaving the player to wonder.
+        CV.Store.onTamper(() => {
+            const strip = document.getElementById('storeAlert');
+            if (!strip) return;
+            strip.hidden = false;
+            strip.textContent = CV.t('storage.tampered');
+        });
+    }
+
+    /**
+     * Seal the namespace once everything has registered.
+     *
+     * Every `CV.X = …` in the hub runs while its file loads, so by the time
+     * boot finishes nothing legitimate writes here again. Freezing therefore
+     * costs nothing and takes away the easiest console edit there is —
+     * replacing a whole module, `CV.Profile = {…}`, or swapping one method for
+     * a version that always says yes.
+     *
+     * It does not make the game uncheatable, and it is not meant to: the state
+     * behind these modules still lives in the same browser as the person
+     * reading this. It raises the floor. What actually protects *other* players
+     * is that the host never trusts a guest's numbers — see net.js and
+     * js/ui/room.js, where a guest is seated with a fixed stack no matter what
+     * their own profile claims.
+     */
+    function lockApi() {
+        for (const key of Object.keys(CV)) {
+            const part = CV[key];
+            const kind = typeof part;
+            if (part && (kind === 'object' || kind === 'function')) {
+                try { Object.freeze(part); } catch (_) { /* nothing to lose if it refuses */ }
+            }
+        }
+        try { Object.freeze(CV); } catch (_) { /* as above */ }
     }
 
     function boot() {
+        // Before anything reads a store: seal whatever this browser already
+        // holds, so an existing player keeps their record and an unsealed one
+        // stops being acceptable from the next boot onward.
+        CV.Store.sealAll();
+
         CV.Settings.apply();
         CV.Profile.load();
         CV.Stats.load();
@@ -57,6 +98,10 @@
 
         window.CVReady = true;
         document.dispatchEvent(new CustomEvent('cardverse:ready'));
+
+        // After the ready event: drive.js only ever touches window globals, but
+        // a listener that wanted to register a module should still get to.
+        lockApi();
 
         const login = CV.Missions.loginState();
         if (login.claimable && !CV.Store.isEmpty()) {

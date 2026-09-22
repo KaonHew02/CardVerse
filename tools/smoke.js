@@ -4826,7 +4826,56 @@ console.log('\n🛡️  Untrusted input');
         'an option type kept a quote and can break out of an attribute: ' + wired.options[0].type);
     check(wired.seats[0].cards[0].r === 14, 'the wire strip damaged a card rank');
 
-    // 7. An imported profile is arithmetic as well as text.
+    // 7. A record edited straight into localStorage is not loaded. This is the
+    //    console paste that survived a refresh: a DOM edit never does, so
+    //    anything that persists was written to storage behind the game's back.
+    const K = 'cardverse.seal.v1';
+
+    CV.Store.set(K, { coins: 5000 });
+    check(CV.Store.get(K, null).coins === 5000, 'a sealed record did not read back');
+    check(!/^[[{]/.test(localStorage.getItem(K)), 'a stored record is not sealed at all');
+
+    let tamperedKey = null;
+    CV.Store.onTamper((k) => { tamperedKey = k; });
+
+    // The paste: rewrite the value and keep the seal that no longer matches it.
+    const sealed = localStorage.getItem(K);
+    localStorage.setItem(K, sealed.slice(0, sealed.indexOf('.') + 1) + '{"coins":999999}');
+    check(CV.Store.get(K, null) === null, 'an edited record was loaded anyway');
+    check(tamperedKey === K,              'an edited record did not raise onTamper');
+    check(localStorage.getItem(K + '.rejected') !== null,
+        'an edited record was discarded instead of set aside');
+
+    // Re-sealing the edit by hand does work — the fingerprint is in code the
+    // player can read. That is a known limit, asserted so nobody later mistakes
+    // this for something it is not.
+    localStorage.setItem(K, CV.Store.seal(K, '{"coins":999999}'));
+    check(CV.Store.get(K, null).coins === 999999,
+        'the seal claims to resist someone who has read the source — it does not');
+
+    // A record written before sealing existed is still honoured on the boot
+    // that migrates it, or an update costs every existing player their history.
+    localStorage.removeItem('cardverse.sealed.v1');
+    localStorage.setItem(K, '{"coins":4242}');
+    check(CV.Store.get(K, null).coins === 4242, 'an unsealed legacy record was rejected pre-migration');
+
+    // After that one boot, unsealed is the shape a pasted cheat takes, and it
+    // stops being acceptable. This is the hole the first draft left open: plain
+    // JSON typed into localStorage is indistinguishable from an old record, so
+    // the only thing that separates them is which side of the migration it is on.
+    localStorage.setItem('cardverse.profile.v1', '{"coins":5}');
+    CV.Store.sealAll();
+    localStorage.setItem(K, '{"coins":999999}');
+    check(CV.Store.get(K, null) === null, 'a pasted unsealed record was loaded after migration');
+    check(CV.Store.get('cardverse.profile.v1', null).coins === 5,
+        'migration did not carry an existing record across');
+
+    localStorage.removeItem(K);
+    localStorage.removeItem(K + '.rejected');
+    localStorage.removeItem('cardverse.profile.v1');
+    localStorage.removeItem('cardverse.profile.v1.rejected');
+
+    // 8. An imported profile is arithmetic as well as text.
     const kept = JSON.parse(JSON.stringify(CV.Profile.get()));
     CV.Profile.replace({ name: '<b>x</b>', avatar: nasty, coins: '9999', level: -4, xp: 'NaN' });
     const p = CV.Profile.get();
