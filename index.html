@@ -3,6 +3,33 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+
+    <!-- The second layer under the escaping in js/core/safe.js. CardVerse takes
+         a table snapshot from another player's browser and an imported save
+         from a file; if either ever reaches innerHTML unescaped again, this is
+         what stops it becoming script. Every origin below is one the app
+         genuinely talks to:
+           cdnjs            PeerJS, pinned and hashed (see the bottom of this file)
+           accounts.google  the sign-in library and its popup
+           googleapis       the Drive read/write calls
+           0.peerjs.com     the matchmaking broker, https to fetch an id and wss to hold it
+         'unsafe-inline' is present for style only: the views set widths and
+         positions through style="" attributes, which style-src-attr governs.
+         There is no inline <script> anywhere, so script-src stays strict.
+         frame-ancestors is deliberately absent — a <meta> CSP cannot carry it,
+         and GitHub Pages cannot send headers. -->
+    <meta http-equiv="Content-Security-Policy" content="
+        default-src 'self';
+        script-src 'self' https://cdnjs.cloudflare.com https://accounts.google.com;
+        style-src 'self' 'unsafe-inline';
+        img-src 'self' data: blob:;
+        font-src 'self';
+        connect-src 'self' https://www.googleapis.com https://accounts.google.com https://0.peerjs.com wss://0.peerjs.com;
+        frame-src https://accounts.google.com;
+        object-src 'none';
+        base-uri 'self';
+        form-action 'self'">
+    <meta name="referrer" content="strict-origin-when-cross-origin">
     <meta name="color-scheme" content="dark light">
     <title>CardVerse — One World. Every Game.</title>
     <meta name="description" content="A casual card and tile game hub. Virtual coins only.">
@@ -124,6 +151,9 @@
     </div>
 
     <!-- core: order matters — each file adds to window.CV -->
+    <!-- safe.js is first because Seat, Profile, Net and RemoteEngine all
+         sanitise through it as they load. -->
+    <script src="js/core/safe.js"></script>
     <script src="js/core/rng.js"></script>
     <script src="js/core/cards.js"></script>
     <script src="js/core/store.js"></script>
@@ -226,7 +256,13 @@
     <!-- PeerJS, for online play only. Same deal as the sign-in library below:
          `async defer` so a slow or blocked CDN never delays a card, and
          CV.Net.available() reports honestly if it never arrived. -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.4/peerjs.min.js" async defer></script>
+    <!-- `integrity` pins this to the exact 1.5.4 bytes. A CDN that is
+         compromised, or that ever serves something else under this path, is
+         then a script that does not run rather than a script that runs with
+         every player's save. -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.4/peerjs.min.js"
+            integrity="sha384-nlUQ8ZqCbvStErob+biJNzSgltf6urV3VGqhfIfzhmg9RXmpeRm76ELw0pYnKlTR"
+            crossorigin="anonymous" referrerpolicy="no-referrer" async defer></script>
 
     <!-- Google's sign-in library, for the Drive copy only. `async defer` so a
          blocked or slow accounts.google.com never delays a single card; the

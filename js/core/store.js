@@ -67,7 +67,15 @@
         if (text === null || text === '') return fallback;
         try {
             const value = JSON.parse(text);
-            return (value === null || value === undefined) ? fallback : value;
+            if (value === null || value === undefined) return fallback;
+            // Everything here was JSON a moment ago, and it did not necessarily
+            // start life in this browser: Import writes these keys straight from
+            // a file, and the Drive pull from a folder. JSON can carry a
+            // `__proto__` key, and every module builds its state by
+            // `Object.assign`-ing over what this function returns — which is
+            // exactly the call that turns such a key into a prototype swap. One
+            // strip here covers all seven stores and all three ways in.
+            return (typeof value === 'object') ? window.CV.Safe.clean(value) : value;
         } catch (_) {
             // Corrupt JSON is treated as absent. Throwing here would brick the
             // whole hub over one bad key.

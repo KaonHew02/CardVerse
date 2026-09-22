@@ -242,7 +242,7 @@
                 <h3>${esc(t('room.atTable'))} <small class="muted">${people.length} ${esc(t('of'))} ${max}</small></h3>
                 ${people.map((pl) => `
                     <div class="room-player">
-                        <span class="avatar">${pl.avatar}</span>
+                        <span class="avatar">${esc(pl.avatar)}</span>
                         <b>${esc(pl.name)}</b>
                         ${pl.host ? `<span class="tag on">${esc(t('host'))}</span>` : `<span class="tag">${esc(t('guest'))}</span>`}
                     </div>`).join('')}
@@ -441,7 +441,16 @@
 
     /** A GameResult arrives as plain JSON; put its helper methods back. */
     function rehydrate(raw) {
-        return new CV.GameResult({ ranks: (raw && raw.ranks) || [], detail: (raw && raw.detail) || '', draw: !!(raw && raw.draw) });
+        const safe = CV.Safe.clean(raw) || {};
+        return new CV.GameResult({
+            // `ranks` carries the card and tile ids that the result screen
+            // puts straight into `data-id` attributes, so it takes the wire
+            // strip. `detail` is a sentence, and it is escaped where it is
+            // rendered — so it keeps its apostrophes.
+            ranks:  CV.Safe.wire(safe.ranks) || [],
+            detail: typeof safe.detail === 'string' ? safe.detail : '',
+            draw:   !!safe.draw,
+        });
     }
 
     function paintWaiting() {

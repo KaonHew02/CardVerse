@@ -111,7 +111,7 @@
             return `
                 <div class="seat pk-seat${turn ? ' is-turn' : ''}${(s.folded || s.out) ? ' is-out' : ''}">
                     <div class="seat-head">
-                        <span class="avatar">${s.avatar}</span>
+                        <span class="avatar">${esc(s.avatar)}</span>
                         <span class="who"><span class="name">${esc(s.name)}</span>
                             <span class="coins">🪙 ${fmt(s.stack)}</span></span>
                         ${this.button(i)}

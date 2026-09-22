@@ -21,7 +21,7 @@
 
         $('profileBody').innerHTML = `
             <div class="profile-card">
-                <button class="avatar huge" id="profileAvatar" title="Change avatar">${p.avatar}</button>
+                <button class="avatar huge" id="profileAvatar" title="Change avatar">${esc(p.avatar)}</button>
                 <div class="profile-main">
                     <h2>${esc(p.name)} <button class="btn tiny ghost" id="profileRename">✏️</button></h2>
                     <div class="muted">${title.icon} ${esc(title.name)} · ${esc(t('level'))} ${p.level} · ${esc(t('prof.since', { date: dmyDate(new Date(p.created)) }))}</div>

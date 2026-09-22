@@ -202,7 +202,7 @@
                 return `
                     <div class="seat lami-seat${turn ? ' is-turn' : ''}${s.folded ? ' is-folded' : ''}">
                         <div class="seat-head">
-                            <span class="avatar">${s.avatar}</span>
+                            <span class="avatar">${esc(s.avatar)}</span>
                             <span class="who"><span class="name">${esc(s.name)}</span>
                                 <span class="coins">🪙 ${fmt(s.coins)}</span></span>
                             <span class="tag lami-count">${s.rack.length}</span>

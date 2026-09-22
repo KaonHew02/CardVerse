@@ -42,6 +42,9 @@ function load(rel) {
 }
 
 [
+    // safe.js first, for the same reason index.html loads it first: Seat,
+    // Store, Profile and RemoteEngine all sanitise through it.
+    'js/core/safe.js',
     'js/core/rng.js', 'js/core/cards.js', 'js/core/store.js', 'js/core/i18n.js', 'js/core/engine.js',
     'js/core/transport.js', 'js/core/ai.js', 'js/core/registry.js', 'js/core/profile.js',
     'js/core/stats.js', 'js/core/achievements.js', 'js/core/missions.js', 'js/core/cosmetics.js',
@@ -4742,6 +4745,126 @@ console.log('\n🔒 Reserved event names');
         }
     }
     console.log(`  ${checked} checks — no engine emits a name the wrapper needs`);
+}
+
+/* ---- what arrives from somewhere else ---------------------------------- */
+
+/**
+ * The three untrusted inputs from js/core/safe.js, each pushed through the
+ * path it actually takes. These are regression tests for a real bug: a host's
+ * snapshot carried a seat avatar straight into `innerHTML` in eleven views, so
+ * hosting a table let you run script in every guest's browser.
+ */
+console.log('\n🛡️  Untrusted input');
+{
+    // 1. Markup never survives the sanitiser, in either direction.
+    const nasty = '<img src=x onerror=alert(1)>';
+    check(!/[<>&"'`]/.test(CV.Safe.avatar(nasty)), 'Safe.avatar let markup through');
+    check(!/[<>&"'`]/.test(CV.Safe.name(nasty)),   'Safe.name let markup through');
+    check(CV.Safe.avatar('') === '🙂',              'Safe.avatar lost its fallback');
+    // A ZWJ emoji is five UTF-16 units and must not be cut mid-surrogate.
+    check(CV.Safe.avatar('🧑‍💻') === '🧑‍💻',        'Safe.avatar mangled a ZWJ emoji');
+
+    // 2. A Seat is the funnel every name and face reaches a view through.
+    const seat = new CV.Seat(0, { name: nasty, avatar: nasty });
+    check(!/[<>]/.test(seat.avatar), 'a hostile avatar reached a Seat intact');
+    check(!/[<>]/.test(seat.name),   'a hostile name reached a Seat intact');
+
+    // 3. `__proto__` out of JSON must stay data, never become a prototype.
+    const poisoned = JSON.parse('{"a":1,"__proto__":{"pwned":true}}');
+    const cleaned  = CV.Safe.clean(poisoned);
+    Object.assign({}, cleaned);
+    check({}.pwned === undefined,                       'Safe.clean allowed prototype pollution');
+    check(!Object.keys(cleaned).includes('__proto__'),  'Safe.clean kept a __proto__ key');
+    check(cleaned.a === 1,                              'Safe.clean dropped real data');
+
+    // 4. Every store is read back through the same strip — this is the path an
+    //    imported file and a Drive pull both take.
+    localStorage.setItem('cardverse.smoke.v1', '{"name":"ok","__proto__":{"stored":true}}');
+    const readBack = CV.Store.get('cardverse.smoke.v1', null);
+    Object.assign({}, readBack);
+    check({}.stored === undefined,          'Store.get allowed prototype pollution');
+    check(readBack && readBack.name === 'ok', 'Store.get dropped real data');
+    localStorage.removeItem('cardverse.smoke.v1');
+
+    // 5. A hostile snapshot, as a malicious host would send it. `youSeat` is a
+    //    getter with no setter: assigning it throws under 'use strict', which
+    //    used to be a one-line way to kill every guest's table.
+    const hostile = JSON.parse('{"phase":"play","turn":0,"over":false,"viewer":0,'
+        + '"seats":[{"name":"A","avatar":"<img src=x onerror=alert(1)>"}],'
+        + '"log":[],"options":[],"wall":12,'
+        + '"youSeat":7,"apply":1,"isOver":1,"__proto__":{"owned":true}}');
+    let remote = null;
+    try {
+        remote = new CV.RemoteEngine(hostile, { code: 'smoke' });
+    } catch (err) {
+        check(false, 'a hostile snapshot threw inside absorb: ' + err.message);
+    }
+    if (remote) {
+        Object.assign({}, remote.view);
+        check({}.owned === undefined,              'a snapshot polluted Object.prototype');
+        check(typeof remote.apply === 'function',  'a snapshot overwrote apply()');
+        check(typeof remote.isOver === 'function', 'a snapshot overwrote isOver()');
+        check(remote.youSeat === 0,                'a snapshot overrode the viewer seat');
+        check(!/[<>]/.test(remote.seats[0].avatar), 'a hostile avatar survived into a guest seat');
+        check(remote.wall === 12,                  'absorb dropped legitimate game state');
+    }
+
+    // 6. Ids and enums do not land in text, they land in HTML attributes:
+    //    `data-id="…"` on every card and tile, `data-act="…"` on every button,
+    //    `class="badge …"` on every seat. A value that closes the quote is an
+    //    injection no amount of *text* escaping would ever have caught — which
+    //    is why the strip happens once at the boundary instead of at the forty
+    //    render sites that would each have to remember.
+    const withIds = JSON.parse('{"phase":"play","turn":0,"over":false,"viewer":0,'
+        + '"seats":[{"name":"B","avatar":"x","cards":[{"r":14,"s":"S","id":"0-S14\\" onmouseover=\\"x"}]}],'
+        + '"options":[{"type":"hit\\" onclick=\\"x"}],"log":[]}');
+    const wired = new CV.RemoteEngine(withIds, { code: 'smoke' });
+    check(!/["'<>`]/.test(wired.seats[0].cards[0].id),
+        'a card id kept a quote and can break out of data-id: ' + wired.seats[0].cards[0].id);
+    check(!/["'<>`]/.test(wired.options[0].type),
+        'an option type kept a quote and can break out of an attribute: ' + wired.options[0].type);
+    check(wired.seats[0].cards[0].r === 14, 'the wire strip damaged a card rank');
+
+    // 7. An imported profile is arithmetic as well as text.
+    const kept = JSON.parse(JSON.stringify(CV.Profile.get()));
+    CV.Profile.replace({ name: '<b>x</b>', avatar: nasty, coins: '9999', level: -4, xp: 'NaN' });
+    const p = CV.Profile.get();
+    check(!/[<>]/.test(p.name + p.avatar), 'an imported profile kept its markup');
+    check(Number.isFinite(p.coins) && p.coins === 9999, 'an imported profile kept a string balance');
+    check(p.level >= 1 && Number.isFinite(p.xp),        'an imported profile kept an impossible level');
+    CV.Profile.replace(kept);
+
+    console.log('  ✓ markup, prototypes and impossible numbers stop at the boundary');
+}
+
+/* ---- no view interpolates an untrusted value raw ------------------------ */
+
+console.log('\n🖊️  Render sites');
+{
+    // The avatar is the one free-text field that is rendered as HTML rather
+    // than set as textContent, so it is the one worth checking in the source.
+    // A game icon may legitimately be raw — the registry allows inline SVG —
+    // and an avatar may not.
+    const files = [];
+    (function sweep(dir) {
+        for (const f of fs.readdirSync(dir)) {
+            const full = path.join(dir, f);
+            if (fs.statSync(full).isDirectory()) sweep(full);
+            else if (f.endsWith('.js')) files.push(full);
+        }
+    })(path.join(ROOT, 'js'));
+
+    let sites = 0;
+    for (const file of files) {
+        const src = fs.readFileSync(file, 'utf8');
+        const bare = src.match(/\$\{\s*[A-Za-z_][A-Za-z0-9_]*\.avatar\s*\}/g) || [];
+        for (const hit of bare) {
+            check(false, path.relative(ROOT, file) + ': avatar rendered unescaped — ' + hit);
+        }
+        sites += (src.match(/\$\{esc\([A-Za-z_][A-Za-z0-9_]*\.avatar\)\}/g) || []).length;
+    }
+    console.log(`  ${sites} avatar render sites, every one escaped`);
 }
 
 /* ---- the Table wrapper, with real timers ------------------------------- */

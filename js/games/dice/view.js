@@ -108,7 +108,7 @@
                 return `
                     <div class="seat${mine ? ' is-you' : ''}${turn ? ' is-turn' : ''}">
                         <div class="seat-head">
-                            <span class="avatar">${s.avatar}</span>
+                            <span class="avatar">${esc(s.avatar)}</span>
                             <span class="who"><span class="name">${esc(s.name)}${mine ? ' <em>(you)</em>' : ''}</span>
                                 <span class="coins">🪙 ${fmt(s.coins)}</span></span>
                             ${show ? `<span class="badge ${s.outcome}">${esc(t('out.' + s.outcome))}</span>` : ''}

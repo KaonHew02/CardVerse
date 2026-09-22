@@ -216,7 +216,7 @@
                 return `
                     <div class="${cls}">
                         <div class="seat-head">
-                            <span class="avatar">${s.avatar}</span>
+                            <span class="avatar">${esc(s.avatar)}</span>
                             <div class="who">
                                 <span class="name">${esc(s.name)}${s.isYou ? ` <em>(${esc(t('you'))})</em>` : ''}</span>
                                 <span class="coins">🪙 ${fmt(s.coins)}</span>
@@ -248,7 +248,7 @@
             if (!who) { host.innerHTML = ''; return; }
             host.innerHTML = e.turn === this.you
                 ? `<span class="you">${esc(t('rl.yourBet'))}</span>`
-                : `<span class="muted">${who.avatar} ${esc(t('table.betting', { name: who.name }))}</span>`;
+                : `<span class="muted">${esc(who.avatar)} ${esc(t('table.betting', { name: who.name }))}</span>`;
         }
 
         paintActions() {

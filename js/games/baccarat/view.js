@@ -145,7 +145,7 @@
                 return `
                     <div class="${cls}" data-seat="${i}">
                         <div class="seat-head">
-                            <span class="avatar">${s.avatar}</span>
+                            <span class="avatar">${esc(s.avatar)}</span>
                             <div class="who">
                                 <span class="name">${esc(s.name)}${s.isYou ? ` <em>(${esc(t('you'))})</em>` : ''}</span>
                                 <span class="coins">🪙 ${fmt(s.coins)}</span>
@@ -173,7 +173,7 @@
             if (!seat) return void (host.innerHTML = '');
             host.innerHTML = seat.isHuman
                 ? `<span class="you">${esc(t('bac.yourBet'))}</span>`
-                : `<span class="muted">${seat.avatar} ${esc(t('table.betting', { name: seat.name }))}</span>`;
+                : `<span class="muted">${esc(seat.avatar)} ${esc(t('table.betting', { name: seat.name }))}</span>`;
         }
 
         paintActions() {

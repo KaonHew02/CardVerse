@@ -46,7 +46,30 @@
 
         /** Take a new snapshot from the host. */
         absorb(view) {
-            for (const k of Object.keys(view)) if (!SHARED.has(k)) this[k] = view[k];
+            // Everything below is JSON from a browser this one does not own. A
+            // guest trusts its host with the rules of the game — that is the
+            // model — but not with what may be written onto this object, and
+            // not with what its strings may do once a view puts them in an
+            // attribute. `wire` covers both; see js/core/safe.js.
+            view = CV.Safe.wire(view) || {};
+
+            for (const k of Object.keys(view)) {
+                if (SHARED.has(k)) continue;
+                // `__proto__` arrives from JSON as an ordinary-looking key and
+                // leaves as a prototype swap; see js/core/safe.js.
+                if (!CV.Safe.isSafeKey(k)) continue;
+                // A name already on the prototype is worse than useless here.
+                // `youSeat` and `shoeState` are getters with no setter, so
+                // under 'use strict' assigning one *throws* and takes the
+                // guest's whole table down — a one-line denial of service from
+                // any host. `apply`, `isOver` and the rest are methods, and a
+                // number in their place breaks the next call instead.
+                if (k in RemoteEngine.prototype) {
+                    console.warn('[remote] snapshot key shadows the engine surface, ignored:', k);
+                    continue;
+                }
+                this[k] = view[k];
+            }
             this.view    = view;
             this.phase   = view.phase;
             this.turn    = view.turn;
@@ -67,7 +90,17 @@
             // Seats arrive as plain JSON, so `isHuman` — a getter on the Seat
             // prototype — does not survive the trip. Rehydrating real Seats is
             // cheaper than teaching every view to cope without it.
-            this.seats = (view.seats || []).map((s, i) => Object.assign(new CV.Seat(i, s), s));
+            this.seats = (view.seats || []).map((s, i) => {
+                // The `Object.assign` is what carries a game's own seat fields —
+                // hands, melds, tiles, bets — onto a real Seat. It also copies
+                // `name` and `avatar` straight back over the two the Seat
+                // constructor had just cleaned, which is how a host's markup
+                // used to reach eleven views. So they are cleaned again after.
+                const seat = Object.assign(new CV.Seat(i, s), s);
+                seat.name   = CV.Safe.name(seat.name, `Player ${i + 1}`);
+                seat.avatar = CV.Safe.avatar(seat.avatar);
+                return seat;
+            });
             return this;
         }
 

@@ -320,7 +320,7 @@
                     <div class="mj-seat-head">
                         ${turn ? `<span class="mj-turn-tag">${
                             esc(t(e.phase === 'claim' ? 'mj.seatClaim' : 'mj.seatTurn'))}</span>` : ''}
-                        <span class="avatar">${s.avatar}</span>
+                        <span class="avatar">${esc(s.avatar)}</span>
                         <span class="who">
                             <span class="name">${esc(s.name)}</span>
                             <span class="coins">🪙 ${fmt(s.coins)}</span>

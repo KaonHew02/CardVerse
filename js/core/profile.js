@@ -146,20 +146,37 @@
     };
 
     function rename(name) {
-        const clean = String(name || '').trim().slice(0, 16);
+        const clean = window.CV.Safe.text(name, 16);
         if (!clean) return false;
         get().name = clean;
         return save();
     }
 
+    /**
+     * The name and the face are the two profile fields that get *rendered*,
+     * and — once a table is hosted — rendered in other people's browsers. They
+     * are sanitised on the way in rather than only on the way out, because by
+     * then they have already been copied onto a seat and posted down a wire.
+     */
     function setAvatar(emoji) {
-        get().avatar = emoji;
+        get().avatar = window.CV.Safe.avatar(emoji);
         return save();
     }
 
     /** Used by Import — replace wholesale, never merge two histories. */
     function replace(next) {
         state = Object.assign(blank(), next || {});
+        // An imported profile is a file somebody was handed. Its name and face
+        // are the parts that reach a screen, and its counters are the parts
+        // that reach arithmetic — a string where `coins` should be turns every
+        // balance on every screen into NaN.
+        state.name   = window.CV.Safe.name(state.name);
+        state.avatar = window.CV.Safe.avatar(state.avatar);
+        for (const key of ['level', 'xp', 'coins', 'totalGames', 'wins', 'losses', 'draws', 'streak', 'bestStreak']) {
+            const n = Number(state[key]);
+            state[key] = Number.isFinite(n) ? Math.max(0, Math.floor(n)) : blank()[key];
+        }
+        state.level = Math.max(1, state.level);
         return save();
     }
 

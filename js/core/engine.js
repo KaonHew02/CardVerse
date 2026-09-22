@@ -31,8 +31,13 @@
         constructor(i, opts = {}) {
             this.index  = i;
             this.id     = opts.id     || `seat${i}`;
-            this.name   = opts.name   || `Player ${i + 1}`;
-            this.avatar = opts.avatar || '🙂';
+            // A Seat is built from three places, and one of them is a stranger's
+            // browser: the local table, a guest's roster entry on the host, and
+            // every seat in a host's snapshot on a guest. Sanitising here covers
+            // all three at once — including whoever adds the fourth. The views
+            // escape as well; see js/core/safe.js for why both.
+            this.name   = window.CV.Safe.name(opts.name, `Player ${i + 1}`);
+            this.avatar = window.CV.Safe.avatar(opts.avatar);
             this.kind   = opts.kind   || 'ai';        // 'human' | 'ai' | 'remote'
             this.level  = opts.level  || 'normal';    // AI difficulty
             this.coins  = opts.coins  || 0;

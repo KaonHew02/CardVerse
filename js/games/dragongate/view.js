@@ -147,7 +147,7 @@
                 return `
                     <div class="${cls}" data-seat="${i}">
                         <div class="seat-head">
-                            <span class="avatar">${s.avatar}</span>
+                            <span class="avatar">${esc(s.avatar)}</span>
                             <div class="who">
                                 <span class="name">${esc(s.name)}${s.isYou ? ` <em>(${esc(t('you'))})</em>` : ''}</span>
                                 <span class="coins">🪙 ${fmt(s.coins)}</span>
@@ -228,13 +228,13 @@
             if (e.phase === 'choose') {
                 host.innerHTML = mine
                     ? `<span class="you">${esc(t('dg.chooseAsk', { rank: e.rankName(e.gate.low) }))}</span>`
-                    : `<span class="muted">${who.avatar} ${esc(t('dg.calling', { name: who.name }))}</span>`;
+                    : `<span class="muted">${esc(who.avatar)} ${esc(t('dg.calling', { name: who.name }))}</span>`;
                 return;
             }
             if (e.phase === 'offer') {
                 host.innerHTML = mine
                     ? `<span class="you">${esc(t('dg.offer'))}</span>`
-                    : `<span class="muted">${who.avatar} ${esc(t('table.betting', { name: who.name }))}</span>`;
+                    : `<span class="muted">${esc(who.avatar)} ${esc(t('table.betting', { name: who.name }))}</span>`;
                 return;
             }
             host.innerHTML = '';

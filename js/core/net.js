@@ -164,19 +164,37 @@
 
         receive(entry, msg) {
             if (!msg || typeof msg.t !== 'string') return;
+            // Anyone who guesses six digits can open this socket, so the host
+            // spends nothing on a peer that will not slow down. The budget is
+            // far above real play — a fast game is a handful of actions a
+            // second — and a peer that blows through it is dropped rather than
+            // throttled, because at that rate it is not playing.
+            if (!this.allow(entry)) return this.drop(entry, 'sent too much, too fast');
+
             if (msg.t === 'hello') {
-                entry.name = String(msg.name || entry.name).slice(0, 16);
-                entry.avatar = String(msg.avatar || entry.avatar).slice(0, 4);
+                entry.name   = CV.Safe.name(msg.name, entry.name);
+                entry.avatar = CV.Safe.avatar(msg.avatar);
                 this.fire('roster');
                 return;
             }
             if (msg.t === 'action') {
                 // The seat is taken from the connection, never from the message.
                 // Otherwise any peer could act for anybody at the table.
-                this.fire('action', Object.assign({}, msg.action, { seat: entry.seat }));
+                //
+                // `clean` first: the action is parsed JSON from another browser,
+                // so it can carry a `__proto__` key that Object.assign would
+                // hand to the prototype setter instead of storing as a field.
+                this.fire('action', Object.assign({}, CV.Safe.clean(msg.action), { seat: entry.seat }));
                 return;
             }
-            if (msg.t === 'chat') this.fire('chat', entry, String(msg.text || '').slice(0, 200));
+            if (msg.t === 'chat') this.fire('chat', entry, CV.Safe.text(msg.text, 200));
+        }
+
+        /** A sliding one-second window per connection. */
+        allow(entry) {
+            const now = Date.now();
+            if (now - (entry.windowAt || 0) > 1000) { entry.windowAt = now; entry.inWindow = 0; }
+            return ++entry.inWindow <= 40;
         }
 
         drop(entry, why) {
@@ -227,6 +245,9 @@
      * Client
      * ------------------------------------------------------------------ */
 
+    /** The only message types a host may make a guest's browser act on. */
+    const FROM_HOST = new Set(['welcome', 'full', 'start', 'state', 'over', 'bye']);
+
     /** A guest. Holds no engine at all — it renders what the host sends. */
     class Client {
         constructor() {
@@ -267,7 +288,21 @@
                 });
                 conn.on('data', (msg) => {
                     if (!msg || typeof msg.t !== 'string') return;
-                    if (msg.t === 'welcome') { this.seat = msg.seat; finish(resolve, msg); }
+                    // The host chooses `t`, so without this list the host also
+                    // chooses which of our handlers runs — including `error`,
+                    // which is meant to carry a local connection failure and
+                    // nothing that arrived over the wire.
+                    if (!FROM_HOST.has(msg.t)) return;
+                    if (msg.t === 'welcome') {
+                        // Our own seat index decides what we are shown and what
+                        // we may do. It has to be a real index, not a string or
+                        // a float that quietly indexes nothing.
+                        if (!Number.isInteger(msg.seat) || msg.seat < 0 || msg.seat > 16) {
+                            return finish(reject, new Error('The host sent a seat that does not exist.'));
+                        }
+                        this.seat = msg.seat;
+                        finish(resolve, msg);
+                    }
                     if (msg.t === 'full')    finish(reject, new Error('That table is full.'));
                     this.fire(msg.t, msg);
                 });

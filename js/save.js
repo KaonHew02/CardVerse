@@ -96,11 +96,26 @@
         CV.UI.flash(btn, t('save.exported'));
     }
 
+    /**
+     * A real CardVerse record is a few tens of kilobytes: a profile, per-game
+     * counters and at most 200 history rows. Anything wildly past that is not
+     * a save, and parsing it would freeze the tab before the dialog that asks
+     * about it could ever appear.
+     */
+    const MAX_IMPORT_BYTES = 8 * 1024 * 1024;
+
     function importBackup(file) {
+        if (file && file.size > MAX_IMPORT_BYTES) {
+            return CV.UI.say(t('save.badFile'), t('save.badFileBody'));
+        }
         const reader = new FileReader();
         reader.onload = () => {
             let env = null;
             try { env = JSON.parse(reader.result); } catch (_) { env = null; }
+            // The file came from wherever the player got it. Strip the keys
+            // that are not data before the summary reads it or `apply` writes
+            // it — see js/core/safe.js.
+            env = CV.Safe.clean(env);
             if (!valid(env)) {
                 return CV.UI.say(t('save.badFile'), t('save.badFileBody'));
             }

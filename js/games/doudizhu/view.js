@@ -121,7 +121,7 @@
             return `
                 <div class="seat ddz-seat${turn ? ' is-turn' : ''}">
                     <div class="seat-head">
-                        <span class="avatar">${s.avatar}</span>
+                        <span class="avatar">${esc(s.avatar)}</span>
                         <span class="who"><span class="name">${esc(s.name)}</span>
                             <span class="coins">🪙 ${fmt(s.coins)}</span></span>
                         ${this.roleTag(i)}
