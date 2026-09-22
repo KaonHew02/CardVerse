@@ -130,6 +130,13 @@
 
     function eraseAll() {
         for (const key of Object.values(CV.Store.KEYS)) CV.Store.remove(key);
+        // A record refused as edited is kept aside so a false positive cannot
+        // cost anybody their history — but "erase everything" has to mean it,
+        // or the copy outlives the erase that was meant to remove it.
+        for (const key of CV.Store.rejectedKeys()) CV.Store.remove(key);
+        // The seal flag deliberately stays. Clearing it would reopen the
+        // one-boot window in which an unsealed record is honoured, and there is
+        // nothing left for that window to migrate.
         try { localStorage.removeItem('cardverse.drive.lastPush'); } catch (_) { /* fine */ }
         location.reload();
     }

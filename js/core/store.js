@@ -223,14 +223,31 @@
      * drive.js uses to offer a pull instead of silently starting you over.
      */
     function isEmpty() {
-        return !raw(KEYS.profile) && !raw(KEYS.stats) && !raw(KEYS.history);
+        return !usable(KEYS.profile) && !usable(KEYS.stats) && !usable(KEYS.history);
+    }
+
+    /**
+     * Present *and* readable. A rejected record is still sitting in storage as
+     * bytes, and counting those as a record is how a player whose save was
+     * refused ends up with a blank profile and no offer to restore the good
+     * copy from Drive — at exactly the moment they need it most.
+     */
+    function usable(key) {
+        const stored = raw(key);
+        if (stored === null || stored === '') return false;
+        return !unseal(key, stored).tampered;
+    }
+
+    /** The set-aside copies, so "erase everything" means everything. */
+    function rejectedKeys() {
+        return Object.values(KEYS).map((k) => k + '.rejected').filter((k) => raw(k) !== null);
     }
 
     window.CV = window.CV || {};
     window.CV.Store = {
         KEYS, BACKUP_STORES,
         raw, write, get, set, remove, usage, isEmpty,
-        seal, unseal, fingerprint, sealAll,
+        seal, unseal, fingerprint, sealAll, usable, rejectedKeys,
         onError(fn) { listeners.push(fn); },
         /**
          * Registration order must not decide whether the player is told. The

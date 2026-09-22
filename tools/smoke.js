@@ -4870,6 +4870,32 @@ console.log('\n🛡️  Untrusted input');
     check(CV.Store.get('cardverse.profile.v1', null).coins === 5,
         'migration did not carry an existing record across');
 
+    // A refused record must not look like a record. Otherwise the player whose
+    // save was rejected gets a blank profile *and* no offer to pull the good
+    // copy from Drive, which is the one moment that offer matters.
+    localStorage.setItem('cardverse.profile.v1', CV.Store.seal('cardverse.profile.v1', '{"coins":1}'));
+    check(CV.Store.usable('cardverse.profile.v1') === true,  'a good record was not counted as usable');
+    localStorage.setItem('cardverse.profile.v1', 'zzz.{"coins":999999}');
+    check(CV.Store.usable('cardverse.profile.v1') === false, 'a refused record was counted as usable');
+
+    // isEmpty() is the three-key question drive.js actually asks. By now this
+    // run has played thousands of hands, so stats and history are legitimately
+    // full — set them aside so the refused profile is what decides.
+    const keepStats = localStorage.getItem('cardverse.stats.v1');
+    const keepHist  = localStorage.getItem('cardverse.history.v1');
+    localStorage.removeItem('cardverse.stats.v1');
+    localStorage.removeItem('cardverse.history.v1');
+    check(CV.Store.isEmpty() === true,
+        'a browser whose only record was refused does not look empty, so Drive never offers the restore');
+    if (keepStats !== null) localStorage.setItem('cardverse.stats.v1', keepStats);
+    if (keepHist  !== null) localStorage.setItem('cardverse.history.v1', keepHist);
+
+    // Setting the copy aside is `get`'s doing, not a query's — so read it once,
+    // then check that "erase everything" would be able to find the copy.
+    CV.Store.get('cardverse.profile.v1', null);
+    check(CV.Store.rejectedKeys().includes('cardverse.profile.v1.rejected'),
+        'the set-aside copy is not discoverable, so erase cannot remove it');
+
     localStorage.removeItem(K);
     localStorage.removeItem(K + '.rejected');
     localStorage.removeItem('cardverse.profile.v1');
